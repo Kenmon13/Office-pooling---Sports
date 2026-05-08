@@ -1,0 +1,8 @@
+{
+  "name": "office-pooling-sports",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cp -r dist ../backend/public",
+    "start": "cd backend && npm install && node index.js"
+  }
+}

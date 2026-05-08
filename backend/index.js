@@ -1,3 +1,4 @@
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const db = require("./db");
@@ -8,6 +9,9 @@ require("./seed");
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve frontend static build
+app.use(express.static(path.join(__dirname, "public")));
 
 // --- Participants ---
 
@@ -151,6 +155,11 @@ app.get("/api/leaderboard", (req, res) => {
     )
     .all();
   res.json(leaderboard);
+});
+
+// Client-side routing fallback
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 const PORT = process.env.PORT || 3001;

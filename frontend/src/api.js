@@ -1,4 +1,4 @@
-const API = "http://localhost:3001/api";
+const API = "/api";
 
 export async function fetchGroups() {
   const res = await fetch(`${API}/groups`);
