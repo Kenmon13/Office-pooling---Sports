@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchMatches, fetchGroups } from "../api";
+import { flag } from "../flags";
 
 function Matches() {
   const [matches, setMatches] = useState([]);
@@ -58,7 +59,7 @@ function Matches() {
                   ?.teams.map((t) => (
                     <tr key={t.id}>
                       <td>
-                        {t.name} ({t.code})
+                        {flag(t.code)} {t.name} ({t.code})
                       </td>
                     </tr>
                   ))}
@@ -71,13 +72,13 @@ function Matches() {
               <div key={m.id} className={`match-card ${m.status}`}>
                 <div className="match-date">{m.match_date}</div>
                 <div className="match-teams">
-                  <span className="team home">{m.home_team}</span>
+                  <span className="team home">{flag(m.home_code)} {m.home_team}</span>
                   <span className="vs">
                     {m.status === "finished"
                       ? `${m.home_score} - ${m.away_score}`
                       : "vs"}
                   </span>
-                  <span className="team away">{m.away_team}</span>
+                  <span className="team away">{m.away_team} {flag(m.away_code)}</span>
                 </div>
                 <div className={`match-status ${m.status}`}>{m.status}</div>
               </div>

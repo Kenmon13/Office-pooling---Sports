@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchMatches, fetchPredictions, submitPrediction } from "../api";
+import { flag } from "../flags";
 
 function Predictions({ currentUser }) {
   const [matches, setMatches] = useState([]);
@@ -67,7 +68,7 @@ function Predictions({ currentUser }) {
                     onClick={() => handlePredict(m.id, "home")}
                     disabled={saving === m.id}
                   >
-                    {m.home_team} wins
+                    {flag(m.home_code)} {m.home_team} wins
                   </button>
                   <button
                     className={`pred-btn draw ${predictions[m.id] === "draw" ? "selected" : ""}`}
@@ -81,7 +82,7 @@ function Predictions({ currentUser }) {
                     onClick={() => handlePredict(m.id, "away")}
                     disabled={saving === m.id}
                   >
-                    {m.away_team} wins
+                    {m.away_team} {flag(m.away_code)} wins
                   </button>
                 </div>
               </div>
@@ -106,8 +107,8 @@ function Predictions({ currentUser }) {
                   <div className="match-info">
                     <span className="group-badge">Group {m.group_name}</span>
                     <span>
-                      {m.home_team} {m.home_score} - {m.away_score}{" "}
-                      {m.away_team}
+                      {flag(m.home_code)} {m.home_team} {m.home_score} - {m.away_score}{" "}
+                      {m.away_team} {flag(m.away_code)}
                     </span>
                     <span className={`result-badge ${correct ? "correct" : "wrong"}`}>
                       {correct ? "+3 pts" : "0 pts"}
@@ -117,9 +118,9 @@ function Predictions({ currentUser }) {
                     You picked:{" "}
                     {myPick
                       ? myPick === "home"
-                        ? m.home_team
+                        ? `${flag(m.home_code)} ${m.home_team}`
                         : myPick === "away"
-                          ? m.away_team
+                          ? `${m.away_team} ${flag(m.away_code)}`
                           : "Draw"
                       : "No prediction"}
                   </div>

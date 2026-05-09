@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchMatches, updateMatch } from "../api";
+import { flag } from "../flags";
 
 function Admin() {
   const [matches, setMatches] = useState([]);
@@ -62,7 +63,7 @@ function Admin() {
                   <span className="match-date">{m.match_date}</span>
                 </div>
                 <div className="score-input-row">
-                  <span className="team">{m.home_team}</span>
+                  <span className="team">{flag(m.home_code)} {m.home_team}</span>
                   <input
                     type="number"
                     min="0"
@@ -82,7 +83,7 @@ function Admin() {
                     }
                     className="score-input"
                   />
-                  <span className="team">{m.away_team}</span>
+                  <span className="team">{m.away_team} {flag(m.away_code)}</span>
                   <button
                     onClick={() => handleUpdate(m.id)}
                     className="btn-submit"
@@ -104,7 +105,7 @@ function Admin() {
               <div key={m.id} className="admin-card finished">
                 <span className="group-badge">Group {m.group_name}</span>
                 <span>
-                  {m.home_team} {m.home_score} - {m.away_score} {m.away_team}
+                  {flag(m.home_code)} {m.home_team} {m.home_score} - {m.away_score} {m.away_team} {flag(m.away_code)}
                 </span>
               </div>
             ))}
