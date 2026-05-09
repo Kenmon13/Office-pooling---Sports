@@ -1,9 +1,9 @@
-FROM node:22-alpine
-
-# Install build tools needed for better-sqlite3 native compilation
-RUN apk add --no-cache python3 make g++
+FROM node:22-slim
 
 WORKDIR /app
+
+# Install build tools needed for better-sqlite3 native compilation
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 # Install backend dependencies
 COPY backend/package*.json ./backend/
