@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "scripts": {
     "build": "cd backend && npm install && cd ../frontend && npm install && npm run build && cp -r dist ../backend/public",
-    "start": "cd backend && node index.js"
+    "start": "node backend/index.js"
   }
 }
