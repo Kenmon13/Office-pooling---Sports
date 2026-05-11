@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Matches from "./pages/Matches";
 import Predictions from "./pages/Predictions";
+import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
 import SelectSport from "./pages/SelectSport";
 import SelectTournament from "./pages/SelectTournament";
@@ -183,8 +184,9 @@ function App() {
             </svg>
           </div>
           <nav>
-            <NavLink to="/">Matches</NavLink>
+            <NavLink to="/">Group Stages</NavLink>
             <NavLink to="/predictions">My Predictions</NavLink>
+            <NavLink to="/knockouts">Knockouts</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
           </nav>
           <div className="user-bar">
@@ -204,6 +206,7 @@ function App() {
               path="/predictions"
               element={<Predictions currentUser={participant} />}
             />
+            <Route path="/knockouts" element={<Knockouts />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} />} />
           </Routes>
         </main>

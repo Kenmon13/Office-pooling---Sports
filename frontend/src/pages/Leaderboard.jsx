@@ -19,9 +19,6 @@ function Leaderboard({ poolId }) {
             <tr>
               <th>#</th>
               <th>Name</th>
-              <th>Groups</th>
-              <th>Exact</th>
-              <th>Half</th>
               <th>Points</th>
             </tr>
           </thead>
@@ -30,9 +27,6 @@ function Leaderboard({ poolId }) {
               <tr key={p.id} className={i < 3 ? `rank-${i + 1}` : ""}>
                 <td className="rank">{i + 1}</td>
                 <td className="name">{p.name}</td>
-                <td>{p.groups_predicted || 0}</td>
-                <td>{p.groups_correct || 0}</td>
-                <td>{p.groups_half || 0}</td>
                 <td className="points">{p.points || 0}</td>
               </tr>
             ))}
