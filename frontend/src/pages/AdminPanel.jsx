@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { adminLogin, adminDeletePool } from "../api";
+import { useState, useEffect } from "react";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -12,61 +12,36 @@ const TOURNAMENT_LABELS = {
   epl2627: "English Premier League 26/27",
 };
 
-function AdminPanel({ onSelectPool, onBack }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [creds, setCreds] = useState(null);
+function AdminPanel({ user, onSelectPool, onBack }) {
+  const [tab, setTab] = useState("pools"); // "pools" or "users"
   const [pools, setPools] = useState([]);
-  const [error, setError] = useState("");
+  const [users, setUsers] = useState([]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (!username.trim() || !password.trim()) {
-      setError("Username and password are required");
-      return;
-    }
-    const result = await adminLogin(username.trim(), password.trim());
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setCreds({ username: username.trim(), password: password.trim() });
-    setPools(result.pools);
-  };
+  useEffect(() => {
+    adminFetchPools(user.id).then((data) => {
+      if (!data.error) setPools(data);
+    });
+    adminFetchUsers(user.id).then((data) => {
+      if (!data.error) setUsers(data);
+    });
+  }, [user.id]);
 
-  const handleDelete = async (e, poolId) => {
+  const handleDeletePool = async (e, poolId) => {
     e.stopPropagation();
     if (!confirm("Delete this pool? All participants and predictions will be removed.")) return;
-    await adminDeletePool(poolId, creds.username, creds.password);
+    await adminDeletePool(poolId, user.id);
     setPools((prev) => prev.filter((p) => p.id !== poolId));
   };
 
-  if (!creds) {
-    return (
-      <div className="select-page">
-        <button className="back-btn" onClick={onBack}>&larr; Back</button>
-        <h2>Admin Login</h2>
-        <p className="select-subtitle">Enter admin credentials</p>
-        <form onSubmit={handleLogin} className="pool-form-vertical">
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username"
-            autoFocus
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-          />
-          <button type="submit">Login</button>
-          {error && <p className="error">{error}</p>}
-        </form>
-      </div>
-    );
-  }
+  const handleDeleteUser = async (targetId) => {
+    if (!confirm("Delete this user? All their data will be removed.")) return;
+    const result = await adminDeleteUser(targetId, user.id);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    setUsers((prev) => prev.filter((u) => u.id !== targetId));
+  };
 
   // Group pools by sport, then by tournament
   const grouped = {};
@@ -76,63 +51,112 @@ function AdminPanel({ onSelectPool, onBack }) {
     grouped[p.sport][p.tournament].push(p);
   }
 
-  const totalUsers = pools.reduce((sum, p) => sum + (p.user_count || 0), 0);
+  const totalPoolUsers = pools.reduce((sum, p) => sum + (p.user_count || 0), 0);
 
   return (
     <div className="select-page admin-dashboard">
       <button className="back-btn" onClick={onBack}>&larr; Back</button>
       <h2>Admin Dashboard</h2>
-      <p className="select-subtitle">{pools.length} pool{pools.length !== 1 ? "s" : ""} &middot; {totalUsers} total user{totalUsers !== 1 ? "s" : ""}</p>
 
-      {Object.keys(grouped).length === 0 && <p className="notice">No pools created yet.</p>}
+      <div className="admin-tabs">
+        <button
+          className={`admin-tab ${tab === "pools" ? "active" : ""}`}
+          onClick={() => setTab("pools")}
+        >
+          Pools ({pools.length})
+        </button>
+        <button
+          className={`admin-tab ${tab === "users" ? "active" : ""}`}
+          onClick={() => setTab("users")}
+        >
+          Users ({users.length})
+        </button>
+      </div>
 
-      {Object.entries(grouped).map(([sport, tournaments]) => {
-        const sportLabel = SPORT_LABELS[sport] || { name: sport, emoji: "" };
-        const sportUsers = Object.values(tournaments).flat().reduce((sum, p) => sum + (p.user_count || 0), 0);
-        const sportPools = Object.values(tournaments).flat().length;
+      {tab === "pools" && (
+        <>
+          <p className="select-subtitle">{pools.length} pool{pools.length !== 1 ? "s" : ""} &middot; {totalPoolUsers} total participant{totalPoolUsers !== 1 ? "s" : ""}</p>
 
-        return (
-          <div key={sport} className="admin-sport-section">
-            <div className="admin-sport-header">
-              <span>{sportLabel.emoji} {sportLabel.name}</span>
-              <span className="admin-sport-stats">{sportPools} pool{sportPools !== 1 ? "s" : ""} &middot; {sportUsers} user{sportUsers !== 1 ? "s" : ""}</span>
-            </div>
+          {Object.keys(grouped).length === 0 && <p className="notice">No pools created yet.</p>}
 
-            {Object.entries(tournaments).map(([tournament, tournamentPools]) => {
-              const tournamentLabel = TOURNAMENT_LABELS[tournament] || tournament;
-              const tournamentUsers = tournamentPools.reduce((sum, p) => sum + (p.user_count || 0), 0);
+          {Object.entries(grouped).map(([sport, tournaments]) => {
+            const sportLabel = SPORT_LABELS[sport] || { name: sport, emoji: "" };
+            const sportUsers = Object.values(tournaments).flat().reduce((sum, p) => sum + (p.user_count || 0), 0);
+            const sportPools = Object.values(tournaments).flat().length;
 
-              return (
-                <div key={tournament} className="admin-tournament-section">
-                  <div className="admin-tournament-header">
-                    <span>{tournamentLabel}</span>
-                    <span className="admin-tournament-stats">{tournamentPools.length} pool{tournamentPools.length !== 1 ? "s" : ""} &middot; {tournamentUsers} user{tournamentUsers !== 1 ? "s" : ""}</span>
-                  </div>
-                  <div className="pool-list">
-                    {tournamentPools.map((p) => (
-                      <div key={p.id} className="pool-list-item">
-                        <button
-                          className="pool-list-btn"
-                          onClick={() => onSelectPool({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, isAdmin: true })}
-                        >
-                          <span className="pool-list-name">{p.name}</span>
-                          <span className="pool-list-meta">{p.user_count || 0} user{p.user_count !== 1 ? "s" : ""}</span>
-                        </button>
-                        <button
-                          className="pool-delete-btn"
-                          onClick={(e) => handleDelete(e, p.id)}
-                        >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+            return (
+              <div key={sport} className="admin-sport-section">
+                <div className="admin-sport-header">
+                  <span>{sportLabel.emoji} {sportLabel.name}</span>
+                  <span className="admin-sport-stats">{sportPools} pool{sportPools !== 1 ? "s" : ""} &middot; {sportUsers} user{sportUsers !== 1 ? "s" : ""}</span>
                 </div>
-              );
-            })}
+
+                {Object.entries(tournaments).map(([tournament, tournamentPools]) => {
+                  const tournamentLabel = TOURNAMENT_LABELS[tournament] || tournament;
+                  const tournamentUsers = tournamentPools.reduce((sum, p) => sum + (p.user_count || 0), 0);
+
+                  return (
+                    <div key={tournament} className="admin-tournament-section">
+                      <div className="admin-tournament-header">
+                        <span>{tournamentLabel}</span>
+                        <span className="admin-tournament-stats">{tournamentPools.length} pool{tournamentPools.length !== 1 ? "s" : ""} &middot; {tournamentUsers} user{tournamentUsers !== 1 ? "s" : ""}</span>
+                      </div>
+                      <div className="pool-list">
+                        {tournamentPools.map((p) => (
+                          <div key={p.id} className="pool-list-item">
+                            <button
+                              className="pool-list-btn"
+                              onClick={() => onSelectPool({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, isAdmin: true })}
+                            >
+                              <span className="pool-list-name">{p.name}</span>
+                              <span className="pool-list-meta">{p.user_count || 0} user{p.user_count !== 1 ? "s" : ""}</span>
+                            </button>
+                            <button
+                              className="pool-delete-btn"
+                              onClick={(e) => handleDeletePool(e, p.id)}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {tab === "users" && (
+        <>
+          <p className="select-subtitle">{users.length} registered user{users.length !== 1 ? "s" : ""}</p>
+          <div className="pool-list">
+            {users.map((u) => (
+              <div key={u.id} className="pool-list-item">
+                <div className="pool-list-btn user-list-info">
+                  <div>
+                    <span className="pool-list-name">{u.display_name}</span>
+                    <span className="user-username">@{u.username}</span>
+                  </div>
+                  <span className="pool-list-meta">
+                    {u.is_admin ? "Admin" : "User"}
+                  </span>
+                </div>
+                {!u.is_admin && (
+                  <button
+                    className="pool-delete-btn"
+                    onClick={() => handleDeleteUser(u.id)}
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-        );
-      })}
+        </>
+      )}
     </div>
   );
 }

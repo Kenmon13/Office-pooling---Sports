@@ -14,31 +14,81 @@ app.use(express.json());
 // Serve frontend static build
 app.use(express.static(path.join(__dirname, "public")));
 
+// --- Auth ---
+
+app.post("/api/auth/signup", (req, res) => {
+  const { username, password, display_name } = req.body;
+  if (!username || !username.trim()) return res.status(400).json({ error: "Username is required" });
+  if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
+  if (!display_name || !display_name.trim()) return res.status(400).json({ error: "Display name is required" });
+  try {
+    const result = db.prepare("INSERT INTO users (username, password, display_name) VALUES (?, ?, ?)").run(username.trim().toLowerCase(), password.trim(), display_name.trim());
+    res.json({ id: result.lastInsertRowid, username: username.trim().toLowerCase(), display_name: display_name.trim() });
+  } catch (err) {
+    if (err.message.includes("UNIQUE")) {
+      return res.status(409).json({ error: "Username already taken" });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/auth/signin", (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Username and password are required" });
+  const user = db.prepare("SELECT id, username, display_name, is_admin FROM users WHERE username = ? AND password = ?").get(username.trim().toLowerCase(), password.trim());
+  if (!user) return res.status(401).json({ error: "Invalid username or password" });
+  res.json(user);
+});
+
 // --- Admin ---
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "messi";
+app.get("/api/admin/users", (req, res) => {
+  const userId = req.query.user_id;
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
+  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
 
-app.post("/api/admin/login", (req, res) => {
-  const { username, password } = req.body;
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-    const pools = db.prepare(`
-      SELECT p.id, p.name, p.sport, p.tournament, p.created_at,
-        (SELECT COUNT(*) FROM participants pt WHERE pt.pool_id = p.id) as user_count
-      FROM pools p
-      ORDER BY p.sport, p.tournament, p.created_at DESC
-    `).all();
-    return res.json({ success: true, pools });
-  }
-  res.status(401).json({ error: "Invalid admin credentials" });
+  const users = db.prepare("SELECT id, username, display_name, is_admin, created_at FROM users ORDER BY created_at DESC").all();
+  res.json(users);
+});
+
+app.delete("/api/admin/users/:id", (req, res) => {
+  const userId = req.query.user_id;
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
+  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+
+  const targetId = req.params.id;
+  // Don't allow deleting yourself
+  if (String(targetId) === String(userId)) return res.status(400).json({ error: "Cannot delete yourself" });
+
+  // Delete all their data: group_predictions, predictions, participants, then user
+  db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
+  db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
+  db.prepare("DELETE FROM participants WHERE user_id = ?").run(targetId);
+  db.prepare("DELETE FROM users WHERE id = ?").run(targetId);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/pools", (req, res) => {
+  const userId = req.query.user_id;
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
+  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+
+  const pools = db.prepare(`
+    SELECT p.id, p.name, p.sport, p.tournament, p.created_at,
+      (SELECT COUNT(*) FROM participants pt WHERE pt.pool_id = p.id) as user_count
+    FROM pools p
+    ORDER BY p.sport, p.tournament, p.created_at DESC
+  `).all();
+  res.json(pools);
 });
 
 app.delete("/api/admin/pools/:id", (req, res) => {
-  const { username, password } = req.body;
-  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Invalid admin credentials" });
-  }
+  const userId = req.query.user_id;
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
+  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+
   const poolId = req.params.id;
+  db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM participants WHERE pool_id = ?").run(poolId);
   db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
@@ -85,18 +135,23 @@ app.get("/api/participants", (req, res) => {
   res.json(participants);
 });
 
-app.post("/api/participants", (req, res) => {
-  const { name, pool_id } = req.body;
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: "Name is required" });
-  }
+// Auto-join: find or create participant for a user in a pool
+app.post("/api/participants/auto-join", (req, res) => {
+  const { user_id, pool_id } = req.body;
+  if (!user_id || !pool_id) return res.status(400).json({ error: "user_id and pool_id are required" });
+
+  // Check if already in pool
+  const existing = db.prepare("SELECT * FROM participants WHERE user_id = ? AND pool_id = ?").get(user_id, pool_id);
+  if (existing) return res.json(existing);
+
+  // Get user display name
+  const user = db.prepare("SELECT display_name FROM users WHERE id = ?").get(user_id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
   try {
-    const result = db.prepare("INSERT INTO participants (name, pool_id) VALUES (?, ?)").run(name.trim(), pool_id || null);
-    res.json({ id: result.lastInsertRowid, name: name.trim(), pool_id: pool_id || null });
+    const result = db.prepare("INSERT INTO participants (name, pool_id, user_id) VALUES (?, ?, ?)").run(user.display_name, pool_id, user_id);
+    res.json({ id: result.lastInsertRowid, name: user.display_name, pool_id, user_id });
   } catch (err) {
-    if (err.message.includes("UNIQUE")) {
-      return res.status(409).json({ error: "Name already taken in this pool" });
-    }
     res.status(500).json({ error: err.message });
   }
 });

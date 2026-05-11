@@ -1,7 +1,16 @@
 const API = "/api";
 
-export async function adminLogin(username, password) {
-  const res = await fetch(`${API}/admin/login`, {
+export async function signUp(username, password, display_name) {
+  const res = await fetch(`${API}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, display_name }),
+  });
+  return res.json();
+}
+
+export async function signIn(username, password) {
+  const res = await fetch(`${API}/auth/signin`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -9,11 +18,35 @@ export async function adminLogin(username, password) {
   return res.json();
 }
 
-export async function adminDeletePool(poolId, username, password) {
-  const res = await fetch(`${API}/admin/pools/${poolId}`, {
-    method: "DELETE",
+export async function autoJoinPool(user_id, pool_id) {
+  const res = await fetch(`${API}/participants/auto-join`, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ user_id, pool_id }),
+  });
+  return res.json();
+}
+
+export async function adminFetchUsers(userId) {
+  const res = await fetch(`${API}/admin/users?user_id=${userId}`);
+  return res.json();
+}
+
+export async function adminDeleteUser(targetId, userId) {
+  const res = await fetch(`${API}/admin/users/${targetId}?user_id=${userId}`, {
+    method: "DELETE",
+  });
+  return res.json();
+}
+
+export async function adminFetchPools(userId) {
+  const res = await fetch(`${API}/admin/pools?user_id=${userId}`);
+  return res.json();
+}
+
+export async function adminDeletePool(poolId, userId) {
+  const res = await fetch(`${API}/admin/pools/${poolId}?user_id=${userId}`, {
+    method: "DELETE",
   });
   return res.json();
 }
