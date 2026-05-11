@@ -3,7 +3,10 @@ import { useState, useEffect } from "react";
 import Matches from "./pages/Matches";
 import Predictions from "./pages/Predictions";
 import Leaderboard from "./pages/Leaderboard";
-import Admin from "./pages/Admin";
+import SelectSport from "./pages/SelectSport";
+import SelectTournament from "./pages/SelectTournament";
+import JoinPool from "./pages/JoinPool";
+import AdminPanel from "./pages/AdminPanel";
 import { fetchParticipants, createParticipant } from "./api";
 import "./App.css";
 
@@ -13,16 +16,66 @@ function App() {
   const [joinName, setJoinName] = useState("");
   const [error, setError] = useState("");
 
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [selectedSport, setSelectedSport] = useState(null);
+  const [selectedTournament, setSelectedTournament] = useState(null);
+  const [pool, setPool] = useState(null);
+
   useEffect(() => {
-    fetchParticipants().then(setParticipants);
+    const savedSession = localStorage.getItem("pool_session");
+    if (savedSession) {
+      const session = JSON.parse(savedSession);
+      setSelectedSport(session.sport);
+      setSelectedTournament(session.tournament);
+      setPool(session.pool);
+    }
     const saved = localStorage.getItem("worldcup_user");
     if (saved) setCurrentUser(JSON.parse(saved));
   }, []);
 
+  useEffect(() => {
+    if (pool) {
+      fetchParticipants(pool.id).then(setParticipants);
+    }
+  }, [pool]);
+
+  const handleSelectSport = (sport) => {
+    setSelectedSport(sport);
+  };
+
+  const handleJoinPool = (poolData) => {
+    setPool(poolData);
+    setShowAdmin(false);
+    const sport = selectedSport || { id: poolData.sport, name: poolData.sport, emoji: poolData.sport === "soccer" ? "\u26BD" : "\uD83C\uDFC0" };
+    setSelectedSport(sport);
+    localStorage.setItem(
+      "pool_session",
+      JSON.stringify({ sport, tournament: selectedTournament, pool: poolData })
+    );
+  };
+
+  const handleBackToSport = () => {
+    setSelectedSport(null);
+    setSelectedTournament(null);
+  };
+
+  const handleBackToTournament = () => {
+    setSelectedTournament(null);
+  };
+
+  const handleLeavePool = () => {
+    setSelectedSport(null);
+    setSelectedTournament(null);
+    setPool(null);
+    setCurrentUser(null);
+    localStorage.removeItem("pool_session");
+    localStorage.removeItem("worldcup_user");
+  };
+
   const handleJoin = async (e) => {
     e.preventDefault();
     setError("");
-    const result = await createParticipant(joinName);
+    const result = await createParticipant(joinName, pool.id);
     if (result.error) {
       setError(result.error);
       return;
@@ -43,12 +96,69 @@ function App() {
     localStorage.removeItem("worldcup_user");
   };
 
+  // Admin panel
+  if (showAdmin) {
+    return (
+      <div className="app">
+        <AdminPanel
+          onSelectPool={handleJoinPool}
+          onBack={() => setShowAdmin(false)}
+        />
+      </div>
+    );
+  }
+
+  // Step 1: Pick a sport
+  if (!selectedSport) {
+    return (
+      <div className="app">
+        <SelectSport onSelect={handleSelectSport} onAdminLogin={() => setShowAdmin(true)} />
+      </div>
+    );
+  }
+
+  // Step 2: Pick a tournament
+  if (!selectedTournament) {
+    return (
+      <div className="app">
+        <SelectTournament
+          sport={selectedSport}
+          onSelect={(t) => setSelectedTournament(t)}
+          onBack={handleBackToSport}
+        />
+      </div>
+    );
+  }
+
+  // Step 3: Create or join a pool
+  if (!pool) {
+    return (
+      <div className="app">
+        <JoinPool
+          sport={selectedSport}
+          tournament={selectedTournament}
+          onJoin={handleJoinPool}
+          onBack={handleBackToTournament}
+        />
+      </div>
+    );
+  }
+
+  // Step 3: The main pool view
   return (
     <BrowserRouter>
       <div className="app">
         <header>
           <div className="header-top">
-            <h1>World Cup 2026 Pool</h1>
+            <div>
+              <h1>{selectedTournament.emoji} {pool.name}</h1>
+              <p className="pool-meta">
+                {selectedTournament.name}
+                <button onClick={handleLeavePool} className="btn-small">
+                  Leave Pool
+                </button>
+              </p>
+            </div>
             <svg className="soccer-ball" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
               <circle cx="50" cy="50" r="48" fill="#fff" stroke="#222" strokeWidth="2"/>
               <polygon points="50,18 61,30 56,44 44,44 39,30" fill="#222"/>
@@ -69,7 +179,6 @@ function App() {
             <NavLink to="/">Matches</NavLink>
             <NavLink to="/predictions">My Predictions</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
-            <NavLink to="/admin">Admin</NavLink>
           </nav>
           <div className="user-bar">
             {currentUser ? (
@@ -116,8 +225,7 @@ function App() {
               path="/predictions"
               element={<Predictions currentUser={currentUser} />}
             />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} />} />
           </Routes>
         </main>
       </div>
