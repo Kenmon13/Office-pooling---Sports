@@ -993,3 +993,55 @@ nav a.active {
 .score-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
+
+/* Bracket */
+.bracket {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.bracket-rounds {
+  display: flex;
+  gap: 12px;
+  min-width: max-content;
+}
+
+.bracket-round {
+  flex: 1;
+  min-width: 160px;
+}
+
+.bracket-round-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #5a8a5a;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.bracket-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bracket-match {
+  background: #0f240f;
+  border: 1px solid #1e3a1e;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.bracket-team {
+  font-size: 13px;
+  font-weight: 500;
+  color: #d4e8d4;
+  padding: 4px 0;
+}
+
+.bracket-vs {
+  font-size: 11px;
+  color: #5a8a5a;
+}
