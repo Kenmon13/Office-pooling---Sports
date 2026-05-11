@@ -7,10 +7,21 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 db.exec(`
-  CREATE TABLE IF NOT EXISTS participants (
+  CREATE TABLE IF NOT EXISTS pools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
+    sport TEXT NOT NULL DEFAULT 'soccer',
+    tournament TEXT NOT NULL DEFAULT 'wc2026',
+    password TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS participants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    pool_id INTEGER REFERENCES pools(id),
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(name, pool_id)
   );
 
   CREATE TABLE IF NOT EXISTS groups (
@@ -43,6 +54,16 @@ db.exec(`
     predicted_outcome TEXT NOT NULL CHECK(predicted_outcome IN ('home', 'away', 'draw')),
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(participant_id, match_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS group_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    group_id INTEGER NOT NULL REFERENCES groups(id),
+    team1_id INTEGER NOT NULL REFERENCES teams(id),
+    team2_id INTEGER NOT NULL REFERENCES teams(id),
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, group_id)
   );
 `);
 

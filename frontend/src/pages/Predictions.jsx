@@ -1,24 +1,34 @@
 import { useState, useEffect } from "react";
-import { fetchMatches, fetchPredictions, submitPrediction } from "../api";
+import { fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings } from "../api";
 import { flag } from "../flags";
 
 function Predictions({ currentUser }) {
-  const [matches, setMatches] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [predictions, setPredictions] = useState({});
+  const [selections, setSelections] = useState({});
+  const [standings, setStandings] = useState({});
   const [saving, setSaving] = useState(null);
 
   useEffect(() => {
-    fetchMatches().then(setMatches);
+    fetchGroups().then(setGroups);
+    fetchStandings().then((data) => {
+      const map = {};
+      data.forEach((g) => { map[g.id] = g; });
+      setStandings(map);
+    });
   }, []);
 
   useEffect(() => {
     if (currentUser) {
-      fetchPredictions(currentUser.id).then((preds) => {
+      fetchGroupPredictions(currentUser.id).then((preds) => {
         const map = {};
+        const sel = {};
         preds.forEach((p) => {
-          map[p.match_id] = p.predicted_outcome;
+          map[p.group_id] = p;
+          sel[p.group_id] = [p.team1_id, p.team2_id];
         });
         setPredictions(map);
+        setSelections(sel);
       });
     }
   }, [currentUser]);
@@ -32,104 +42,101 @@ function Predictions({ currentUser }) {
     );
   }
 
-  const handlePredict = async (matchId, outcome) => {
-    setSaving(matchId);
-    await submitPrediction(currentUser.id, matchId, outcome);
-    setPredictions((prev) => ({ ...prev, [matchId]: outcome }));
+  const toggleTeam = (groupId, teamId) => {
+    setSelections((prev) => {
+      const current = prev[groupId] || [];
+      if (current.includes(teamId)) {
+        return { ...prev, [groupId]: current.filter((id) => id !== teamId) };
+      }
+      if (current.length >= 2) {
+        return { ...prev, [groupId]: [current[1], teamId] };
+      }
+      return { ...prev, [groupId]: [...current, teamId] };
+    });
+  };
+
+  const handleSave = async (groupId) => {
+    const picked = selections[groupId] || [];
+    if (picked.length !== 2) return;
+    setSaving(groupId);
+    await submitGroupPrediction(currentUser.id, groupId, picked[0], picked[1]);
+    // Refresh predictions
+    const preds = await fetchGroupPredictions(currentUser.id);
+    const map = {};
+    preds.forEach((p) => { map[p.group_id] = p; });
+    setPredictions(map);
     setSaving(null);
   };
 
-  const upcomingMatches = matches.filter((m) => m.status === "upcoming");
-  const finishedMatches = matches.filter((m) => m.status === "finished");
-
-  const getActualOutcome = (m) => {
-    if (m.home_score > m.away_score) return "home";
-    if (m.away_score > m.home_score) return "away";
-    return "draw";
+  const getScore = (groupId) => {
+    const pred = predictions[groupId];
+    const standing = standings[groupId];
+    if (!pred || !standing || standing.qualified.length === 0) return null;
+    const picked = [pred.team1_id, pred.team2_id];
+    const correct = picked.filter((t) => standing.qualified.includes(t)).length;
+    if (correct === 2) return { points: 5, label: "Both correct", cls: "correct" };
+    if (correct === 1) return { points: 2, label: "1 correct", cls: "half" };
+    return { points: 0, label: "0 correct", cls: "wrong" };
   };
 
   return (
     <div className="page">
       <h2>My Predictions</h2>
+      <p className="select-subtitle" style={{ marginBottom: 24 }}>
+        Pick 2 teams to advance from each group. Both correct = 5 pts, one correct = 2 pts.
+      </p>
 
-      {upcomingMatches.length > 0 && (
-        <>
-          <h3>Upcoming Matches</h3>
-          <div className="prediction-list">
-            {upcomingMatches.map((m) => (
-              <div key={m.id} className="prediction-card">
-                <div className="match-info">
-                  <span className="group-badge">Group {m.group_name}</span>
-                  <span className="match-date">{m.match_date}</span>
-                </div>
-                <div className="prediction-row">
-                  <button
-                    className={`pred-btn ${predictions[m.id] === "home" ? "selected" : ""}`}
-                    onClick={() => handlePredict(m.id, "home")}
-                    disabled={saving === m.id}
-                  >
-                    {flag(m.home_code)} {m.home_team} wins
-                  </button>
-                  <button
-                    className={`pred-btn draw ${predictions[m.id] === "draw" ? "selected" : ""}`}
-                    onClick={() => handlePredict(m.id, "draw")}
-                    disabled={saving === m.id}
-                  >
-                    Draw
-                  </button>
-                  <button
-                    className={`pred-btn ${predictions[m.id] === "away" ? "selected" : ""}`}
-                    onClick={() => handlePredict(m.id, "away")}
-                    disabled={saving === m.id}
-                  >
-                    {m.away_team} {flag(m.away_code)} wins
-                  </button>
-                </div>
+      <div className="group-pred-list">
+        {groups.map((g) => {
+          const picked = selections[g.id] || [];
+          const saved = predictions[g.id];
+          const score = getScore(g.id);
+          const hasChanged = saved
+            ? !(picked.length === 2 && [saved.team1_id, saved.team2_id].sort().join() === [...picked].sort().join())
+            : picked.length === 2;
+
+          return (
+            <div key={g.id} className={`group-pred-card ${score ? score.cls : ""}`}>
+              <div className="group-pred-header">
+                <span className="group-badge">Group {g.name}</span>
+                {score && (
+                  <span className={`result-badge ${score.cls}`}>
+                    {score.label} &middot; +{score.points} pts
+                  </span>
+                )}
               </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {finishedMatches.length > 0 && (
-        <>
-          <h3>Results</h3>
-          <div className="prediction-list">
-            {finishedMatches.map((m) => {
-              const actual = getActualOutcome(m);
-              const myPick = predictions[m.id];
-              const correct = myPick === actual;
-              return (
-                <div
-                  key={m.id}
-                  className={`prediction-card ${correct ? "correct" : "wrong"}`}
-                >
-                  <div className="match-info">
-                    <span className="group-badge">Group {m.group_name}</span>
-                    <span>
-                      {flag(m.home_code)} {m.home_team} {m.home_score} - {m.away_score}{" "}
-                      {m.away_team} {flag(m.away_code)}
-                    </span>
-                    <span className={`result-badge ${correct ? "correct" : "wrong"}`}>
-                      {correct ? "+3 pts" : "0 pts"}
-                    </span>
-                  </div>
-                  <div className="my-pick">
-                    You picked:{" "}
-                    {myPick
-                      ? myPick === "home"
-                        ? `${flag(m.home_code)} ${m.home_team}`
-                        : myPick === "away"
-                          ? `${m.away_team} ${flag(m.away_code)}`
-                          : "Draw"
-                      : "No prediction"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+              <div className="group-pred-teams">
+                {g.teams.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`group-team-btn ${picked.includes(t.id) ? "selected" : ""}`}
+                    onClick={() => toggleTeam(g.id, t.id)}
+                  >
+                    {flag(t.code)} {t.name}
+                  </button>
+                ))}
+              </div>
+              <div className="group-pred-footer">
+                {saved && !hasChanged && (
+                  <span className="saved-label">Saved</span>
+                )}
+                {picked.length === 2 && hasChanged && (
+                  <button
+                    className="btn-submit"
+                    onClick={() => handleSave(g.id)}
+                    disabled={saving === g.id}
+                  >
+                    {saving === g.id ? "Saving..." : saved ? "Update" : "Save"}
+                  </button>
+                )}
+                {picked.length < 2 && (
+                  <span className="pick-hint">Pick {2 - picked.length} more</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

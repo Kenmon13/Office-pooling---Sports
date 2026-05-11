@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { fetchLeaderboard } from "../api";
 
-function Leaderboard() {
+function Leaderboard({ poolId }) {
   const [leaderboard, setLeaderboard] = useState([]);
 
   useEffect(() => {
-    fetchLeaderboard().then(setLeaderboard);
-  }, []);
+    fetchLeaderboard(poolId).then(setLeaderboard);
+  }, [poolId]);
 
   return (
     <div className="page">
@@ -19,8 +19,9 @@ function Leaderboard() {
             <tr>
               <th>#</th>
               <th>Name</th>
-              <th>Correct</th>
-              <th>Predicted</th>
+              <th>Groups</th>
+              <th>Exact</th>
+              <th>Half</th>
               <th>Points</th>
             </tr>
           </thead>
@@ -29,8 +30,9 @@ function Leaderboard() {
               <tr key={p.id} className={i < 3 ? `rank-${i + 1}` : ""}>
                 <td className="rank">{i + 1}</td>
                 <td className="name">{p.name}</td>
-                <td>{p.correct_predictions || 0}</td>
-                <td>{p.matches_predicted || 0}</td>
+                <td>{p.groups_predicted || 0}</td>
+                <td>{p.groups_correct || 0}</td>
+                <td>{p.groups_half || 0}</td>
                 <td className="points">{p.points || 0}</td>
               </tr>
             ))}
