@@ -22,7 +22,7 @@ function SelectSport({ onSelect, onAdminLogin }) {
           </button>
         ))}
       </div>
-      <button className="admin-link" onClick={onAdminLogin}>Admin Login</button>
+      {onAdminLogin && <button className="admin-link" onClick={onAdminLogin}>Admin Dashboard</button>}
     </div>
   );
 }

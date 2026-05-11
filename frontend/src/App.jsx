@@ -7,14 +7,13 @@ import SelectSport from "./pages/SelectSport";
 import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
-import { fetchParticipants, createParticipant } from "./api";
+import Auth from "./pages/Auth";
+import { autoJoinPool } from "./api";
 import "./App.css";
 
 function App() {
-  const [participants, setParticipants] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [joinName, setJoinName] = useState("");
-  const [error, setError] = useState("");
+  const [user, setUser] = useState(null);
+  const [participant, setParticipant] = useState(null);
 
   const [showAdmin, setShowAdmin] = useState(false);
   const [selectedSport, setSelectedSport] = useState(null);
@@ -22,6 +21,9 @@ function App() {
   const [pool, setPool] = useState(null);
 
   useEffect(() => {
+    const savedUser = localStorage.getItem("auth_user");
+    if (savedUser) setUser(JSON.parse(savedUser));
+
     const savedSession = localStorage.getItem("pool_session");
     if (savedSession) {
       const session = JSON.parse(savedSession);
@@ -29,15 +31,31 @@ function App() {
       setSelectedTournament(session.tournament);
       setPool(session.pool);
     }
-    const saved = localStorage.getItem("worldcup_user");
-    if (saved) setCurrentUser(JSON.parse(saved));
   }, []);
 
+  // Auto-join pool when user and pool are both set
   useEffect(() => {
-    if (pool) {
-      fetchParticipants(pool.id).then(setParticipants);
+    if (user && pool) {
+      autoJoinPool(user.id, pool.id).then((p) => {
+        if (!p.error) setParticipant(p);
+      });
     }
-  }, [pool]);
+  }, [user, pool]);
+
+  const handleAuth = (userData) => {
+    setUser(userData);
+    localStorage.setItem("auth_user", JSON.stringify(userData));
+  };
+
+  const handleSignOut = () => {
+    setUser(null);
+    setParticipant(null);
+    setSelectedSport(null);
+    setSelectedTournament(null);
+    setPool(null);
+    localStorage.removeItem("auth_user");
+    localStorage.removeItem("pool_session");
+  };
 
   const handleSelectSport = (sport) => {
     setSelectedSport(sport);
@@ -67,40 +85,25 @@ function App() {
     setSelectedSport(null);
     setSelectedTournament(null);
     setPool(null);
-    setCurrentUser(null);
+    setParticipant(null);
     localStorage.removeItem("pool_session");
-    localStorage.removeItem("worldcup_user");
   };
 
-  const handleJoin = async (e) => {
-    e.preventDefault();
-    setError("");
-    const result = await createParticipant(joinName, pool.id);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setCurrentUser(result);
-    localStorage.setItem("worldcup_user", JSON.stringify(result));
-    setParticipants((prev) => [...prev, result]);
-    setJoinName("");
-  };
-
-  const handleSelect = (p) => {
-    setCurrentUser(p);
-    localStorage.setItem("worldcup_user", JSON.stringify(p));
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem("worldcup_user");
-  };
+  // Step 0: Sign in / Sign up
+  if (!user) {
+    return (
+      <div className="app">
+        <Auth onAuth={handleAuth} />
+      </div>
+    );
+  }
 
   // Admin panel
   if (showAdmin) {
     return (
       <div className="app">
         <AdminPanel
+          user={user}
           onSelectPool={handleJoinPool}
           onBack={() => setShowAdmin(false)}
         />
@@ -112,7 +115,11 @@ function App() {
   if (!selectedSport) {
     return (
       <div className="app">
-        <SelectSport onSelect={handleSelectSport} onAdminLogin={() => setShowAdmin(true)} />
+        <div className="auth-bar">
+          Signed in as <strong>{user.display_name}</strong>
+          <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+        </div>
+        <SelectSport onSelect={handleSelectSport} onAdminLogin={user.is_admin ? () => setShowAdmin(true) : null} />
       </div>
     );
   }
@@ -144,7 +151,7 @@ function App() {
     );
   }
 
-  // Step 3: The main pool view
+  // Step 4: The main pool view
   return (
     <BrowserRouter>
       <div className="app">
@@ -181,40 +188,12 @@ function App() {
             <NavLink to="/leaderboard">Leaderboard</NavLink>
           </nav>
           <div className="user-bar">
-            {currentUser ? (
-              <span>
-                Playing as <strong>{currentUser.name}</strong>
-                <button onClick={handleLogout} className="btn-small">
-                  Switch
-                </button>
-              </span>
-            ) : (
-              <div className="join-section">
-                <form onSubmit={handleJoin} className="join-form">
-                  <input
-                    value={joinName}
-                    onChange={(e) => setJoinName(e.target.value)}
-                    placeholder="Enter your name to join"
-                  />
-                  <button type="submit">Join Pool</button>
-                </form>
-                {participants.length > 0 && (
-                  <div className="existing-users">
-                    <span>Or select: </span>
-                    {participants.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => handleSelect(p)}
-                        className="btn-small"
-                      >
-                        {p.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {error && <p className="error">{error}</p>}
-              </div>
-            )}
+            <span>
+              Playing as <strong>{user.display_name}</strong>
+              <button onClick={handleSignOut} className="btn-small">
+                Sign Out
+              </button>
+            </span>
           </div>
         </header>
 
@@ -223,7 +202,7 @@ function App() {
             <Route path="/" element={<Matches />} />
             <Route
               path="/predictions"
-              element={<Predictions currentUser={currentUser} />}
+              element={<Predictions currentUser={participant} />}
             />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} />} />
           </Routes>

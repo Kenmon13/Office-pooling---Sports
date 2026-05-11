@@ -8,6 +8,15 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS pools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -21,8 +30,9 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     pool_id INTEGER REFERENCES pools(id),
+    user_id INTEGER REFERENCES users(id),
     created_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(name, pool_id)
+    UNIQUE(user_id, pool_id)
   );
 
   CREATE TABLE IF NOT EXISTS groups (
@@ -67,5 +77,13 @@ db.exec(`
     UNIQUE(participant_id, group_id)
   );
 `);
+
+// Seed admin user
+const adminUsername = process.env.ADMIN_USERNAME || "admin";
+const adminPassword = process.env.ADMIN_PASSWORD || "messi";
+const existingAdmin = db.prepare("SELECT id FROM users WHERE username = ?").get(adminUsername);
+if (!existingAdmin) {
+  db.prepare("INSERT INTO users (username, password, display_name, is_admin) VALUES (?, ?, ?, 1)").run(adminUsername, adminPassword, "Admin");
+}
 
 module.exports = db;
