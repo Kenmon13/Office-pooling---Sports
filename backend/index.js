@@ -60,7 +60,8 @@ app.delete("/api/admin/users/:id", (req, res) => {
   // Don't allow deleting yourself
   if (String(targetId) === String(userId)) return res.status(400).json({ error: "Cannot delete yourself" });
 
-  // Delete all their data: group_predictions, predictions, participants, then user
+  // Delete all their data: knockout_predictions, group_predictions, predictions, participants, then user
+  db.prepare("DELETE FROM knockout_predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
   db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
   db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
   db.prepare("DELETE FROM participants WHERE user_id = ?").run(targetId);
@@ -88,6 +89,7 @@ app.delete("/api/admin/pools/:id", (req, res) => {
   if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
 
   const poolId = req.params.id;
+  db.prepare("DELETE FROM knockout_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM participants WHERE pool_id = ?").run(poolId);
@@ -208,8 +210,23 @@ app.get("/api/group-predictions/:participantId", (req, res) => {
   res.json(predictions);
 });
 
+app.get("/api/prediction-deadline", (req, res) => {
+  const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
+  if (!firstMatch) return res.json({ deadline: null });
+  res.json({ deadline: firstMatch.match_date });
+});
+
 app.post("/api/group-predictions", (req, res) => {
   const { participant_id, group_id, team1_id, team2_id } = req.body;
+
+  // Check deadline - lock predictions before first match
+  const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
+  if (firstMatch) {
+    const deadline = new Date(firstMatch.match_date.replace(" ", "T"));
+    if (new Date() >= deadline) {
+      return res.status(403).json({ error: "Predictions are locked - the tournament has started" });
+    }
+  }
 
   if (!participant_id || !group_id || !team1_id || !team2_id) {
     return res.status(400).json({ error: "All fields are required" });
@@ -230,6 +247,37 @@ app.post("/api/group-predictions", (req, res) => {
       VALUES (?, ?, ?, ?)
       ON CONFLICT(participant_id, group_id) DO UPDATE SET team1_id = excluded.team1_id, team2_id = excluded.team2_id
     `).run(participant_id, group_id, team1_id, team2_id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Knockout Matches & Predictions ---
+
+app.get("/api/knockout-matches", (req, res) => {
+  const matches = db.prepare("SELECT * FROM knockout_matches ORDER BY id").all();
+  res.json(matches);
+});
+
+app.get("/api/knockout-predictions/:participantId", (req, res) => {
+  const predictions = db
+    .prepare("SELECT * FROM knockout_predictions WHERE participant_id = ?")
+    .all(req.params.participantId);
+  res.json(predictions);
+});
+
+app.post("/api/knockout-predictions", (req, res) => {
+  const { participant_id, match_id, predicted_winner } = req.body;
+  if (!participant_id || !match_id || !predicted_winner) {
+    return res.status(400).json({ error: "All fields are required" });
+  }
+  try {
+    db.prepare(`
+      INSERT INTO knockout_predictions (participant_id, match_id, predicted_winner)
+      VALUES (?, ?, ?)
+      ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_winner = excluded.predicted_winner
+    `).run(participant_id, match_id, predicted_winner);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -329,12 +377,20 @@ app.get("/api/leaderboard", (req, res) => {
   // Get all group predictions
   const allPredictions = db.prepare("SELECT * FROM group_predictions").all();
 
+  // Get knockout data for scoring
+  const koMatches = db.prepare("SELECT * FROM knockout_matches WHERE status = 'finished'").all();
+  const allKoPredictions = db.prepare("SELECT * FROM knockout_predictions").all();
+
+  const koPointsMap = { R32: 3, R16: 5, QF: 7, SF: 10, F: 15 };
+
   const leaderboard = participants.map((p) => {
     const myPreds = allPredictions.filter((gp) => gp.participant_id === p.id);
     let points = 0;
     let groups_correct = 0;
     let groups_half = 0;
     let groups_predicted = myPreds.length;
+    let ko_correct = 0;
+    let ko_points = 0;
 
     for (const pred of myPreds) {
       const q = qualified[pred.group_id];
@@ -345,7 +401,20 @@ app.get("/api/leaderboard", (req, res) => {
       else if (correctCount === 1) { points += 2; groups_half++; }
     }
 
-    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half };
+    // Knockout prediction scoring
+    const myKoPreds = allKoPredictions.filter((kp) => kp.participant_id === p.id);
+    for (const kp of myKoPreds) {
+      const match = koMatches.find((m) => m.id === kp.match_id);
+      if (!match || !match.winner_team_id) continue;
+      if (String(kp.predicted_winner) === String(match.winner_team_id)) {
+        const roundPts = koPointsMap[match.round] || 0;
+        ko_points += roundPts;
+        ko_correct++;
+      }
+    }
+    points += ko_points;
+
+    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, ko_correct, ko_points };
   });
 
   leaderboard.sort((a, b) => b.points - a.points || b.groups_correct - a.groups_correct || a.name.localeCompare(b.name));

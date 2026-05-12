@@ -108,6 +108,30 @@ export async function submitGroupPrediction(participant_id, group_id, team1_id, 
   return res.json();
 }
 
+export async function fetchKnockoutMatches() {
+  const res = await fetch(`${API}/knockout-matches`);
+  return res.json();
+}
+
+export async function fetchKnockoutPredictions(participantId) {
+  const res = await fetch(`${API}/knockout-predictions/${participantId}`);
+  return res.json();
+}
+
+export async function submitKnockoutPrediction(participant_id, match_id, predicted_winner) {
+  const res = await fetch(`${API}/knockout-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participant_id, match_id, predicted_winner }),
+  });
+  return res.json();
+}
+
+export async function fetchPredictionDeadline() {
+  const res = await fetch(`${API}/prediction-deadline`);
+  return res.json();
+}
+
 export async function fetchStandings() {
   const res = await fetch(`${API}/standings`);
   return res.json();

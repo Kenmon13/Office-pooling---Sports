@@ -56,6 +56,7 @@ function seed() {
 
       // Generate round-robin matches for each group (6 matches per group)
       // Dates are approximate - spread across June 11 - June 27, 2026
+      const kickoffTimes = ["13:00", "16:00", "19:00"];
       const baseDateMs = new Date("2026-06-11").getTime();
       let matchIndex = 0;
       for (let i = 0; i < teamIds.length; i++) {
@@ -64,7 +65,8 @@ function seed() {
           const matchDate = new Date(baseDateMs + dayOffset * 86400000)
             .toISOString()
             .split("T")[0];
-          insertMatch.run(groupId, teamIds[i], teamIds[j], matchDate);
+          const kickoff = kickoffTimes[matchIndex % kickoffTimes.length];
+          insertMatch.run(groupId, teamIds[i], teamIds[j], `${matchDate} ${kickoff}`);
           matchIndex++;
         }
       }
