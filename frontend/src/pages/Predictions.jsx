@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings } from "../api";
 import { flag } from "../flags";
-import Bracket from "../components/Bracket";
 
 function Predictions({ currentUser }) {
   const [groups, setGroups] = useState([]);
@@ -139,8 +138,6 @@ function Predictions({ currentUser }) {
         })}
       </div>
 
-      <h3 style={{ marginTop: 40 }}>Knockout Bracket</h3>
-      <Bracket />
     </div>
   );
 }

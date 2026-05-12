@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Matches from "./pages/Matches";
-import Predictions from "./pages/Predictions";
+
+
 import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
 import SelectSport from "./pages/SelectSport";
@@ -185,7 +186,6 @@ function App() {
           </div>
           <nav>
             <NavLink to="/">Group Stages</NavLink>
-            <NavLink to="/predictions">My Predictions</NavLink>
             <NavLink to="/knockouts">Knockouts</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
           </nav>
@@ -201,12 +201,8 @@ function App() {
 
         <main>
           <Routes>
-            <Route path="/" element={<Matches />} />
-            <Route
-              path="/predictions"
-              element={<Predictions currentUser={participant} />}
-            />
-            <Route path="/knockouts" element={<Knockouts />} />
+            <Route path="/" element={<Matches currentUser={participant} />} />
+            <Route path="/knockouts" element={<Knockouts currentUser={participant} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} />} />
           </Routes>
         </main>

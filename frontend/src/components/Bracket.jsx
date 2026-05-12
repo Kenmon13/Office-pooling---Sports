@@ -1,6 +1,4 @@
-function Bracket() {
-  // 2026 World Cup: 48 teams, 12 groups (A-L)
-  // Top 2 from each group (24) + 8 best 3rd-place teams = 32
+function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {} }) {
   const rounds = [
     {
       name: "Round of 32",
@@ -58,21 +56,107 @@ function Bracket() {
     },
   ];
 
+  const MATCH_H = 52;
+  const BASE_GAP = 10;
+  const SLOT = MATCH_H + BASE_GAP;
+  const ROUND_W = 140;
+  const CONN_W = 36;
+  const TITLE_H = 28;
+  const TOTAL_H = 16 * SLOT - BASE_GAP + TITLE_H;
+  const TOTAL_W = rounds.length * ROUND_W + (rounds.length - 1) * CONN_W;
+
+  const matchCenterY = (r, m) =>
+    TITLE_H + (Math.pow(2, r) - 1) * SLOT / 2 + m * Math.pow(2, r) * SLOT + MATCH_H / 2;
+
+  const roundLeft = (r) => r * (ROUND_W + CONN_W);
+
+  const lines = [];
+  for (let r = 0; r < rounds.length - 1; r++) {
+    const numPairs = rounds[r].matches.length / 2;
+    const matchRight = roundLeft(r) + ROUND_W;
+    const connX = matchRight + CONN_W / 2;
+    const nextLeft = roundLeft(r + 1);
+
+    for (let j = 0; j < numPairs; j++) {
+      const topY = matchCenterY(r, 2 * j);
+      const botY = matchCenterY(r, 2 * j + 1);
+      const midY = (topY + botY) / 2;
+
+      lines.push(
+        { x1: matchRight, y1: topY, x2: connX, y2: topY },
+        { x1: matchRight, y1: botY, x2: connX, y2: botY },
+        { x1: connX, y1: topY, x2: connX, y2: botY },
+        { x1: connX, y1: midY, x2: nextLeft, y2: midY },
+      );
+    }
+  }
+
+  // Check if a knockout match has a result
+  const getKoMatch = (matchId) => koMatches.find((m) => m.id === matchId);
+
+  const getMatchStatus = (matchId) => {
+    const ko = getKoMatch(matchId);
+    if (!ko) return null;
+    if (ko.status !== "finished" || !ko.winner_team_id) return null;
+    const pred = predictions[matchId];
+    if (!pred) return null;
+    return String(pred) === String(ko.winner_team_id) ? "correct" : "wrong";
+  };
+
   return (
     <div className="bracket">
-      <div className="bracket-rounds">
-        {rounds.map((round) => (
-          <div key={round.name} className="bracket-round">
-            <h4 className="bracket-round-title">{round.name}</h4>
-            <div className="bracket-matches">
-              {round.matches.map((m) => (
-                <div key={m.id} className="bracket-match">
-                  <div className="bracket-team">{m.home}</div>
-                  <div className="bracket-vs">vs</div>
-                  <div className="bracket-team">{m.away}</div>
-                </div>
-              ))}
+      <div className="bracket-canvas" style={{ position: "relative", width: TOTAL_W, height: TOTAL_H }}>
+        <svg
+          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+        >
+          {lines.map((l, i) => (
+            <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#2a5a2a" strokeWidth="1" />
+          ))}
+        </svg>
+
+        {rounds.map((round, ri) => (
+          <div key={round.name}>
+            <div
+              className="bracket-round-title"
+              style={{ position: "absolute", left: roundLeft(ri), top: 0, width: ROUND_W }}
+            >
+              {round.name}
+              {pointsMap[round.name] && (
+                <span className="bracket-pts-label"> ({pointsMap[round.name]} pts)</span>
+              )}
             </div>
+            {round.matches.map((m, mi) => {
+              const pred = predictions[m.id];
+              const status = getMatchStatus(m.id);
+              const isSaving = saving === m.id;
+
+              return (
+                <div
+                  key={m.id}
+                  className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""}`}
+                  style={{
+                    position: "absolute",
+                    left: roundLeft(ri),
+                    top: matchCenterY(ri, mi) - MATCH_H / 2,
+                    width: ROUND_W,
+                    height: MATCH_H,
+                  }}
+                >
+                  <div
+                    className={`bracket-team top ${onPick ? "clickable" : ""} ${pred === "home" ? "picked" : ""}`}
+                    onClick={onPick ? () => onPick(m.id, "home") : undefined}
+                  >
+                    {m.home}
+                  </div>
+                  <div
+                    className={`bracket-team bottom ${onPick ? "clickable" : ""} ${pred === "away" ? "picked" : ""}`}
+                    onClick={onPick ? () => onPick(m.id, "away") : undefined}
+                  >
+                    {m.away}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
