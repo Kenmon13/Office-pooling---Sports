@@ -494,6 +494,349 @@ app.get("/api/knockout-deadline", (req, res) => {
   res.json({ openMatchIds, groupStageComplete, matchMeta });
 });
 
+// ── Admin: test pool management ──────────────────────────────────────────────
+
+function requireAdmin(req, res) {
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(req.query.user_id);
+  if (!user || !user.is_admin) { res.status(401).json({ error: "Not authorized" }); return null; }
+  return user;
+}
+
+app.post("/api/admin/test/pool", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { name, password } = req.body;
+  if (!name || !password) return res.status(400).json({ error: "name and password required" });
+  try {
+    const result = db.prepare("INSERT INTO pools (name, sport, tournament, password, is_test) VALUES (?, 'soccer', 'wc2022', ?, 1)").run(name.trim(), password.trim());
+    res.json({ id: result.lastInsertRowid, name: name.trim(), sport: "soccer", tournament: "wc2022", is_test: 1 });
+  } catch (err) {
+    if (err.message.includes("UNIQUE")) return res.status(409).json({ error: "Pool name already taken" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const TEST_NAMES = [
+  "Alice","Bob","Charlie","Diana","Edward","Fatima","George","Hannah",
+  "Ivan","Julia","Kevin","Laura","Michael","Nina","Oscar","Paula",
+  "Quinn","Rachel","Samuel","Tina","Ulrich","Victoria","William","Xena",
+  "Yusuf","Zara","Aaron","Bella","Carlos","Demi",
+];
+
+app.post("/api/admin/test/pool/:poolId/participants", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { count = 5 } = req.body;
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT is_test FROM pools WHERE id = ?").get(poolId);
+  if (!pool || !pool.is_test) return res.status(400).json({ error: "Not a test pool" });
+
+  const existing = db.prepare("SELECT name FROM participants WHERE pool_id = ?").all(poolId).map((p) => p.name);
+  const available = TEST_NAMES.filter((n) => !existing.includes(n));
+  const toAdd = available.slice(0, Math.min(count, available.length));
+
+  const insert = db.prepare("INSERT INTO participants (name, pool_id) VALUES (?, ?)");
+  const added = [];
+  for (const name of toAdd) {
+    const result = insert.run(name, poolId);
+    added.push({ id: result.lastInsertRowid, name });
+  }
+  res.json({ added });
+});
+
+app.post("/api/admin/test/pool/:poolId/randomize-picks", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT is_test FROM pools WHERE id = ?").get(poolId);
+  if (!pool || !pool.is_test) return res.status(400).json({ error: "Not a test pool" });
+
+  const participants = db.prepare("SELECT id FROM participants WHERE pool_id = ?").all(poolId);
+  const groups = db.prepare("SELECT * FROM wc2022_groups").all();
+  const teams = db.prepare("SELECT * FROM wc2022_teams").all();
+  const koMatches = db.prepare("SELECT * FROM wc2022_knockout_matches").all();
+
+  const upsertGp = db.prepare(`
+    INSERT INTO wc2022_group_predictions (participant_id, group_id, team1_id, team2_id)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(participant_id, group_id) DO UPDATE SET team1_id=excluded.team1_id, team2_id=excluded.team2_id
+  `);
+  const upsertKp = db.prepare(`
+    INSERT INTO wc2022_knockout_predictions (participant_id, match_id, predicted_winner)
+    VALUES (?, ?, ?)
+    ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_winner=excluded.predicted_winner
+  `);
+
+  const shuffle = (arr) => arr.sort(() => Math.random() - 0.5);
+
+  for (const p of participants) {
+    // Random group predictions: pick 2 of 4 teams per group
+    for (const g of groups) {
+      const groupTeams = shuffle(teams.filter((t) => t.group_id === g.id));
+      upsertGp.run(p.id, g.id, groupTeams[0].id, groupTeams[1].id);
+    }
+    // Random KO predictions: pick home or away for each match
+    for (const m of koMatches) {
+      const winner = Math.random() < 0.5 ? m.home_team_id : m.away_team_id;
+      upsertKp.run(p.id, m.id, winner);
+    }
+  }
+  res.json({ success: true, participants: participants.length });
+});
+
+app.put("/api/admin/test/pool/:poolId/mock-date", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { mock_date } = req.body;
+  db.prepare("UPDATE pools SET mock_date = ? WHERE id = ? AND is_test = 1").run(mock_date || null, req.params.poolId);
+  res.json({ success: true });
+});
+
+app.delete("/api/admin/test/pool/:poolId/mock-date", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  db.prepare("UPDATE pools SET mock_date = NULL WHERE id = ? AND is_test = 1").run(req.params.poolId);
+  res.json({ success: true });
+});
+
+// ── WC2022 data endpoints ────────────────────────────────────────────────────
+
+app.get("/api/wc2022/groups", (req, res) => {
+  const groups = db.prepare("SELECT * FROM wc2022_groups ORDER BY name").all();
+  const teams = db.prepare("SELECT * FROM wc2022_teams ORDER BY name").all();
+  res.json(groups.map((g) => ({ ...g, teams: teams.filter((t) => t.group_id === g.id) })));
+});
+
+app.get("/api/wc2022/matches", (req, res) => {
+  const matches = db.prepare(`
+    SELECT m.*, g.name as group_name,
+      ht.name as home_team, ht.code as home_code,
+      at.name as away_team, at.code as away_code
+    FROM wc2022_matches m
+    JOIN wc2022_groups g ON m.group_id = g.id
+    JOIN wc2022_teams ht ON m.home_team_id = ht.id
+    JOIN wc2022_teams at ON m.away_team_id = at.id
+    ORDER BY m.match_date, g.name, m.id
+  `).all();
+  res.json(matches);
+});
+
+app.get("/api/wc2022/standings", (req, res) => {
+  const matches = db.prepare("SELECT * FROM wc2022_matches WHERE status = 'finished'").all();
+  const teams = db.prepare("SELECT * FROM wc2022_teams").all();
+  const groups = db.prepare("SELECT * FROM wc2022_groups ORDER BY name").all();
+
+  const stats = {};
+  for (const t of teams) {
+    stats[t.id] = { team_id: t.id, name: t.name, code: t.code, group_id: t.group_id, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
+  }
+  for (const m of matches) {
+    const h = stats[m.home_team_id], a = stats[m.away_team_id];
+    if (!h || !a) continue;
+    h.played++; a.played++;
+    h.gf += m.home_score; h.ga += m.away_score;
+    a.gf += m.away_score; a.ga += m.home_score;
+    if (m.home_score > m.away_score) { h.won++; h.points += 3; a.lost++; }
+    else if (m.away_score > m.home_score) { a.won++; a.points += 3; h.lost++; }
+    else { h.drawn++; h.points++; a.drawn++; a.points++; }
+  }
+
+  res.json(groups.map((g) => {
+    const groupTeams = Object.values(stats)
+      .filter((t) => t.group_id === g.id)
+      .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    const allFinished = groupTeams.every((t) => t.played >= 3);
+    return { ...g, teams: groupTeams, qualified: allFinished ? [groupTeams[0]?.team_id, groupTeams[1]?.team_id] : [] };
+  }));
+});
+
+app.get("/api/wc2022/knockout-matches", (req, res) => {
+  const matches = db.prepare(`
+    SELECT km.*,
+      ht.name as home_team_name, ht.code as home_team_code,
+      at.name as away_team_name, at.code as away_team_code,
+      wt.name as winner_team_name
+    FROM wc2022_knockout_matches km
+    LEFT JOIN wc2022_teams ht ON km.home_team_id = ht.id
+    LEFT JOIN wc2022_teams at ON km.away_team_id = at.id
+    LEFT JOIN wc2022_teams wt ON km.winner_team_id = wt.id
+    ORDER BY km.match_date
+  `).all();
+  res.json(matches);
+});
+
+const WC2022_KO_PREREQUISITES = {
+  "22-QF-1": ["22-R16-1","22-R16-2"], "22-QF-2": ["22-R16-3","22-R16-4"],
+  "22-QF-3": ["22-R16-5","22-R16-6"], "22-QF-4": ["22-R16-7","22-R16-8"],
+  "22-SF-1": ["22-QF-1","22-QF-3"],   "22-SF-2": ["22-QF-2","22-QF-4"],
+  "22-F":    ["22-SF-1","22-SF-2"],
+};
+const LAST_2022_GROUP_DATE = "2022-12-02 23:59";
+
+app.get("/api/wc2022/knockout-deadline", (req, res) => {
+  const poolId = req.query.pool_id;
+  const pool = poolId ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(poolId) : null;
+  const effectiveNow = pool?.mock_date
+    ? new Date(pool.mock_date.replace(" ", "T") + "Z").getTime()
+    : Date.now();
+
+  const koMatches = db.prepare("SELECT * FROM wc2022_knockout_matches").all();
+  const koById = Object.fromEntries(koMatches.map((m) => [m.id, m]));
+
+  const matchKickoff = (m) => m.match_date ? new Date(m.match_date.replace(" ", "T") + "Z").getTime() : null;
+  const lastGroupMs = new Date(LAST_2022_GROUP_DATE.replace(" ", "T") + "Z").getTime();
+
+  const isMatchOpen = (matchId) => {
+    const match = koById[matchId];
+    if (!match || !match.match_date) return false;
+    const kickoff = matchKickoff(match);
+    if (effectiveNow >= kickoff) return false; // past or at kickoff
+    const prereqs = WC2022_KO_PREREQUISITES[matchId];
+    if (!prereqs) return effectiveNow >= lastGroupMs; // R16: group stage must be done
+    return prereqs.every((pid) => {
+      const feeder = koById[pid];
+      if (!feeder || !feeder.match_date) return false;
+      return effectiveNow >= matchKickoff(feeder) + 3 * 3600 * 1000; // 3h after feeder kickoff
+    });
+  };
+
+  const openMatchIds = koMatches.filter((m) => isMatchOpen(m.id)).map((m) => m.id);
+  const matchMeta = {};
+  for (const m of koMatches) {
+    const prereqs = WC2022_KO_PREREQUISITES[m.id];
+    let opensAfter = null;
+    if (!prereqs) {
+      opensAfter = LAST_2022_GROUP_DATE;
+    } else {
+      const feederDates = prereqs.map((pid) => koById[pid]?.match_date).filter(Boolean);
+      opensAfter = feederDates.length ? feederDates.reduce((a, b) => (a > b ? a : b)) : null;
+    }
+    matchMeta[m.id] = { opensAfter, closesAt: m.match_date };
+  }
+
+  const groupStageComplete = effectiveNow >= lastGroupMs;
+  res.json({ openMatchIds, groupStageComplete, matchMeta });
+});
+
+app.get("/api/wc2022/group-predictions/:participantId", (req, res) => {
+  const preds = db.prepare(`
+    SELECT gp.*, t1.name as team1_name, t1.code as team1_code,
+      t2.name as team2_name, t2.code as team2_code
+    FROM wc2022_group_predictions gp
+    JOIN wc2022_teams t1 ON gp.team1_id = t1.id
+    JOIN wc2022_teams t2 ON gp.team2_id = t2.id
+    WHERE gp.participant_id = ?
+  `).all(req.params.participantId);
+  res.json(preds);
+});
+
+app.post("/api/wc2022/group-predictions", (req, res) => {
+  const { participant_id, group_id, team1_id, team2_id } = req.body;
+  if (!participant_id || !group_id || !team1_id || !team2_id) return res.status(400).json({ error: "All fields required" });
+  if (team1_id === team2_id) return res.status(400).json({ error: "Must pick two different teams" });
+
+  const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+  if (!participant) return res.status(404).json({ error: "Participant not found" });
+  const pool = db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(participant.pool_id);
+  const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
+  const firstMatch = new Date("2022-11-20T16:00:00Z");
+  if (effectiveNow >= firstMatch) return res.status(403).json({ error: "Group predictions are locked" });
+
+  const teams = db.prepare("SELECT id FROM wc2022_teams WHERE group_id = ? AND id IN (?, ?)").all(group_id, team1_id, team2_id);
+  if (teams.length !== 2) return res.status(400).json({ error: "Teams must belong to this group" });
+
+  db.prepare(`
+    INSERT INTO wc2022_group_predictions (participant_id, group_id, team1_id, team2_id)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(participant_id, group_id) DO UPDATE SET team1_id=excluded.team1_id, team2_id=excluded.team2_id
+  `).run(participant_id, group_id, team1_id, team2_id);
+  res.json({ success: true });
+});
+
+app.get("/api/wc2022/knockout-predictions/:participantId", (req, res) => {
+  const preds = db.prepare("SELECT * FROM wc2022_knockout_predictions WHERE participant_id = ?").all(req.params.participantId);
+  res.json(preds);
+});
+
+app.post("/api/wc2022/knockout-predictions", (req, res) => {
+  const { participant_id, match_id, predicted_winner } = req.body;
+  if (!participant_id || !match_id || !predicted_winner) return res.status(400).json({ error: "All fields required" });
+  db.prepare(`
+    INSERT INTO wc2022_knockout_predictions (participant_id, match_id, predicted_winner)
+    VALUES (?, ?, ?)
+    ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_winner=excluded.predicted_winner
+  `).run(participant_id, match_id, predicted_winner);
+  res.json({ success: true });
+});
+
+app.get("/api/wc2022/leaderboard", (req, res) => {
+  const poolId = req.query.pool_id;
+  const participants = poolId
+    ? db.prepare("SELECT * FROM participants WHERE pool_id = ?").all(poolId)
+    : db.prepare("SELECT * FROM participants").all();
+
+  // Compute group qualifiers from WC2022 results
+  const matches = db.prepare("SELECT * FROM wc2022_matches WHERE status = 'finished'").all();
+  const teams = db.prepare("SELECT * FROM wc2022_teams").all();
+  const groups = db.prepare("SELECT * FROM wc2022_groups").all();
+  const stats = {};
+  for (const t of teams) stats[t.id] = { team_id: t.id, group_id: t.group_id, played: 0, gf: 0, ga: 0, points: 0 };
+  for (const m of matches) {
+    const h = stats[m.home_team_id], a = stats[m.away_team_id];
+    if (!h || !a) continue;
+    h.played++; a.played++; h.gf += m.home_score; h.ga += m.away_score; a.gf += m.away_score; a.ga += m.home_score;
+    if (m.home_score > m.away_score) { h.points += 3; } else if (m.away_score > m.home_score) { a.points += 3; } else { h.points++; a.points++; }
+  }
+  const qualified = {};
+  for (const g of groups) {
+    const gt = Object.values(stats).filter((t) => t.group_id === g.id).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    qualified[g.id] = gt.every((t) => t.played >= 3) ? [gt[0]?.team_id, gt[1]?.team_id] : null;
+  }
+
+  const allGp = db.prepare("SELECT * FROM wc2022_group_predictions").all();
+  const koMatches = db.prepare("SELECT * FROM wc2022_knockout_matches WHERE status = 'finished'").all();
+  const allKp = db.prepare("SELECT * FROM wc2022_knockout_predictions").all();
+  const koPointsMap = { R16: 5, QF: 7, SF: 10, F: 15 };
+
+  const leaderboard = participants.map((p) => {
+    let points = 0, groups_correct = 0, groups_half = 0, ko_correct = 0, ko_points = 0;
+    for (const pred of allGp.filter((gp) => gp.participant_id === p.id)) {
+      const q = qualified[pred.group_id]; if (!q) continue;
+      const correct = [pred.team1_id, pred.team2_id].filter((t) => q.includes(t)).length;
+      if (correct === 2) { points += 5; groups_correct++; } else if (correct === 1) { points += 2; groups_half++; }
+    }
+    for (const kp of allKp.filter((kp) => kp.participant_id === p.id)) {
+      const match = koMatches.find((m) => m.id === kp.match_id);
+      if (!match?.winner_team_id) continue;
+      if (String(kp.predicted_winner) === String(match.winner_team_id)) {
+        const pts = koPointsMap[match.round] || 0;
+        ko_points += pts; ko_correct++;
+      }
+    }
+    points += ko_points;
+    return { id: p.id, name: p.name, points, groups_correct, groups_half, ko_correct, ko_points };
+  });
+
+  leaderboard.sort((a, b) => b.points - a.points || b.groups_correct - a.groups_correct || a.name.localeCompare(b.name));
+  res.json(leaderboard);
+});
+
+app.get("/api/wc2022/prediction-deadline", (req, res) => {
+  const poolId = req.query.pool_id;
+  const pool = poolId ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(poolId) : null;
+  const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
+  const deadline = "2022-11-20 16:00";
+  const locked = effectiveNow >= new Date(deadline.replace(" ", "T") + "Z");
+  res.json({ deadline, locked });
+});
+
+app.get("/api/admin/test/pools", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const pools = db.prepare(`
+    SELECT p.id, p.name, p.mock_date,
+      (SELECT COUNT(*) FROM participants pt WHERE pt.pool_id = p.id) as participant_count
+    FROM pools p WHERE p.is_test = 1 ORDER BY p.created_at DESC
+  `).all();
+  res.json(pools);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.put("/api/admin/knockout-matches/:id", (req, res) => {
   const userId = req.query.user_id;
   const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);

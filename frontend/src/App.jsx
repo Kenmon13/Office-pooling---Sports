@@ -10,7 +10,7 @@ import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
-import { autoJoinPool, fetchParticipantPoints } from "./api";
+import { autoJoinPool, fetchParticipantPoints, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate } from "./api";
 import "./App.css";
 
 function App() {
@@ -211,14 +211,78 @@ function App() {
         </header>
 
         <main>
+          {pool.is_test && user.is_admin && (
+            <TestControls userId={user.id} pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} />
+          )}
           <Routes>
-            <Route path="/" element={<Matches currentUser={participant} />} />
-            <Route path="/knockouts" element={<Knockouts currentUser={participant} />} />
-            <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} />} />
+            <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} />} />
+            <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} />} />
+            <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} />} />
           </Routes>
         </main>
       </div>
     </BrowserRouter>
+  );
+}
+
+function TestControls({ userId, pool, onMockDateChange }) {
+  const [mockDate, setMockDate] = useState(pool.mock_date ? pool.mock_date.slice(0, 16) : "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const flash = (text) => { setMsg(text); setTimeout(() => setMsg(""), 2500); };
+
+  const addPlayers = async (n) => {
+    setBusy(true);
+    const res = await adminAddTestParticipants(userId, pool.id, n);
+    flash(res.added?.length ? `Added ${res.added.length} player(s)` : (res.error || "No more names available"));
+    setBusy(false);
+  };
+
+  const randomize = async () => {
+    setBusy(true);
+    const res = await adminRandomizePicks(userId, pool.id);
+    flash(res.success ? `Randomized picks for ${res.participants} players` : (res.error || "Error"));
+    setBusy(false);
+  };
+
+  const applyDate = async () => {
+    if (!mockDate) return;
+    setBusy(true);
+    await adminSetMockDate(userId, pool.id, mockDate.replace("T", " "));
+    onMockDateChange(mockDate.replace("T", " "));
+    flash("Mock date set");
+    setBusy(false);
+  };
+
+  const clearDate = async () => {
+    setBusy(true);
+    await adminClearMockDate(userId, pool.id);
+    setMockDate("");
+    onMockDateChange(null);
+    flash("Mock date cleared — using real time");
+    setBusy(false);
+  };
+
+  return (
+    <div className="test-controls">
+      <span className="test-badge">TEST POOL</span>
+      <div className="test-controls-actions">
+        <button className="btn-test" onClick={() => addPlayers(5)} disabled={busy}>+5 Players</button>
+        <button className="btn-test" onClick={() => addPlayers(1)} disabled={busy}>+1 Player</button>
+        <button className="btn-test" onClick={randomize} disabled={busy}>Randomize Picks</button>
+        <span className="test-divider" />
+        <input
+          type="datetime-local"
+          className="test-date-input"
+          value={mockDate}
+          onChange={(e) => setMockDate(e.target.value)}
+        />
+        <button className="btn-test" onClick={applyDate} disabled={busy || !mockDate}>Set Date</button>
+        {pool.mock_date && <button className="btn-test btn-test-clear" onClick={clearDate} disabled={busy}>Clear Date</button>}
+      </div>
+      {msg && <span className="test-msg">{msg}</span>}
+    </div>
   );
 }
 

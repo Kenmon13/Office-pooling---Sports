@@ -154,3 +154,92 @@ export async function fetchLeaderboard(poolId) {
   const res = await fetch(url);
   return res.json();
 }
+
+// ── WC2022 ────────────────────────────────────────────────────────────────────
+
+export async function fetchWC2022Groups() {
+  return (await fetch(`${API}/wc2022/groups`)).json();
+}
+export async function fetchWC2022Matches() {
+  return (await fetch(`${API}/wc2022/matches`)).json();
+}
+export async function fetchWC2022Standings() {
+  return (await fetch(`${API}/wc2022/standings`)).json();
+}
+export async function fetchWC2022KnockoutMatches() {
+  return (await fetch(`${API}/wc2022/knockout-matches`)).json();
+}
+export async function fetchWC2022KnockoutDeadline(poolId) {
+  return (await fetch(`${API}/wc2022/knockout-deadline?pool_id=${poolId}`)).json();
+}
+export async function fetchWC2022GroupPredictions(participantId) {
+  return (await fetch(`${API}/wc2022/group-predictions/${participantId}`)).json();
+}
+export async function submitWC2022GroupPrediction(participant_id, group_id, team1_id, team2_id) {
+  const res = await fetch(`${API}/wc2022/group-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participant_id, group_id, team1_id, team2_id }),
+  });
+  return res.json();
+}
+export async function fetchWC2022KnockoutPredictions(participantId) {
+  return (await fetch(`${API}/wc2022/knockout-predictions/${participantId}`)).json();
+}
+export async function submitWC2022KnockoutPrediction(participant_id, match_id, predicted_winner) {
+  const res = await fetch(`${API}/wc2022/knockout-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participant_id, match_id, predicted_winner }),
+  });
+  return res.json();
+}
+export async function fetchWC2022Leaderboard(poolId) {
+  return (await fetch(`${API}/wc2022/leaderboard?pool_id=${poolId}`)).json();
+}
+export async function fetchWC2022PredictionDeadline(poolId) {
+  return (await fetch(`${API}/wc2022/prediction-deadline?pool_id=${poolId}`)).json();
+}
+
+// ── Admin test pool ───────────────────────────────────────────────────────────
+
+export async function adminFetchTestPools(userId) {
+  return (await fetch(`${API}/admin/test/pools?user_id=${userId}`)).json();
+}
+export async function adminCreateTestPool(userId, name, password) {
+  const res = await fetch(`${API}/admin/test/pool?user_id=${userId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, password }),
+  });
+  return res.json();
+}
+export async function adminAddTestParticipants(userId, poolId, count) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/participants?user_id=${userId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ count }),
+  });
+  return res.json();
+}
+export async function adminRandomizePicks(userId, poolId) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/randomize-picks?user_id=${userId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return res.json();
+}
+export async function adminSetMockDate(userId, poolId, mock_date) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date?user_id=${userId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mock_date }),
+  });
+  return res.json();
+}
+export async function adminClearMockDate(userId, poolId) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date?user_id=${userId}`, {
+    method: "DELETE",
+  });
+  return res.json();
+}

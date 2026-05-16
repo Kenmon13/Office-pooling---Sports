@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { fetchLeaderboard } from "../api";
+import { fetchLeaderboard, fetchWC2022Leaderboard } from "../api";
 
-function Leaderboard({ poolId }) {
+function Leaderboard({ poolId, tournament = "wc2026" }) {
   const [leaderboard, setLeaderboard] = useState([]);
 
   useEffect(() => {
-    fetchLeaderboard(poolId).then(setLeaderboard);
-  }, [poolId]);
+    const fetchFn = tournament === "wc2022" ? fetchWC2022Leaderboard : fetchLeaderboard;
+    fetchFn(poolId).then(setLeaderboard);
+  }, [poolId, tournament]);
 
   return (
     <div className="page">

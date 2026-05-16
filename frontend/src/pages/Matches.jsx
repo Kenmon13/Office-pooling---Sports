@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchMatches, fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings, fetchPredictionDeadline } from "../api";
+import {
+  fetchMatches, fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings, fetchPredictionDeadline,
+  fetchWC2022Matches, fetchWC2022Groups, fetchWC2022GroupPredictions, submitWC2022GroupPrediction, fetchWC2022Standings, fetchWC2022PredictionDeadline,
+} from "../api";
 import { flag } from "../flags";
 
 function formatMatchDate(dateStr) {
@@ -48,7 +51,8 @@ function useCountdown(deadline) {
   return remaining;
 }
 
-function Matches({ currentUser }) {
+function Matches({ currentUser, tournament = "wc2026", poolId }) {
+  const isWC2022 = tournament === "wc2022";
   const [matches, setMatches] = useState([]);
   const [groups, setGroups] = useState([]);
   const [expandedGroup, setExpandedGroup] = useState(null);
@@ -60,25 +64,42 @@ function Matches({ currentUser }) {
   const [locked, setLocked] = useState(false);
 
   useEffect(() => {
-    fetchMatches().then(setMatches);
-    fetchGroups().then(setGroups);
-    fetchStandings().then((data) => {
-      const map = {};
-      data.forEach((g) => { map[g.id] = g; });
-      setStandings(map);
-    });
-    fetchPredictionDeadline().then((data) => {
-      if (data.deadline) {
-        setDeadline(data.deadline);
-        const dl = new Date(data.deadline.replace(" ", "T"));
-        setLocked(new Date() >= dl);
-      }
-    });
-  }, []);
+    if (isWC2022) {
+      fetchWC2022Matches().then(setMatches);
+      fetchWC2022Groups().then(setGroups);
+      fetchWC2022Standings().then((data) => {
+        const map = {};
+        data.forEach((g) => { map[g.id] = g; });
+        setStandings(map);
+      });
+      fetchWC2022PredictionDeadline(poolId).then((data) => {
+        if (data.deadline) {
+          setDeadline(data.deadline);
+          setLocked(data.locked);
+        }
+      });
+    } else {
+      fetchMatches().then(setMatches);
+      fetchGroups().then(setGroups);
+      fetchStandings().then((data) => {
+        const map = {};
+        data.forEach((g) => { map[g.id] = g; });
+        setStandings(map);
+      });
+      fetchPredictionDeadline().then((data) => {
+        if (data.deadline) {
+          setDeadline(data.deadline);
+          const dl = new Date(data.deadline.replace(" ", "T"));
+          setLocked(new Date() >= dl);
+        }
+      });
+    }
+  }, [isWC2022, poolId]);
 
   useEffect(() => {
     if (currentUser) {
-      fetchGroupPredictions(currentUser.id).then((preds) => {
+      const fetchFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
+      fetchFn(currentUser.id).then((preds) => {
         const map = {};
         const sel = {};
         preds.forEach((p) => {
@@ -89,7 +110,7 @@ function Matches({ currentUser }) {
         setSelections(sel);
       });
     }
-  }, [currentUser]);
+  }, [currentUser, isWC2022]);
 
   const toggleGroup = (groupName) => {
     setExpandedGroup((prev) => (prev === groupName ? null : groupName));
@@ -112,8 +133,9 @@ function Matches({ currentUser }) {
     const picked = selections[groupId] || [];
     if (picked.length !== 2) return;
     setSaving(groupId);
-    await submitGroupPrediction(currentUser.id, groupId, picked[0], picked[1]);
-    const preds = await fetchGroupPredictions(currentUser.id);
+    const submitFn = isWC2022 ? submitWC2022GroupPrediction : submitGroupPrediction;
+    await submitFn(currentUser.id, groupId, picked[0], picked[1]);
+    const preds = await (isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions)(currentUser.id);
     const map = {};
     preds.forEach((p) => { map[p.group_id] = p; });
     setPredictions(map);
