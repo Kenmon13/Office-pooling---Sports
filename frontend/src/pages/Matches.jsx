@@ -264,6 +264,12 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
 
               {currentUser && !locked && (
                 <div className="group-card-footer">
+                  {picked.length < 2 && (
+                    <span className="pick-hint">Pick {2 - picked.length} more</span>
+                  )}
+                  {picked.length === 2 && !hasChanged && (
+                    <span className="saved-label">Saved ✓</span>
+                  )}
                   {picked.length === 2 && hasChanged && (
                     <button
                       className="btn-submit"
@@ -272,9 +278,6 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
                     >
                       {saving === g.id ? "Saving..." : saved ? "Update" : "Save"}
                     </button>
-                  )}
-                  {picked.length < 2 && (
-                    <span className="pick-hint">Pick {2 - picked.length} more</span>
                   )}
                 </div>
               )}
