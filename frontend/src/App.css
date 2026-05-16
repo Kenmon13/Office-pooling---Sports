@@ -1327,6 +1327,16 @@ nav a.active {
   pointer-events: none;
 }
 
+.bracket-match-time {
+  font-size: 9px;
+  color: #4a7a4a;
+  text-align: center;
+  padding: 1px 4px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ko-rules {
   background: #0f240f;
   border: 1px solid #1e3a1e;

@@ -8,12 +8,14 @@ function Knockouts({ currentUser }) {
   const [saving, setSaving] = useState(null);
   const [openMatchIds, setOpenMatchIds] = useState(new Set());
   const [groupStageComplete, setGroupStageComplete] = useState(false);
+  const [matchMeta, setMatchMeta] = useState({});
 
   useEffect(() => {
     fetchKnockoutMatches().then(setKoMatches);
     fetchKnockoutDeadline().then((data) => {
       setOpenMatchIds(new Set(data.openMatchIds));
       setGroupStageComplete(data.groupStageComplete);
+      setMatchMeta(data.matchMeta || {});
     });
   }, []);
 
@@ -45,9 +47,9 @@ function Knockouts({ currentUser }) {
         <p className="ko-rules-title">How predictions work</p>
         <ul>
           <li>Round of 32 opens once all group stage matches are complete.</li>
-          <li>Each later match (R16, QF, SF, Final) opens individually once its two feeder matches have confirmed winners.</li>
-          <li>Predictions lock 12 hours before each match kicks off — plan ahead!</li>
-          <li>Points per correct winner: R32 = 3 &middot; R16 = 5 &middot; QF = 7 &middot; SF = 10 &middot; Final = 15</li>
+          <li>Each later match opens individually as soon as both of its feeder matches have confirmed winners — you don't have to wait for a full round to finish.</li>
+          <li>Predictions lock automatically 12 hours before each match kicks off, so submit your pick before then.</li>
+          <li>The further you go in the tournament, the more points a correct winner prediction is worth: 3 points in the Round of 32, 5 in the Round of 16, 7 in the Quarter-Finals, 10 in the Semi-Finals, and 15 for the Final.</li>
         </ul>
       </div>
 
@@ -67,6 +69,7 @@ function Knockouts({ currentUser }) {
         koMatches={koMatches}
         pointsMap={pointsMap}
         openMatchIds={openMatchIds}
+        matchMeta={matchMeta}
       />
     </div>
   );

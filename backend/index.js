@@ -256,7 +256,15 @@ app.post("/api/group-predictions", (req, res) => {
 // --- Knockout Matches & Predictions ---
 
 app.get("/api/knockout-matches", (req, res) => {
-  const matches = db.prepare("SELECT * FROM knockout_matches ORDER BY id").all();
+  const matches = db.prepare(`
+    SELECT km.*,
+      ht.name as home_team_name, ht.code as home_team_code,
+      at.name as away_team_name, at.code as away_team_code
+    FROM knockout_matches km
+    LEFT JOIN teams ht ON km.home_team_id = ht.id
+    LEFT JOIN teams at ON km.away_team_id = at.id
+    ORDER BY km.id
+  `).all();
   res.json(matches);
 });
 
@@ -442,25 +450,52 @@ app.get("/api/knockout-deadline", (req, res) => {
   const finishedMatches = db.prepare("SELECT COUNT(*) as c FROM matches WHERE status = 'finished'").get().c;
   const groupStageComplete = totalMatches > 0 && finishedMatches === totalMatches;
 
+  const lastGroupRow = db.prepare("SELECT MAX(match_date) as d FROM matches").get();
+  const lastGroupMatchDate = lastGroupRow.d;
+
   const koMatches = db.prepare("SELECT * FROM knockout_matches").all();
   const koById = Object.fromEntries(koMatches.map((m) => [m.id, m]));
   const now = Date.now();
+
+  const toUtcStr = (ms) => new Date(ms).toISOString().replace("T", " ").slice(0, 16);
+
+  const getClosesAt = (matchDate) => {
+    if (!matchDate) return null;
+    const kickoff = new Date(matchDate.replace(" ", "T") + "Z").getTime();
+    return toUtcStr(kickoff - TWELVE_HOURS_MS);
+  };
+
+  const getOpensAfter = (matchId) => {
+    const prereqs = KO_PREREQUISITES[matchId];
+    if (!prereqs) return lastGroupMatchDate; // R32 opens after last group match
+    const dates = prereqs.map((pid) => koById[pid]?.match_date).filter(Boolean);
+    return dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  };
 
   const isMatchOpen = (matchId) => {
     const match = koById[matchId];
     if (!match) return false;
     if (match.status === "live" || match.status === "finished") return false;
     if (match.match_date) {
-      const kickoff = new Date(match.match_date.replace(" ", "T")).getTime();
+      const kickoff = new Date(match.match_date.replace(" ", "T") + "Z").getTime();
       if (now >= kickoff - TWELVE_HOURS_MS) return false;
     }
     const prereqs = KO_PREREQUISITES[matchId];
-    if (!prereqs) return groupStageComplete; // R32 — opens when group stage done
+    if (!prereqs) return groupStageComplete;
     return prereqs.every((pid) => koById[pid]?.winner_team_id);
   };
 
   const openMatchIds = koMatches.filter((m) => isMatchOpen(m.id)).map((m) => m.id);
-  res.json({ openMatchIds, groupStageComplete });
+
+  const matchMeta = {};
+  for (const m of koMatches) {
+    matchMeta[m.id] = {
+      opensAfter: getOpensAfter(m.id),
+      closesAt: getClosesAt(m.match_date),
+    };
+  }
+
+  res.json({ openMatchIds, groupStageComplete, matchMeta });
 });
 
 app.put("/api/admin/knockout-matches/:id", (req, res) => {

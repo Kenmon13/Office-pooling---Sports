@@ -1,4 +1,12 @@
-function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set() }) {
+import { flag } from "../flags";
+
+function formatKoTime(utcStr) {
+  if (!utcStr) return null;
+  const d = new Date(utcStr.replace(" ", "T") + "Z");
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {} }) {
   const rounds = [
     {
       name: "Round of 32",
@@ -56,7 +64,7 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
     },
   ];
 
-  const MATCH_H = 52;
+  const MATCH_H = 72;
   const BASE_GAP = 10;
   const SLOT = MATCH_H + BASE_GAP;
   const ROUND_W = 140;
@@ -133,6 +141,17 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
               const matchOpen = openMatchIds.has(m.id);
               const matchLocked = !matchOpen || (ko && ko.status !== "upcoming");
               const canPick = onPick && !matchLocked;
+              const meta = matchMeta[m.id] || {};
+              const timeLabel = matchOpen
+                ? { text: "Closes: " + formatKoTime(meta.closesAt), red: true }
+                : { text: "Opens after: " + formatKoTime(meta.opensAfter), red: false };
+
+              const homeLabel = ko?.home_team_name
+                ? <>{flag(ko.home_team_code)} {ko.home_team_name}</>
+                : m.home;
+              const awayLabel = ko?.away_team_name
+                ? <>{flag(ko.away_team_code)} {ko.away_team_name}</>
+                : m.away;
 
               return (
                 <div
@@ -150,14 +169,19 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
                     className={`bracket-team top ${canPick ? "clickable" : ""} ${pred === "home" ? "picked" : ""}`}
                     onClick={canPick ? () => onPick(m.id, "home") : undefined}
                   >
-                    {m.home}
+                    {homeLabel}
                   </div>
                   <div
                     className={`bracket-team bottom ${canPick ? "clickable" : ""} ${pred === "away" ? "picked" : ""}`}
                     onClick={canPick ? () => onPick(m.id, "away") : undefined}
                   >
-                    {m.away}
+                    {awayLabel}
                   </div>
+                  {timeLabel.text && (
+                    <div className="bracket-match-time" style={{ color: timeLabel.red ? "#ff6b6b" : undefined }}>
+                      {timeLabel.text}
+                    </div>
+                  )}
                 </div>
               );
             })}
