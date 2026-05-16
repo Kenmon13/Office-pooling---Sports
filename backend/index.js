@@ -603,6 +603,10 @@ app.get("/api/wc2022/groups", (req, res) => {
 });
 
 app.get("/api/wc2022/matches", (req, res) => {
+  const poolId = req.query.pool_id;
+  const pool = poolId ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(poolId) : null;
+  const cutoff = pool?.mock_date || null;
+
   const matches = db.prepare(`
     SELECT m.*, g.name as group_name,
       ht.name as home_team, ht.code as home_code,
@@ -613,11 +617,25 @@ app.get("/api/wc2022/matches", (req, res) => {
     JOIN wc2022_teams at ON m.away_team_id = at.id
     ORDER BY m.match_date, g.name, m.id
   `).all();
-  res.json(matches);
+
+  // When a mock date is set, hide scores for matches that haven't kicked off yet
+  const result = matches.map((m) => {
+    if (cutoff && m.match_date > cutoff) {
+      return { ...m, home_score: null, away_score: null, status: "upcoming" };
+    }
+    return m;
+  });
+  res.json(result);
 });
 
 app.get("/api/wc2022/standings", (req, res) => {
-  const matches = db.prepare("SELECT * FROM wc2022_matches WHERE status = 'finished'").all();
+  const poolId = req.query.pool_id;
+  const pool = poolId ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(poolId) : null;
+  const cutoff = pool?.mock_date || null;
+
+  // Only count matches that have kicked off by effectiveNow
+  const allMatches = db.prepare("SELECT * FROM wc2022_matches WHERE status = 'finished'").all();
+  const matches = cutoff ? allMatches.filter((m) => m.match_date <= cutoff) : allMatches;
   const teams = db.prepare("SELECT * FROM wc2022_teams").all();
   const groups = db.prepare("SELECT * FROM wc2022_groups ORDER BY name").all();
 

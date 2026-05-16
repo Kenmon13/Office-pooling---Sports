@@ -160,11 +160,11 @@ export async function fetchLeaderboard(poolId) {
 export async function fetchWC2022Groups() {
   return (await fetch(`${API}/wc2022/groups`)).json();
 }
-export async function fetchWC2022Matches() {
-  return (await fetch(`${API}/wc2022/matches`)).json();
+export async function fetchWC2022Matches(poolId) {
+  return (await fetch(`${API}/wc2022/matches?pool_id=${poolId}`)).json();
 }
-export async function fetchWC2022Standings() {
-  return (await fetch(`${API}/wc2022/standings`)).json();
+export async function fetchWC2022Standings(poolId) {
+  return (await fetch(`${API}/wc2022/standings?pool_id=${poolId}`)).json();
 }
 export async function fetchWC2022KnockoutMatches() {
   return (await fetch(`${API}/wc2022/knockout-matches`)).json();

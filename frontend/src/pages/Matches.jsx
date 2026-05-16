@@ -65,9 +65,9 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
 
   useEffect(() => {
     if (isWC2022) {
-      fetchWC2022Matches().then(setMatches);
+      fetchWC2022Matches(poolId).then(setMatches);
       fetchWC2022Groups().then(setGroups);
-      fetchWC2022Standings().then((data) => {
+      fetchWC2022Standings(poolId).then((data) => {
         const map = {};
         data.forEach((g) => { map[g.id] = g; });
         setStandings(map);
