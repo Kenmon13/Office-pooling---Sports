@@ -30,14 +30,19 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const handleCreateTestPool = async () => {
     if (!newTestName.trim() || !newTestPwd.trim()) return;
     setCreating(true);
-    const res = await adminCreateTestPool(user.id, newTestName.trim(), newTestPwd.trim());
-    if (!res.error) {
-      setNewTestName(""); setNewTestPwd("");
-      adminFetchTestPools(user.id).then((d) => { if (!d.error) setTestPools(d); });
-    } else {
-      alert(res.error);
+    try {
+      const res = await adminCreateTestPool(user.id, newTestName.trim(), newTestPwd.trim());
+      if (!res.error) {
+        setNewTestName(""); setNewTestPwd("");
+        adminFetchTestPools(user.id).then((d) => { if (!d.error) setTestPools(d); });
+      } else {
+        alert(res.error);
+      }
+    } catch (err) {
+      alert("Failed to create pool: " + err.message);
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   const handleDeleteTestPool = async (poolId) => {

@@ -249,9 +249,11 @@ function TestControls({ userId, pool, onMockDateChange }) {
   const applyDate = async () => {
     if (!mockDate) return;
     setBusy(true);
-    await adminSetMockDate(userId, pool.id, mockDate.replace("T", " "));
-    onMockDateChange(mockDate.replace("T", " "));
-    flash("Mock date set");
+    // datetime-local is in local time; convert to UTC for storage
+    const utcStr = new Date(mockDate).toISOString().slice(0, 16).replace("T", " ");
+    await adminSetMockDate(userId, pool.id, utcStr);
+    onMockDateChange(utcStr);
+    flash("Mock date set (stored as UTC: " + utcStr + ")");
     setBusy(false);
   };
 
@@ -272,6 +274,7 @@ function TestControls({ userId, pool, onMockDateChange }) {
         <button className="btn-test" onClick={() => addPlayers(1)} disabled={busy}>+1 Player</button>
         <button className="btn-test" onClick={randomize} disabled={busy}>Randomize Picks</button>
         <span className="test-divider" />
+        <span className="test-date-label">Sim date (local time):</span>
         <input
           type="datetime-local"
           className="test-date-input"
