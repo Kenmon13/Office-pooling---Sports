@@ -1361,6 +1361,11 @@ nav a.active {
   gap: 3px;
 }
 
+.ko-points-list {
+  margin-top: 4px;
+  gap: 2px;
+}
+
 .team-flag {
   width: 20px;
   height: 15px;

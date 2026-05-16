@@ -443,7 +443,7 @@ const KO_PREREQUISITES = {
   "F":     ["SF-1",  "SF-2"],
 };
 
-const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const TWELVE_HOURS_MS = 1 * 60 * 60 * 1000; // 1 hour before kickoff
 
 app.get("/api/knockout-deadline", (req, res) => {
   const totalMatches = db.prepare("SELECT COUNT(*) as c FROM matches").get().c;
