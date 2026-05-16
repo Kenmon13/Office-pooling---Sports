@@ -443,7 +443,7 @@ const KO_PREREQUISITES = {
   "F":     ["SF-1",  "SF-2"],
 };
 
-const TWELVE_HOURS_MS = 1 * 60 * 60 * 1000; // 1 hour before kickoff
+const TWELVE_HOURS_MS = 0; // lock at kickoff
 
 app.get("/api/knockout-deadline", (req, res) => {
   const totalMatches = db.prepare("SELECT COUNT(*) as c FROM matches").get().c;
@@ -459,11 +459,7 @@ app.get("/api/knockout-deadline", (req, res) => {
 
   const toUtcStr = (ms) => new Date(ms).toISOString().replace("T", " ").slice(0, 16);
 
-  const getClosesAt = (matchDate) => {
-    if (!matchDate) return null;
-    const kickoff = new Date(matchDate.replace(" ", "T") + "Z").getTime();
-    return toUtcStr(kickoff - TWELVE_HOURS_MS);
-  };
+  const getClosesAt = (matchDate) => matchDate || null;
 
   const getOpensAfter = (matchId) => {
     const prereqs = KO_PREREQUISITES[matchId];

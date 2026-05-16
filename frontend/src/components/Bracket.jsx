@@ -6,21 +6,10 @@ function formatKoTime(utcStr) {
   return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function formatSlot(slot) {
-  if (!slot) return "TBD";
-  // "1A" / "2B" → "1st, Group A"
-  const single = slot.match(/^([123])([A-L])$/);
-  if (single) {
-    const ord = { "1": "1st", "2": "2nd", "3": "3rd" }[single[1]];
-    return `${ord}, Group ${single[2]}`;
-  }
-  // "3C/D/E" → "Best 3rd (C/D/E)"
-  const best3 = slot.match(/^3([A-L](?:\/[A-L])+)$/);
-  if (best3) return `Best 3rd (${best3[1]})`;
-  // "W R32-1" → "R32 Match 1 winner"
-  const win = slot.match(/^W (R32|R16|QF|SF)-(\d+)$/);
-  if (win) return `${win[1]} Match ${win[2]} winner`;
-  return slot;
+const TBC_FLAG = "https://www.gstatic.com/onebox/sports/logos/crest_48dp.png";
+
+function SlotLabel() {
+  return <><img src={TBC_FLAG} className="team-flag" alt="" /> TBC</>;
 }
 
 function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {} }) {
@@ -165,10 +154,10 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
 
               const homeLabel = ko?.home_team_name
                 ? <>{flag(ko.home_team_code)} {ko.home_team_name}</>
-                : formatSlot(m.home);
+                : <SlotLabel />;
               const awayLabel = ko?.away_team_name
                 ? <>{flag(ko.away_team_code)} {ko.away_team_name}</>
-                : formatSlot(m.away);
+                : <SlotLabel />;
 
               return (
                 <div
