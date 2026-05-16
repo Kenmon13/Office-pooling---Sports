@@ -6,11 +6,15 @@ function Knockouts({ currentUser }) {
   const [koMatches, setKoMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
   const [saving, setSaving] = useState(null);
-  const [locked, setLocked] = useState(false);
+  const [openMatchIds, setOpenMatchIds] = useState(new Set());
+  const [groupStageComplete, setGroupStageComplete] = useState(false);
 
   useEffect(() => {
     fetchKnockoutMatches().then(setKoMatches);
-    fetchKnockoutDeadline().then((data) => setLocked(data.locked));
+    fetchKnockoutDeadline().then((data) => {
+      setOpenMatchIds(new Set(data.openMatchIds));
+      setGroupStageComplete(data.groupStageComplete);
+    });
   }, []);
 
   useEffect(() => {
@@ -36,23 +40,33 @@ function Knockouts({ currentUser }) {
   return (
     <div className="page">
       <h2>Knockout Stage</h2>
-      {locked ? (
+
+      <div className="ko-rules">
+        <p className="ko-rules-title">How predictions work</p>
+        <ul>
+          <li>Round of 32 opens once all group stage matches are complete.</li>
+          <li>Each later match (R16, QF, SF, Final) opens individually once its two feeder matches have confirmed winners.</li>
+          <li>Predictions lock 12 hours before each match kicks off — plan ahead!</li>
+          <li>Points per correct winner: R32 = 3 &middot; R16 = 5 &middot; QF = 7 &middot; SF = 10 &middot; Final = 15</li>
+        </ul>
+      </div>
+
+      {!groupStageComplete && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
-          <span className="deadline-locked-text">Knockout predictions are locked — the stage has started</span>
+          <span className="deadline-locked-text">Knockout predictions open once the group stage is complete</span>
         </div>
-      ) : currentUser ? (
-        <p className="select-subtitle" style={{ marginBottom: 16 }}>
-          Pick a winner for each match. Points per correct pick: R32 = 3 pts, R16 = 5 pts, QF = 7 pts, SF = 10 pts, Final = 15 pts.
-        </p>
-      ) : (
+      )}
+      {!currentUser && (
         <p className="notice">Join the pool to make knockout predictions.</p>
       )}
+
       <Bracket
         predictions={predictions}
-        onPick={locked || !currentUser ? null : handlePick}
+        onPick={currentUser ? handlePick : null}
         saving={saving}
         koMatches={koMatches}
         pointsMap={pointsMap}
+        openMatchIds={openMatchIds}
       />
     </div>
   );

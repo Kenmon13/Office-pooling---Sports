@@ -423,9 +423,53 @@ app.get("/api/leaderboard", (req, res) => {
 
 // --- Knockout Deadline ---
 
+// Which two feeder matches must have winners before a match opens
+const KO_PREREQUISITES = {
+  "R16-1": ["R32-1", "R32-2"],  "R16-2": ["R32-3",  "R32-4"],
+  "R16-3": ["R32-5", "R32-6"],  "R16-4": ["R32-7",  "R32-8"],
+  "R16-5": ["R32-9", "R32-10"], "R16-6": ["R32-11", "R32-12"],
+  "R16-7": ["R32-13","R32-14"], "R16-8": ["R32-15", "R32-16"],
+  "QF-1":  ["R16-1", "R16-2"],  "QF-2":  ["R16-3",  "R16-4"],
+  "QF-3":  ["R16-5", "R16-6"],  "QF-4":  ["R16-7",  "R16-8"],
+  "SF-1":  ["QF-1",  "QF-2"],   "SF-2":  ["QF-3",   "QF-4"],
+  "F":     ["SF-1",  "SF-2"],
+};
+
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
 app.get("/api/knockout-deadline", (req, res) => {
-  const started = db.prepare("SELECT COUNT(*) as c FROM knockout_matches WHERE status != 'upcoming'").get();
-  res.json({ locked: started.c > 0 });
+  const totalMatches = db.prepare("SELECT COUNT(*) as c FROM matches").get().c;
+  const finishedMatches = db.prepare("SELECT COUNT(*) as c FROM matches WHERE status = 'finished'").get().c;
+  const groupStageComplete = totalMatches > 0 && finishedMatches === totalMatches;
+
+  const koMatches = db.prepare("SELECT * FROM knockout_matches").all();
+  const koById = Object.fromEntries(koMatches.map((m) => [m.id, m]));
+  const now = Date.now();
+
+  const isMatchOpen = (matchId) => {
+    const match = koById[matchId];
+    if (!match) return false;
+    if (match.status === "live" || match.status === "finished") return false;
+    if (match.match_date) {
+      const kickoff = new Date(match.match_date.replace(" ", "T")).getTime();
+      if (now >= kickoff - TWELVE_HOURS_MS) return false;
+    }
+    const prereqs = KO_PREREQUISITES[matchId];
+    if (!prereqs) return groupStageComplete; // R32 — opens when group stage done
+    return prereqs.every((pid) => koById[pid]?.winner_team_id);
+  };
+
+  const openMatchIds = koMatches.filter((m) => isMatchOpen(m.id)).map((m) => m.id);
+  res.json({ openMatchIds, groupStageComplete });
+});
+
+app.put("/api/admin/knockout-matches/:id", (req, res) => {
+  const userId = req.query.user_id;
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
+  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+  const { match_date } = req.body;
+  db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ?").run(match_date || null, req.params.id);
+  res.json({ success: true });
 });
 
 // Client-side routing fallback

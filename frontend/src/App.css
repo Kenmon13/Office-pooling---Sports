@@ -1322,6 +1322,35 @@ nav a.active {
   color: #3a6a3a;
 }
 
+.bracket-match.not-open {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.ko-rules {
+  background: #0f240f;
+  border: 1px solid #1e3a1e;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #7da67d;
+}
+
+.ko-rules-title {
+  font-weight: 600;
+  color: #6fdc6f;
+  margin-bottom: 6px;
+}
+
+.ko-rules ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .team-flag {
   width: 20px;
   height: 15px;

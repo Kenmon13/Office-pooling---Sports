@@ -98,6 +98,9 @@ db.exec(`
   );
 `);
 
+// Add match_date to knockout_matches if not already present
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN match_date TEXT"); } catch (_) {}
+
 // Seed knockout matches
 const koExists = db.prepare("SELECT COUNT(*) as c FROM knockout_matches").get();
 if (koExists.c === 0) {

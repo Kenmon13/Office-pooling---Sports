@@ -1,4 +1,4 @@
-function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {} }) {
+function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set() }) {
   const rounds = [
     {
       name: "Round of 32",
@@ -129,11 +129,15 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
               const pred = predictions[m.id];
               const status = getMatchStatus(m.id);
               const isSaving = saving === m.id;
+              const ko = getKoMatch(m.id);
+              const matchOpen = openMatchIds.has(m.id);
+              const matchLocked = !matchOpen || (ko && ko.status !== "upcoming");
+              const canPick = onPick && !matchLocked;
 
               return (
                 <div
                   key={m.id}
-                  className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""}`}
+                  className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""} ${!matchOpen ? "not-open" : ""}`}
                   style={{
                     position: "absolute",
                     left: roundLeft(ri),
@@ -143,14 +147,14 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
                   }}
                 >
                   <div
-                    className={`bracket-team top ${onPick ? "clickable" : ""} ${pred === "home" ? "picked" : ""}`}
-                    onClick={onPick ? () => onPick(m.id, "home") : undefined}
+                    className={`bracket-team top ${canPick ? "clickable" : ""} ${pred === "home" ? "picked" : ""}`}
+                    onClick={canPick ? () => onPick(m.id, "home") : undefined}
                   >
                     {m.home}
                   </div>
                   <div
-                    className={`bracket-team bottom ${onPick ? "clickable" : ""} ${pred === "away" ? "picked" : ""}`}
-                    onClick={onPick ? () => onPick(m.id, "away") : undefined}
+                    className={`bracket-team bottom ${canPick ? "clickable" : ""} ${pred === "away" ? "picked" : ""}`}
+                    onClick={canPick ? () => onPick(m.id, "away") : undefined}
                   >
                     {m.away}
                   </div>
