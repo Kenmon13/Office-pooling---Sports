@@ -9,7 +9,7 @@ function formatKoTime(utcStr) {
 const TBC_FLAG = "https://www.gstatic.com/onebox/sports/logos/crest_48dp.png";
 
 function SlotLabel() {
-  return <><img src={TBC_FLAG} className="team-flag" alt="" /> TBC</>;
+  return <><img src={TBC_FLAG} className="team-flag tbc-flag" alt="" /> TBC</>;
 }
 
 function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {} }) {

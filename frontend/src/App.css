@@ -1374,3 +1374,9 @@ nav a.active {
   border-radius: 2px;
 }
 
+.team-flag.tbc-flag {
+  width: 15px;
+  height: 15px;
+  border-radius: 2px;
+}
+
