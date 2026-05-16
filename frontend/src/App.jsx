@@ -10,12 +10,13 @@ import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
-import { autoJoinPool } from "./api";
+import { autoJoinPool, fetchParticipantPoints } from "./api";
 import "./App.css";
 
 function App() {
   const [user, setUser] = useState(null);
   const [participant, setParticipant] = useState(null);
+  const [points, setPoints] = useState(0);
 
   const [showAdmin, setShowAdmin] = useState(false);
   const [selectedSport, setSelectedSport] = useState(null);
@@ -43,6 +44,13 @@ function App() {
       });
     }
   }, [user, pool]);
+
+  // Refresh points whenever participant changes
+  useEffect(() => {
+    if (participant) {
+      fetchParticipantPoints(participant.id, participant.pool_id).then(setPoints);
+    }
+  }, [participant]);
 
   const handleAuth = (userData) => {
     setUser(userData);
@@ -168,35 +176,36 @@ function App() {
                 </button>
               </p>
             </div>
-            <svg className="soccer-ball" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="50" r="48" fill="#fff" stroke="#222" strokeWidth="2"/>
-              <polygon points="50,18 61,30 56,44 44,44 39,30" fill="#222"/>
-              <polygon points="75,38 82,52 74,63 62,58 62,44" fill="#222"/>
-              <polygon points="68,76 56,82 44,82 32,76 38,63 62,63" fill="#222"/>
-              <polygon points="25,38 38,44 38,58 26,63 18,52" fill="#222"/>
-              <polygon points="50,6 61,18 39,18" fill="#222" opacity="0.3"/>
-              <polygon points="84,30 75,38 62,30 66,18 78,20" fill="#222" opacity="0.3"/>
-              <polygon points="16,30 22,20 34,18 38,30 25,38" fill="#222" opacity="0.3"/>
-              <polygon points="88,62 82,52 86,40" fill="#222" opacity="0.15"/>
-              <polygon points="12,62 14,40 18,52" fill="#222" opacity="0.15"/>
-              <polygon points="26,76 18,64 12,72" fill="#222" opacity="0.15"/>
-              <polygon points="74,76 82,64 88,72" fill="#222" opacity="0.15"/>
-              <polygon points="44,94 44,82 56,82 56,94" fill="#222" opacity="0.15"/>
-            </svg>
+            <div className="header-right">
+              <div className="header-user">
+                <span className="header-user-name">{user.display_name}</span>
+                {participant && (
+                  <span className="header-user-points">{points} pts</span>
+                )}
+                <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+              </div>
+              <svg className="soccer-ball" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="48" fill="#fff" stroke="#222" strokeWidth="2"/>
+                <polygon points="50,18 61,30 56,44 44,44 39,30" fill="#222"/>
+                <polygon points="75,38 82,52 74,63 62,58 62,44" fill="#222"/>
+                <polygon points="68,76 56,82 44,82 32,76 38,63 62,63" fill="#222"/>
+                <polygon points="25,38 38,44 38,58 26,63 18,52" fill="#222"/>
+                <polygon points="50,6 61,18 39,18" fill="#222" opacity="0.3"/>
+                <polygon points="84,30 75,38 62,30 66,18 78,20" fill="#222" opacity="0.3"/>
+                <polygon points="16,30 22,20 34,18 38,30 25,38" fill="#222" opacity="0.3"/>
+                <polygon points="88,62 82,52 86,40" fill="#222" opacity="0.15"/>
+                <polygon points="12,62 14,40 18,52" fill="#222" opacity="0.15"/>
+                <polygon points="26,76 18,64 12,72" fill="#222" opacity="0.15"/>
+                <polygon points="74,76 82,64 88,72" fill="#222" opacity="0.15"/>
+                <polygon points="44,94 44,82 56,82 56,94" fill="#222" opacity="0.15"/>
+              </svg>
+            </div>
           </div>
           <nav>
             <NavLink to="/">Group Stages</NavLink>
             <NavLink to="/knockouts">Knockouts</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
           </nav>
-          <div className="user-bar">
-            <span>
-              Playing as <strong>{user.display_name}</strong>
-              <button onClick={handleSignOut} className="btn-small">
-                Sign Out
-              </button>
-            </span>
-          </div>
         </header>
 
         <main>

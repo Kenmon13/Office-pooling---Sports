@@ -132,6 +132,18 @@ export async function fetchPredictionDeadline() {
   return res.json();
 }
 
+export async function fetchKnockoutDeadline() {
+  const res = await fetch(`${API}/knockout-deadline`);
+  return res.json();
+}
+
+export async function fetchParticipantPoints(participantId, poolId) {
+  const res = await fetch(`${API}/leaderboard?pool_id=${poolId}`);
+  const data = await res.json();
+  const me = data.find((p) => p.id === participantId);
+  return me ? me.points : 0;
+}
+
 export async function fetchStandings() {
   const res = await fetch(`${API}/standings`);
   return res.json();

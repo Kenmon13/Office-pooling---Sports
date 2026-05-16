@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
-import { fetchKnockoutMatches, fetchKnockoutPredictions, submitKnockoutPrediction } from "../api";
+import { fetchKnockoutMatches, fetchKnockoutPredictions, submitKnockoutPrediction, fetchKnockoutDeadline } from "../api";
 import Bracket from "../components/Bracket";
 
 function Knockouts({ currentUser }) {
   const [koMatches, setKoMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
   const [saving, setSaving] = useState(null);
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
     fetchKnockoutMatches().then(setKoMatches);
+    fetchKnockoutDeadline().then((data) => setLocked(data.locked));
   }, []);
 
   useEffect(() => {
@@ -34,7 +36,11 @@ function Knockouts({ currentUser }) {
   return (
     <div className="page">
       <h2>Knockout Stage</h2>
-      {currentUser ? (
+      {locked ? (
+        <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
+          <span className="deadline-locked-text">Knockout predictions are locked — the stage has started</span>
+        </div>
+      ) : currentUser ? (
         <p className="select-subtitle" style={{ marginBottom: 16 }}>
           Pick a winner for each match. Points per correct pick: R32 = 3 pts, R16 = 5 pts, QF = 7 pts, SF = 10 pts, Final = 15 pts.
         </p>
@@ -43,7 +49,7 @@ function Knockouts({ currentUser }) {
       )}
       <Bracket
         predictions={predictions}
-        onPick={currentUser ? handlePick : null}
+        onPick={locked || !currentUser ? null : handlePick}
         saving={saving}
         koMatches={koMatches}
         pointsMap={pointsMap}

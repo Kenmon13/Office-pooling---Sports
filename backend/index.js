@@ -421,6 +421,13 @@ app.get("/api/leaderboard", (req, res) => {
   res.json(leaderboard);
 });
 
+// --- Knockout Deadline ---
+
+app.get("/api/knockout-deadline", (req, res) => {
+  const started = db.prepare("SELECT COUNT(*) as c FROM knockout_matches WHERE status != 'upcoming'").get();
+  res.json({ locked: started.c > 0 });
+});
+
 // Client-side routing fallback
 app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
