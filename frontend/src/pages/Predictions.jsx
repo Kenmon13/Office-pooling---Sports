@@ -96,7 +96,7 @@ function Predictions({ currentUser }) {
             : picked.length === 2;
 
           return (
-            <div key={g.id} className={`group-pred-card ${score ? score.cls : ""}`}>
+            <div key={g.id} className={`group-pred-card ${score ? score.cls : !saved ? "unpicked" : ""}`}>
               <div className="group-pred-header">
                 <span className="group-badge">Group {g.name}</span>
                 {score && (

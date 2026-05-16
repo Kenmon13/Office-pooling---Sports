@@ -50,13 +50,13 @@ function Knockouts({ currentUser }) {
           <li>Each later match opens individually as soon as both of its feeder matches have confirmed winners — you don't have to wait for a full round to finish.</li>
           <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
           <li>Points for each correct winner prediction:
-            <ul className="ko-points-list">
-              <li>Round of 32 — 3 points</li>
-              <li>Round of 16 — 5 points</li>
-              <li>Quarter-Finals — 7 points</li>
-              <li>Semi-Finals — 10 points</li>
-              <li>Final — 15 points</li>
-            </ul>
+            <div className="ko-points-grid">
+              <span>Round of 32</span><span>3 pts</span>
+              <span>Round of 16</span><span>5 pts</span>
+              <span>Quarter-Finals</span><span>7 pts</span>
+              <span>Semi-Finals</span><span>10 pts</span>
+              <span>Final</span><span>15 pts</span>
+            </div>
           </li>
         </ul>
       </div>

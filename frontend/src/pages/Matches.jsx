@@ -195,7 +195,7 @@ function Matches({ currentUser }) {
           const gMatches = groupMatches[g.name] || [];
 
           return (
-            <div key={g.id} className={`group-card ${score ? score.cls : ""} ${isExpanded ? "expanded" : ""}`}>
+            <div key={g.id} className={`group-card ${score ? score.cls : !saved && !locked ? "unpicked" : ""} ${isExpanded ? "expanded" : ""}`}>
               <div className="group-card-header" onClick={() => toggleGroup(g.name)}>
                 <span className="group-badge">Group {g.name}</span>
                 {score && (

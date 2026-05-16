@@ -162,7 +162,7 @@ function Bracket({ predictions = {}, onPick, saving, koMatches = [], pointsMap =
               return (
                 <div
                   key={m.id}
-                  className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""} ${!matchOpen ? "not-open" : ""}`}
+                  className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""} ${!matchOpen ? "not-open" : ""} ${matchOpen && !pred && ko?.home_team_name ? "unpicked" : ""}`}
                   style={{
                     position: "absolute",
                     left: roundLeft(ri),

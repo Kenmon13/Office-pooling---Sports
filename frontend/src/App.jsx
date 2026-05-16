@@ -14,27 +14,29 @@ import { autoJoinPool, fetchParticipantPoints } from "./api";
 import "./App.css";
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem("auth_user");
+    return saved ? JSON.parse(saved) : null;
+  });
   const [participant, setParticipant] = useState(null);
   const [points, setPoints] = useState(0);
 
   const [showAdmin, setShowAdmin] = useState(false);
-  const [selectedSport, setSelectedSport] = useState(null);
-  const [selectedTournament, setSelectedTournament] = useState(null);
-  const [pool, setPool] = useState(null);
-
-  useEffect(() => {
-    const savedUser = localStorage.getItem("auth_user");
-    if (savedUser) setUser(JSON.parse(savedUser));
-
-    const savedSession = localStorage.getItem("pool_session");
-    if (savedSession) {
-      const session = JSON.parse(savedSession);
-      setSelectedSport(session.sport);
-      setSelectedTournament(session.tournament);
-      setPool(session.pool);
-    }
-  }, []);
+  const [selectedSport, setSelectedSport] = useState(() => {
+    const saved = localStorage.getItem("pool_session");
+    if (!saved) return null;
+    return JSON.parse(saved).sport ?? null;
+  });
+  const [selectedTournament, setSelectedTournament] = useState(() => {
+    const saved = localStorage.getItem("pool_session");
+    if (!saved) return null;
+    return JSON.parse(saved).tournament ?? null;
+  });
+  const [pool, setPool] = useState(() => {
+    const saved = localStorage.getItem("pool_session");
+    if (!saved) return null;
+    return JSON.parse(saved).pool ?? null;
+  });
 
   // Auto-join pool when user and pool are both set
   useEffect(() => {
