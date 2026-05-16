@@ -7,6 +7,7 @@ const SPORT_LABELS = {
 };
 
 const TOURNAMENT_LABELS = {
+  wc2022: "World Cup 2022",
   wc2026: "World Cup 2026",
   ucl2627: "Champions League 26/27",
   epl2627: "English Premier League 26/27",
@@ -128,7 +129,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
                           <div key={p.id} className="pool-list-item">
                             <button
                               className="pool-list-btn"
-                              onClick={() => onSelectPool({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, isAdmin: true })}
+                              onClick={() => onSelectPool({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, is_test: p.is_test, isAdmin: true })}
                             >
                               <span className="pool-list-name">{p.name}</span>
                               <span className="pool-list-meta">{p.user_count || 0} user{p.user_count !== 1 ? "s" : ""}</span>

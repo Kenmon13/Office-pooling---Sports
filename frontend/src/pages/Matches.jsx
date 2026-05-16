@@ -51,7 +51,7 @@ function useCountdown(deadline) {
   return remaining;
 }
 
-function Matches({ currentUser, tournament = "wc2026", poolId }) {
+function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   const isWC2022 = tournament === "wc2022";
   const [matches, setMatches] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -94,7 +94,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
         }
       });
     }
-  }, [isWC2022, poolId]);
+  }, [isWC2022, poolId, mockDate]);
 
   useEffect(() => {
     if (currentUser) {
@@ -137,8 +137,13 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
     await submitFn(currentUser.id, groupId, picked[0], picked[1]);
     const preds = await (isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions)(currentUser.id);
     const map = {};
-    preds.forEach((p) => { map[p.group_id] = p; });
+    const sel = {};
+    preds.forEach((p) => {
+      map[p.group_id] = p;
+      sel[p.group_id] = [p.team1_id, p.team2_id];
+    });
     setPredictions(map);
+    setSelections((prev) => ({ ...prev, ...sel }));
     setSaving(null);
   };
 
@@ -164,6 +169,15 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
   return (
     <div className="page">
       <h2>Group Stages</h2>
+
+      <div className="ko-rules">
+        <p className="ko-rules-title">How predictions work</p>
+        <ul>
+          <li>Pick the 2 teams you think will qualify from each group.</li>
+          <li>Both correct = 5 pts &middot; One correct = 2 pts.</li>
+          <li>Predictions lock once the first match of the group stage kicks off — you can update your picks until that time.</li>
+        </ul>
+      </div>
 
       {deadline && !locked && countdown && (
         <div className="deadline-banner">
@@ -199,12 +213,6 @@ function Matches({ currentUser, tournament = "wc2026", poolId }) {
           <span className="deadline-locked-text">Predictions are locked - the tournament has started</span>
         </div>
       )}
-      {currentUser && !locked && (
-        <p className="select-subtitle" style={{ marginBottom: 16 }}>
-          Pick 2 teams to advance from each group. Both correct = 5 pts, one correct = 2 pts.
-        </p>
-      )}
-
       <div className="group-grid">
         {groups.map((g) => {
           const isExpanded = expandedGroup === g.name;

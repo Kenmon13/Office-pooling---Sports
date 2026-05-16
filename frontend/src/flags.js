@@ -13,6 +13,7 @@ const isoMap = {
   GER: "de", KSA: "sa", CRO: "hr", IRN: "ir",
   USA: "us", DEN: "dk", CHN: "cn", IDN: "id",
   BEL: "be", QAT: "qa", URU: "uy", VEN: "ve",
+  WAL: "gb-wls", POL: "pl", TUN: "tn", CRC: "cr", SUI: "ch", GHA: "gh",
 };
 
 export function flag(code) {

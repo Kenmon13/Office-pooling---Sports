@@ -1,17 +1,22 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Matches from "./pages/Matches";
-
-
 import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
+import Champion from "./pages/Champion";
+import History from "./pages/History";
 import SelectSport from "./pages/SelectSport";
 import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
-import { autoJoinPool, fetchParticipantPoints, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate } from "./api";
 import "./App.css";
+
+const TOURNAMENT_META = {
+  wc2026: { id: "wc2026", name: "World Cup 2026", emoji: "🏆" },
+  wc2022: { id: "wc2022", name: "World Cup 2022", emoji: "🏆" },
+};
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -30,7 +35,12 @@ function App() {
   const [selectedTournament, setSelectedTournament] = useState(() => {
     const saved = localStorage.getItem("pool_session");
     if (!saved) return null;
-    return JSON.parse(saved).tournament ?? null;
+    const parsed = JSON.parse(saved);
+    const t = parsed.tournament ?? null;
+    if (!t && parsed.pool?.tournament) {
+      return TOURNAMENT_META[parsed.pool.tournament] || { id: parsed.pool.tournament, name: parsed.pool.tournament, emoji: "🏆" };
+    }
+    return t;
   });
   const [pool, setPool] = useState(() => {
     const saved = localStorage.getItem("pool_session");
@@ -47,12 +57,16 @@ function App() {
     }
   }, [user, pool]);
 
-  // Refresh points whenever participant changes
+  // Refresh points whenever participant or pool changes
   useEffect(() => {
-    if (participant) {
-      fetchParticipantPoints(participant.id, participant.pool_id).then(setPoints);
+    if (participant && pool) {
+      const fetchFn = pool.tournament === "wc2022" ? fetchWC2022Leaderboard : fetchLeaderboard;
+      fetchFn(pool.id).then((data) => {
+        const me = data.find((p) => p.id === participant.id);
+        setPoints(me ? me.points : 0);
+      });
     }
-  }, [participant]);
+  }, [participant, pool]);
 
   const handleAuth = (userData) => {
     setUser(userData);
@@ -78,9 +92,11 @@ function App() {
     setShowAdmin(false);
     const sport = selectedSport || { id: poolData.sport, name: poolData.sport, emoji: poolData.sport === "soccer" ? "\u26BD" : "\uD83C\uDFC0" };
     setSelectedSport(sport);
+    const tournament = selectedTournament || TOURNAMENT_META[poolData.tournament] || { id: poolData.tournament, name: poolData.tournament, emoji: "\uD83C\uDFC6" };
+    setSelectedTournament(tournament);
     localStorage.setItem(
       "pool_session",
-      JSON.stringify({ sport, tournament: selectedTournament, pool: poolData })
+      JSON.stringify({ sport, tournament, pool: poolData })
     );
   };
 
@@ -204,9 +220,11 @@ function App() {
             </div>
           </div>
           <nav>
-            <NavLink to="/">Group Stages</NavLink>
+            <NavLink to="/">Groups</NavLink>
             <NavLink to="/knockouts">Knockouts</NavLink>
+            <NavLink to="/champion">Winner</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
+            <NavLink to="/history">History</NavLink>
           </nav>
         </header>
 
@@ -215,9 +233,11 @@ function App() {
             <TestControls userId={user.id} pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} />
           )}
           <Routes>
-            <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} />} />
-            <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} />} />
-            <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} />} />
+            <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
+            <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
           </Routes>
         </main>
       </div>
@@ -225,12 +245,60 @@ function App() {
   );
 }
 
+function utcToSGTParts(utcStr) {
+  if (!utcStr) return { date: "", time: "00:00" };
+  const sgt = new Date(new Date(utcStr.replace(" ", "T") + "Z").getTime() + 8 * 3600000);
+  const iso = sgt.toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
+
 function TestControls({ userId, pool, onMockDateChange }) {
-  const [mockDate, setMockDate] = useState(pool.mock_date ? pool.mock_date.slice(0, 16) : "");
+  const [mockDate, setMockDate] = useState(() => utcToSGTParts(pool.mock_date).date);
+  const [mockTime, setMockTime] = useState(() => utcToSGTParts(pool.mock_date).time);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   const flash = (text) => { setMsg(text); setTimeout(() => setMsg(""), 2500); };
+
+  const syncInputs = (utcStr) => {
+    const { date, time } = utcToSGTParts(utcStr);
+    setMockDate(date);
+    setMockTime(time);
+  };
+
+  const adjustDate = async (offsetMs) => {
+    setBusy(true);
+    const base = pool.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
+    const next = new Date(base.getTime() + offsetMs);
+    const utcStr = next.toISOString().slice(0, 16).replace("T", " ");
+    await adminSetMockDate(userId, pool.id, utcStr);
+    onMockDateChange(utcStr);
+    syncInputs(utcStr);
+    flash("Date adjusted");
+    setBusy(false);
+  };
+
+  const applyDate = async () => {
+    if (!mockDate) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(mockDate)) { flash("Date: YYYY-MM-DD"); return; }
+    if (!/^\d{2}:\d{2}$/.test(mockTime)) { flash("Time: HH:MM"); return; }
+    setBusy(true);
+    const utcStr = new Date(`${mockDate}T${mockTime}+08:00`).toISOString().slice(0, 16).replace("T", " ");
+    await adminSetMockDate(userId, pool.id, utcStr);
+    onMockDateChange(utcStr);
+    flash("Date set");
+    setBusy(false);
+  };
+
+  const clearDate = async () => {
+    setBusy(true);
+    await adminClearMockDate(userId, pool.id);
+    setMockDate("");
+    setMockTime("00:00");
+    onMockDateChange(null);
+    flash("Using real time");
+    setBusy(false);
+  };
 
   const addPlayers = async (n) => {
     setBusy(true);
@@ -246,25 +314,8 @@ function TestControls({ userId, pool, onMockDateChange }) {
     setBusy(false);
   };
 
-  const applyDate = async () => {
-    if (!mockDate) return;
-    setBusy(true);
-    // datetime-local is in local time; convert to UTC for storage
-    const utcStr = new Date(mockDate).toISOString().slice(0, 16).replace("T", " ");
-    await adminSetMockDate(userId, pool.id, utcStr);
-    onMockDateChange(utcStr);
-    flash("Mock date set (stored as UTC: " + utcStr + ")");
-    setBusy(false);
-  };
-
-  const clearDate = async () => {
-    setBusy(true);
-    await adminClearMockDate(userId, pool.id);
-    setMockDate("");
-    onMockDateChange(null);
-    flash("Mock date cleared — using real time");
-    setBusy(false);
-  };
+  const H = 3600000;
+  const D = 86400000;
 
   return (
     <div className="test-controls">
@@ -274,15 +325,21 @@ function TestControls({ userId, pool, onMockDateChange }) {
         <button className="btn-test" onClick={() => addPlayers(1)} disabled={busy}>+1 Player</button>
         <button className="btn-test" onClick={randomize} disabled={busy}>Randomize Picks</button>
         <span className="test-divider" />
-        <span className="test-date-label">Sim date (local time):</span>
-        <input
-          type="datetime-local"
-          className="test-date-input"
-          value={mockDate}
-          onChange={(e) => setMockDate(e.target.value)}
-        />
-        <button className="btn-test" onClick={applyDate} disabled={busy || !mockDate}>Set Date</button>
-        {pool.mock_date && <button className="btn-test btn-test-clear" onClick={clearDate} disabled={busy}>Clear Date</button>}
+        <span className="test-date-label">Sim time (SGT):</span>
+        <input type="text" className="test-date-input" placeholder="YYYY-MM-DD" value={mockDate} onChange={(e) => setMockDate(e.target.value)} />
+        <div className="test-spin">
+          <button className="btn-spin" onClick={() => adjustDate(D)} disabled={busy}>▲</button>
+          <button className="btn-spin" onClick={() => adjustDate(-D)} disabled={busy}>▼</button>
+        </div>
+        <input type="text" className="test-date-input test-time-input" placeholder="HH:MM" value={mockTime} onChange={(e) => setMockTime(e.target.value)} />
+        <div className="test-spin">
+          <button className="btn-spin" onClick={() => adjustDate(H)} disabled={busy}>▲</button>
+          <button className="btn-spin" onClick={() => adjustDate(-H)} disabled={busy}>▼</button>
+        </div>
+        <button className="btn-test" onClick={applyDate} disabled={busy || !mockDate}>Set</button>
+        {pool.mock_date && (
+          <button className="btn-test btn-test-clear" onClick={clearDate} disabled={busy}>Clear</button>
+        )}
       </div>
       {msg && <span className="test-msg">{msg}</span>}
     </div>

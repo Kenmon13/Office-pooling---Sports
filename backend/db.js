@@ -105,6 +105,14 @@ try { db.exec("ALTER TABLE knockout_matches ADD COLUMN match_date TEXT"); } catc
 try { db.exec("ALTER TABLE pools ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE pools ADD COLUMN mock_date TEXT"); } catch (_) {}
 
+// Add actual score columns to knockout matches (for score-prediction scoring)
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_score INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_score INTEGER"); } catch (_) {}
+
+// Add predicted score columns to KO prediction tables
+try { db.exec("ALTER TABLE knockout_predictions ADD COLUMN predicted_home_score INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_predictions ADD COLUMN predicted_away_score INTEGER"); } catch (_) {}
+
 // WC2022 isolated tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS wc2022_groups (
@@ -159,6 +167,24 @@ db.exec(`
     predicted_winner INTEGER NOT NULL,
     created_at     TEXT DEFAULT (datetime('now')),
     UNIQUE(participant_id, match_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS champion_picks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL UNIQUE REFERENCES participants(id),
+    team_id        INTEGER REFERENCES teams(id),
+    is_changed     INTEGER NOT NULL DEFAULT 0,
+    change_cost    INTEGER NOT NULL DEFAULT 0,
+    updated_at     TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS wc2022_champion_picks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL UNIQUE REFERENCES participants(id),
+    team_id        INTEGER REFERENCES wc2022_teams(id),
+    is_changed     INTEGER NOT NULL DEFAULT 0,
+    change_cost    INTEGER NOT NULL DEFAULT 0,
+    updated_at     TEXT DEFAULT (datetime('now'))
   );
 `);
 
@@ -309,6 +335,33 @@ if (!wc2022Seeded) {
     insertKo22.run(m.id, m.round, m.home_slot, m.away_slot, t22[m.home], t22[m.away], t22[m.winner], m.match_date);
   }
 }
+
+// Add score columns to wc2022_knockout_matches (AET scores)
+try { db.exec("ALTER TABLE wc2022_knockout_matches ADD COLUMN home_score INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE wc2022_knockout_matches ADD COLUMN away_score INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_home_score INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_away_score INTEGER"); } catch (_) {}
+
+// Seed WC2022 actual KO scores (AET where applicable; penalties not counted in score)
+const WC2022_KO_SCORES = [
+  { id: "22-R16-1", hs: 3, as: 1 }, // Netherlands 3-1 USA
+  { id: "22-R16-2", hs: 2, as: 1 }, // Argentina 2-1 Australia
+  { id: "22-R16-3", hs: 3, as: 1 }, // France 3-1 Poland
+  { id: "22-R16-4", hs: 3, as: 0 }, // England 3-0 Senegal
+  { id: "22-R16-5", hs: 1, as: 1 }, // Japan 1-1 Croatia AET (CRO wins pens)
+  { id: "22-R16-6", hs: 4, as: 1 }, // Brazil 4-1 South Korea
+  { id: "22-R16-7", hs: 0, as: 0 }, // Morocco 0-0 Spain AET (MAR wins pens)
+  { id: "22-R16-8", hs: 6, as: 1 }, // Portugal 6-1 Switzerland
+  { id: "22-QF-1",  hs: 2, as: 2 }, // Netherlands 2-2 Argentina AET (ARG wins pens)
+  { id: "22-QF-2",  hs: 2, as: 1 }, // France 2-1 England
+  { id: "22-QF-3",  hs: 1, as: 1 }, // Croatia 1-1 Brazil AET (CRO wins pens)
+  { id: "22-QF-4",  hs: 1, as: 0 }, // Morocco 1-0 Portugal
+  { id: "22-SF-1",  hs: 3, as: 0 }, // Argentina 3-0 Croatia
+  { id: "22-SF-2",  hs: 2, as: 0 }, // France 2-0 Morocco
+  { id: "22-F",     hs: 3, as: 3 }, // Argentina 3-3 France AET (ARG wins pens)
+];
+const updateKo22Score = db.prepare("UPDATE wc2022_knockout_matches SET home_score = ?, away_score = ? WHERE id = ? AND home_score IS NULL");
+for (const s of WC2022_KO_SCORES) updateKo22Score.run(s.hs, s.as, s.id);
 
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Sources: FIFA official calendar. Exact kickoff times TBC closer to the event —
