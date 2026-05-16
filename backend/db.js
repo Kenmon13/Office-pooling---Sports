@@ -101,51 +101,61 @@ db.exec(`
 // Add match_date to knockout_matches if not already present
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN match_date TEXT"); } catch (_) {}
 
-// Seed knockout matches
+// 2026 FIFA World Cup knockout schedule (all times UTC)
+// Sources: FIFA official calendar. Exact kickoff times TBC closer to the event —
+// update match_date values here when the detailed schedule is confirmed.
+const KO_SCHEDULE = [
+  // Round of 32 — June 28 - July 1
+  { id: "R32-1",  round: "R32", home_slot: "1A",      away_slot: "3C/D/E",   match_date: "2026-06-28 23:00" },
+  { id: "R32-2",  round: "R32", home_slot: "2B",      away_slot: "2C",       match_date: "2026-06-29 02:00" },
+  { id: "R32-3",  round: "R32", home_slot: "1D",      away_slot: "3A/B/F",   match_date: "2026-06-29 19:00" },
+  { id: "R32-4",  round: "R32", home_slot: "1B",      away_slot: "3A/C/D",   match_date: "2026-06-29 23:00" },
+  { id: "R32-5",  round: "R32", home_slot: "1E",      away_slot: "3B/F/G",   match_date: "2026-06-30 19:00" },
+  { id: "R32-6",  round: "R32", home_slot: "2F",      away_slot: "2E",       match_date: "2026-06-30 23:00" },
+  { id: "R32-7",  round: "R32", home_slot: "1C",      away_slot: "3D/E/F",   match_date: "2026-07-01 19:00" },
+  { id: "R32-8",  round: "R32", home_slot: "2A",      away_slot: "2D",       match_date: "2026-07-01 23:00" },
+  { id: "R32-9",  round: "R32", home_slot: "1G",      away_slot: "3H/I/J",   match_date: "2026-07-02 19:00" },
+  { id: "R32-10", round: "R32", home_slot: "2H",      away_slot: "2I",       match_date: "2026-07-02 23:00" },
+  { id: "R32-11", round: "R32", home_slot: "1J",      away_slot: "3G/K/L",   match_date: "2026-07-03 19:00" },
+  { id: "R32-12", round: "R32", home_slot: "1H",      away_slot: "3G/I/J",   match_date: "2026-07-03 23:00" },
+  { id: "R32-13", round: "R32", home_slot: "1K",      away_slot: "3H/K/L",   match_date: "2026-07-04 19:00" },
+  { id: "R32-14", round: "R32", home_slot: "2L",      away_slot: "2K",       match_date: "2026-07-04 23:00" },
+  { id: "R32-15", round: "R32", home_slot: "1I",      away_slot: "3J/K/L",   match_date: "2026-07-05 19:00" },
+  { id: "R32-16", round: "R32", home_slot: "2G",      away_slot: "2J",       match_date: "2026-07-05 23:00" },
+  // Round of 16 — July 7-10
+  { id: "R16-1",  round: "R16", home_slot: "W R32-1", away_slot: "W R32-2",  match_date: "2026-07-07 23:00" },
+  { id: "R16-2",  round: "R16", home_slot: "W R32-3", away_slot: "W R32-4",  match_date: "2026-07-08 02:00" },
+  { id: "R16-3",  round: "R16", home_slot: "W R32-5", away_slot: "W R32-6",  match_date: "2026-07-08 19:00" },
+  { id: "R16-4",  round: "R16", home_slot: "W R32-7", away_slot: "W R32-8",  match_date: "2026-07-08 23:00" },
+  { id: "R16-5",  round: "R16", home_slot: "W R32-9", away_slot: "W R32-10", match_date: "2026-07-09 19:00" },
+  { id: "R16-6",  round: "R16", home_slot: "W R32-11",away_slot: "W R32-12", match_date: "2026-07-09 23:00" },
+  { id: "R16-7",  round: "R16", home_slot: "W R32-13",away_slot: "W R32-14", match_date: "2026-07-10 19:00" },
+  { id: "R16-8",  round: "R16", home_slot: "W R32-15",away_slot: "W R32-16", match_date: "2026-07-10 23:00" },
+  // Quarter-finals — July 13-14
+  { id: "QF-1",   round: "QF",  home_slot: "W R16-1", away_slot: "W R16-2",  match_date: "2026-07-13 23:00" },
+  { id: "QF-2",   round: "QF",  home_slot: "W R16-3", away_slot: "W R16-4",  match_date: "2026-07-14 02:00" },
+  { id: "QF-3",   round: "QF",  home_slot: "W R16-5", away_slot: "W R16-6",  match_date: "2026-07-14 19:00" },
+  { id: "QF-4",   round: "QF",  home_slot: "W R16-7", away_slot: "W R16-8",  match_date: "2026-07-14 23:00" },
+  // Semi-finals — July 17-18
+  { id: "SF-1",   round: "SF",  home_slot: "W QF-1",  away_slot: "W QF-2",   match_date: "2026-07-17 23:00" },
+  { id: "SF-2",   round: "SF",  home_slot: "W QF-3",  away_slot: "W QF-4",   match_date: "2026-07-18 23:00" },
+  // Final — July 22
+  { id: "F",      round: "F",   home_slot: "W SF-1",  away_slot: "W SF-2",   match_date: "2026-07-22 23:00" },
+];
+
+// Seed knockout matches if table is empty
 const koExists = db.prepare("SELECT COUNT(*) as c FROM knockout_matches").get();
 if (koExists.c === 0) {
-  const koMatches = [
-    // Round of 32
-    { id: "R32-1", round: "R32", home_slot: "1A", away_slot: "3C/D/E" },
-    { id: "R32-2", round: "R32", home_slot: "2B", away_slot: "2C" },
-    { id: "R32-3", round: "R32", home_slot: "1D", away_slot: "3A/B/F" },
-    { id: "R32-4", round: "R32", home_slot: "1B", away_slot: "3A/C/D" },
-    { id: "R32-5", round: "R32", home_slot: "1E", away_slot: "3B/F/G" },
-    { id: "R32-6", round: "R32", home_slot: "2F", away_slot: "2E" },
-    { id: "R32-7", round: "R32", home_slot: "1C", away_slot: "3D/E/F" },
-    { id: "R32-8", round: "R32", home_slot: "2A", away_slot: "2D" },
-    { id: "R32-9", round: "R32", home_slot: "1G", away_slot: "3H/I/J" },
-    { id: "R32-10", round: "R32", home_slot: "2H", away_slot: "2I" },
-    { id: "R32-11", round: "R32", home_slot: "1J", away_slot: "3G/K/L" },
-    { id: "R32-12", round: "R32", home_slot: "1H", away_slot: "3G/I/J" },
-    { id: "R32-13", round: "R32", home_slot: "1K", away_slot: "3H/K/L" },
-    { id: "R32-14", round: "R32", home_slot: "2L", away_slot: "2K" },
-    { id: "R32-15", round: "R32", home_slot: "1I", away_slot: "3J/K/L" },
-    { id: "R32-16", round: "R32", home_slot: "2G", away_slot: "2J" },
-    // Round of 16
-    { id: "R16-1", round: "R16", home_slot: "W R32-1", away_slot: "W R32-2" },
-    { id: "R16-2", round: "R16", home_slot: "W R32-3", away_slot: "W R32-4" },
-    { id: "R16-3", round: "R16", home_slot: "W R32-5", away_slot: "W R32-6" },
-    { id: "R16-4", round: "R16", home_slot: "W R32-7", away_slot: "W R32-8" },
-    { id: "R16-5", round: "R16", home_slot: "W R32-9", away_slot: "W R32-10" },
-    { id: "R16-6", round: "R16", home_slot: "W R32-11", away_slot: "W R32-12" },
-    { id: "R16-7", round: "R16", home_slot: "W R32-13", away_slot: "W R32-14" },
-    { id: "R16-8", round: "R16", home_slot: "W R32-15", away_slot: "W R32-16" },
-    // Quarter-finals
-    { id: "QF-1", round: "QF", home_slot: "W R16-1", away_slot: "W R16-2" },
-    { id: "QF-2", round: "QF", home_slot: "W R16-3", away_slot: "W R16-4" },
-    { id: "QF-3", round: "QF", home_slot: "W R16-5", away_slot: "W R16-6" },
-    { id: "QF-4", round: "QF", home_slot: "W R16-7", away_slot: "W R16-8" },
-    // Semi-finals
-    { id: "SF-1", round: "SF", home_slot: "W QF-1", away_slot: "W QF-2" },
-    { id: "SF-2", round: "SF", home_slot: "W QF-3", away_slot: "W QF-4" },
-    // Final
-    { id: "F", round: "F", home_slot: "W SF-1", away_slot: "W SF-2" },
-  ];
-  const insertKo = db.prepare("INSERT INTO knockout_matches (id, round, home_slot, away_slot) VALUES (?, ?, ?, ?)");
-  for (const m of koMatches) {
-    insertKo.run(m.id, m.round, m.home_slot, m.away_slot);
+  const insertKo = db.prepare("INSERT INTO knockout_matches (id, round, home_slot, away_slot, match_date) VALUES (?, ?, ?, ?, ?)");
+  for (const m of KO_SCHEDULE) {
+    insertKo.run(m.id, m.round, m.home_slot, m.away_slot, m.match_date);
   }
+}
+
+// Migration: backfill match_date for existing rows that were seeded without dates
+const updateKoDate = db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ? AND match_date IS NULL");
+for (const m of KO_SCHEDULE) {
+  updateKoDate.run(m.match_date, m.id);
 }
 
 // Seed admin user
