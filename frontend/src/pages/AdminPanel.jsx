@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -7,24 +7,50 @@ const SPORT_LABELS = {
 };
 
 const TOURNAMENT_LABELS = {
+  wc2022: "World Cup 2022",
   wc2026: "World Cup 2026",
   ucl2627: "Champions League 26/27",
   epl2627: "English Premier League 26/27",
 };
 
 function AdminPanel({ user, onSelectPool, onBack }) {
-  const [tab, setTab] = useState("pools"); // "pools" or "users"
+  const [tab, setTab] = useState("pools");
   const [pools, setPools] = useState([]);
   const [users, setUsers] = useState([]);
+  const [testPools, setTestPools] = useState([]);
+  const [newTestName, setNewTestName] = useState("");
+  const [newTestPwd, setNewTestPwd] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    adminFetchPools(user.id).then((data) => {
-      if (!data.error) setPools(data);
-    });
-    adminFetchUsers(user.id).then((data) => {
-      if (!data.error) setUsers(data);
-    });
+    adminFetchPools(user.id).then((data) => { if (!data.error) setPools(data); });
+    adminFetchUsers(user.id).then((data) => { if (!data.error) setUsers(data); });
+    adminFetchTestPools(user.id).then((d) => { if (!d.error) setTestPools(d); });
   }, [user.id]);
+
+  const handleCreateTestPool = async () => {
+    if (!newTestName.trim() || !newTestPwd.trim()) return;
+    setCreating(true);
+    try {
+      const res = await adminCreateTestPool(user.id, newTestName.trim(), newTestPwd.trim());
+      if (!res.error) {
+        setNewTestName(""); setNewTestPwd("");
+        adminFetchTestPools(user.id).then((d) => { if (!d.error) setTestPools(d); });
+      } else {
+        alert(res.error);
+      }
+    } catch (err) {
+      alert("Failed to create pool: " + err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteTestPool = async (poolId) => {
+    if (!confirm("Delete this test pool and all its data?")) return;
+    await deletePool(poolId, user.id);
+    setTestPools((prev) => prev.filter((p) => p.id !== poolId));
+  };
 
   const handleDeletePool = async (e, poolId) => {
     e.stopPropagation();
@@ -59,17 +85,14 @@ function AdminPanel({ user, onSelectPool, onBack }) {
       <h2>Admin Dashboard</h2>
 
       <div className="admin-tabs">
-        <button
-          className={`admin-tab ${tab === "pools" ? "active" : ""}`}
-          onClick={() => setTab("pools")}
-        >
+        <button className={`admin-tab ${tab === "pools" ? "active" : ""}`} onClick={() => setTab("pools")}>
           Pools ({pools.length})
         </button>
-        <button
-          className={`admin-tab ${tab === "users" ? "active" : ""}`}
-          onClick={() => setTab("users")}
-        >
+        <button className={`admin-tab ${tab === "users" ? "active" : ""}`} onClick={() => setTab("users")}>
           Users ({users.length})
+        </button>
+        <button className={`admin-tab ${tab === "test" ? "active" : ""}`} onClick={() => setTab("test")}>
+          Test ({testPools.length})
         </button>
       </div>
 
@@ -106,7 +129,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
                           <div key={p.id} className="pool-list-item">
                             <button
                               className="pool-list-btn"
-                              onClick={() => onSelectPool({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, isAdmin: true })}
+                              onClick={() => onSelectPool({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, is_test: p.is_test, isAdmin: true })}
                             >
                               <span className="pool-list-name">{p.name}</span>
                               <span className="pool-list-meta">{p.user_count || 0} user{p.user_count !== 1 ? "s" : ""}</span>
@@ -145,13 +168,51 @@ function AdminPanel({ user, onSelectPool, onBack }) {
                   </span>
                 </div>
                 {!u.is_admin && (
-                  <button
-                    className="pool-delete-btn"
-                    onClick={() => handleDeleteUser(u.id)}
-                  >
-                    &times;
-                  </button>
+                  <button className="pool-delete-btn" onClick={() => handleDeleteUser(u.id)}>&times;</button>
                 )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {tab === "test" && (
+        <>
+          <p className="select-subtitle">WC2022 test pools — isolated data, all results known.</p>
+
+          <div className="test-pool-create">
+            <input
+              className="test-input"
+              placeholder="Pool name"
+              value={newTestName}
+              onChange={(e) => setNewTestName(e.target.value)}
+            />
+            <input
+              className="test-input"
+              placeholder="Password"
+              value={newTestPwd}
+              onChange={(e) => setNewTestPwd(e.target.value)}
+            />
+            <button className="btn-submit" onClick={handleCreateTestPool} disabled={creating || !newTestName.trim() || !newTestPwd.trim()}>
+              {creating ? "Creating…" : "Create WC2022 Test Pool"}
+            </button>
+          </div>
+
+          {testPools.length === 0 && <p className="notice">No test pools yet.</p>}
+          <div className="pool-list" style={{ marginTop: 12 }}>
+            {testPools.map((p) => (
+              <div key={p.id} className="pool-list-item">
+                <button
+                  className="pool-list-btn"
+                  onClick={() => onSelectPool({ id: p.id, name: p.name, sport: "soccer", tournament: "wc2022", is_test: 1, mock_date: p.mock_date, isAdmin: true })}
+                >
+                  <span className="pool-list-name">{p.name}</span>
+                  <span className="pool-list-meta">
+                    {p.participant_count} player{p.participant_count !== 1 ? "s" : ""}
+                    {p.mock_date && <> &middot; sim {p.mock_date.slice(0,10)}</>}
+                  </span>
+                </button>
+                <button className="pool-delete-btn" onClick={() => handleDeleteTestPool(p.id)}>&times;</button>
               </div>
             ))}
           </div>
