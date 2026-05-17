@@ -60,6 +60,7 @@ npm run build   # from repo root
 
 - **Your branch:** `Zhennan` — all your work goes here; merge into `main` via PR.
 - **Never commit directly to `main`.**
+- Open PRs directly without waiting for reviewer approval — Kenmon13 reviews at his own pace.
 - Before starting work each session:
   ```bash
   git fetch origin
