@@ -14,6 +14,10 @@ const isoMap = {
   USA: "us", DEN: "dk", CHN: "cn", IDN: "id",
   BEL: "be", QAT: "qa", URU: "uy", VEN: "ve",
   WAL: "gb-wls", POL: "pl", TUN: "tn", CRC: "cr", SUI: "ch", GHA: "gh",
+  // WC2026 additions
+  RSA: "za", CZE: "cz", BIH: "ba", HAI: "ht", SCO: "gb-sct",
+  CUW: "cw", SWE: "se", CPV: "cv", NOR: "no", IRQ: "iq",
+  AUT: "at", JOR: "jo", COD: "cd",
 };
 
 export function flag(code) {
