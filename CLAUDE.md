@@ -61,6 +61,7 @@ npm run build   # from repo root
 - **Your branch:** `Zhennan` — all your work goes here; merge into `main` via PR.
 - **Never commit directly to `main`.**
 - Open PRs directly without waiting for reviewer approval — Kenmon13 reviews at his own pace.
+- When merging PRs, never delete the `Zhennan` branch — it is the permanent working branch.
 - Before starting work each session:
   ```bash
   git fetch origin
