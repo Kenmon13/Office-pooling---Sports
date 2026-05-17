@@ -2,34 +2,34 @@ const db = require("./db");
 
 // 2026 FIFA World Cup Groups (48 teams, 12 groups of 4)
 const groupsData = {
-  A: ["Morocco", "Peru", "Canada", "Australia"],
-  B: ["Cameroon", "Ireland", "Portugal", "Colombia"],
-  C: ["Argentina", "Uzbekistan", "Egypt", "Bolivia"],
-  D: ["Italy", "Ivory Coast", "Ecuador", "Puerto Rico"],
-  E: ["Mexico", "Japan", "Serbia", "New Zealand"],
-  F: ["Brazil", "Nigeria", "Turkey", "Kenya"],
-  G: ["France", "Panama", "South Korea", "Honduras"],
-  H: ["England", "Senegal", "Chile", "Bahrain"],
-  I: ["Spain", "Netherlands", "Paraguay", "Algeria"],
-  J: ["Germany", "Saudi Arabia", "Croatia", "Iran"],
-  K: ["USA", "Denmark", "China", "Indonesia"],
-  L: ["Belgium", "Qatar", "Uruguay", "Venezuela"],
+  A: ["Mexico", "South Africa", "South Korea", "Czechia"],
+  B: ["Canada", "Switzerland", "Qatar", "Bosnia and Herzegovina"],
+  C: ["Brazil", "Morocco", "Haiti", "Scotland"],
+  D: ["USA", "Paraguay", "Australia", "Türkiye"],
+  E: ["Germany", "Curaçao", "Ivory Coast", "Ecuador"],
+  F: ["Netherlands", "Japan", "Sweden", "Tunisia"],
+  G: ["Belgium", "Egypt", "Iran", "New Zealand"],
+  H: ["Spain", "Cape Verde", "Saudi Arabia", "Uruguay"],
+  I: ["France", "Senegal", "Norway", "Iraq"],
+  J: ["Argentina", "Algeria", "Austria", "Jordan"],
+  K: ["Portugal", "DR Congo", "Uzbekistan", "Colombia"],
+  L: ["England", "Croatia", "Ghana", "Panama"],
 };
 
-// Team codes (ISO-ish short codes)
+// Team codes (FIFA 3-letter codes)
 const teamCodes = {
-  Morocco: "MAR", Peru: "PER", Canada: "CAN", Australia: "AUS",
-  Cameroon: "CMR", Ireland: "IRL", Portugal: "POR", Colombia: "COL",
-  Argentina: "ARG", Uzbekistan: "UZB", Egypt: "EGY", Bolivia: "BOL",
-  Italy: "ITA", "Ivory Coast": "CIV", Ecuador: "ECU", "Puerto Rico": "PUR",
-  Mexico: "MEX", Japan: "JPN", Serbia: "SRB", "New Zealand": "NZL",
-  Brazil: "BRA", Nigeria: "NGA", Turkey: "TUR", Kenya: "KEN",
-  France: "FRA", Panama: "PAN", "South Korea": "KOR", Honduras: "HON",
-  England: "ENG", Senegal: "SEN", Chile: "CHI", Bahrain: "BHR",
-  Spain: "ESP", Netherlands: "NED", Paraguay: "PAR", Algeria: "ALG",
-  Germany: "GER", "Saudi Arabia": "KSA", Croatia: "CRO", Iran: "IRN",
-  USA: "USA", Denmark: "DEN", China: "CHN", Indonesia: "IDN",
-  Belgium: "BEL", Qatar: "QAT", Uruguay: "URU", Venezuela: "VEN",
+  Mexico: "MEX", "South Africa": "RSA", "South Korea": "KOR", Czechia: "CZE",
+  Canada: "CAN", Switzerland: "SUI", Qatar: "QAT", "Bosnia and Herzegovina": "BIH",
+  Brazil: "BRA", Morocco: "MAR", Haiti: "HAI", Scotland: "SCO",
+  USA: "USA", Paraguay: "PAR", Australia: "AUS", "Türkiye": "TUR",
+  Germany: "GER", "Curaçao": "CUW", "Ivory Coast": "CIV", Ecuador: "ECU",
+  Netherlands: "NED", Japan: "JPN", Sweden: "SWE", Tunisia: "TUN",
+  Belgium: "BEL", Egypt: "EGY", Iran: "IRN", "New Zealand": "NZL",
+  Spain: "ESP", "Cape Verde": "CPV", "Saudi Arabia": "KSA", Uruguay: "URU",
+  France: "FRA", Senegal: "SEN", Norway: "NOR", Iraq: "IRQ",
+  Argentina: "ARG", Algeria: "ALG", Austria: "AUT", Jordan: "JOR",
+  Portugal: "POR", "DR Congo": "COD", Uzbekistan: "UZB", Colombia: "COL",
+  England: "ENG", Croatia: "CRO", Ghana: "GHA", Panama: "PAN",
 };
 
 function seed() {
