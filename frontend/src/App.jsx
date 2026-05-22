@@ -229,7 +229,7 @@ function App() {
         </header>
 
         <main>
-          {pool.is_test && user.is_admin && (
+          {!!pool.is_test && user.is_admin && (
             <TestControls userId={user.id} pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} />
           )}
           <Routes>
