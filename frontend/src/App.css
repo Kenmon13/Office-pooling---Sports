@@ -291,6 +291,22 @@ nav a.active {
 }
 
 /* Group grid */
+.btn-toggle-all {
+  display: block;
+  margin: 0 auto 16px;
+  padding: 8px 20px;
+  background: #1e3a1e;
+  color: #b6ffb6;
+  border: 1px solid #2e5a2e;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-toggle-all:hover {
+  background: #2e5a2e;
+}
+
 .group-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

@@ -55,7 +55,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   const isWC2022 = tournament === "wc2022";
   const [matches, setMatches] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [expandedGroup, setExpandedGroup] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [predictions, setPredictions] = useState({});
   const [selections, setSelections] = useState({});
   const [standings, setStandings] = useState({});
@@ -113,7 +113,21 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   }, [currentUser, isWC2022]);
 
   const toggleGroup = (groupName) => {
-    setExpandedGroup((prev) => (prev === groupName ? null : groupName));
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
+  const allExpanded = groups.length > 0 && groups.every((g) => expandedGroups.has(g.name));
+  const toggleAll = () => {
+    if (allExpanded) {
+      setExpandedGroups(new Set());
+    } else {
+      setExpandedGroups(new Set(groups.map((g) => g.name)));
+    }
   };
 
   const toggleTeam = (groupId, teamId) => {
@@ -213,9 +227,12 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           <span className="deadline-locked-text">Predictions are locked - the tournament has started</span>
         </div>
       )}
+      <button className="btn-toggle-all" onClick={toggleAll}>
+        {allExpanded ? "Hide All Matches" : "Show All Matches"}
+      </button>
       <div className="group-grid">
         {groups.map((g) => {
-          const isExpanded = expandedGroup === g.name;
+          const isExpanded = expandedGroups.has(g.name);
           const picked = selections[g.id] || [];
           const saved = predictions[g.id];
           const score = getScore(g.id);
