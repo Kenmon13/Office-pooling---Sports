@@ -93,10 +93,10 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
             <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>
             <li>Points for each correct winner prediction:
               <div className="ko-points-grid">
-                <span>Round of 16</span><span>5 pts (10 if correct score)</span>
-                <span>Quarter-Finals</span><span>7 pts (14 if correct score)</span>
-                <span>Semi-Finals</span><span>10 pts (20 if correct score)</span>
-                <span>Final</span><span>15 pts (30 if correct score)</span>
+                <span>Round of 16</span><span>5 pts (10 if correct score predicted)</span>
+                <span>Quarter-Finals</span><span>7 pts (14 if correct score predicted)</span>
+                <span>Semi-Finals</span><span>10 pts (20 if correct score predicted)</span>
+                <span>Final</span><span>15 pts (30 if correct score predicted)</span>
               </div>
             </li>
           </ul>
@@ -142,11 +142,11 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>
           <li>Points for each correct winner prediction:
             <div className="ko-points-grid">
-              <span>Round of 32</span><span>3 pts (6 if correct score)</span>
-              <span>Round of 16</span><span>5 pts (10 if correct score)</span>
-              <span>Quarter-Finals</span><span>7 pts (14 if correct score)</span>
-              <span>Semi-Finals</span><span>10 pts (20 if correct score)</span>
-              <span>Final</span><span>15 pts (30 if correct score)</span>
+              <span>Round of 32</span><span>3 pts (6 if correct score predicted)</span>
+              <span>Round of 16</span><span>5 pts (10 if correct score predicted)</span>
+              <span>Quarter-Finals</span><span>7 pts (14 if correct score predicted)</span>
+              <span>Semi-Finals</span><span>10 pts (20 if correct score predicted)</span>
+              <span>Final</span><span>15 pts (30 if correct score predicted)</span>
             </div>
           </li>
         </ul>
