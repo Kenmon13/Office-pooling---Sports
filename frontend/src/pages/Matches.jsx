@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchMatches, fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings, fetchPredictionDeadline } from "../api";
+import {
+  fetchMatches, fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings, fetchPredictionDeadline,
+  fetchWC2022Matches, fetchWC2022Groups, fetchWC2022GroupPredictions, submitWC2022GroupPrediction, fetchWC2022Standings, fetchWC2022PredictionDeadline,
+} from "../api";
 import { flag } from "../flags";
 
 function formatMatchDate(dateStr) {
@@ -48,7 +51,8 @@ function useCountdown(deadline) {
   return remaining;
 }
 
-function Matches({ currentUser }) {
+function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
+  const isWC2022 = tournament === "wc2022";
   const [matches, setMatches] = useState([]);
   const [groups, setGroups] = useState([]);
   const [expandedGroup, setExpandedGroup] = useState(null);
@@ -60,25 +64,42 @@ function Matches({ currentUser }) {
   const [locked, setLocked] = useState(false);
 
   useEffect(() => {
-    fetchMatches().then(setMatches);
-    fetchGroups().then(setGroups);
-    fetchStandings().then((data) => {
-      const map = {};
-      data.forEach((g) => { map[g.id] = g; });
-      setStandings(map);
-    });
-    fetchPredictionDeadline().then((data) => {
-      if (data.deadline) {
-        setDeadline(data.deadline);
-        const dl = new Date(data.deadline.replace(" ", "T"));
-        setLocked(new Date() >= dl);
-      }
-    });
-  }, []);
+    if (isWC2022) {
+      fetchWC2022Matches(poolId).then(setMatches);
+      fetchWC2022Groups().then(setGroups);
+      fetchWC2022Standings(poolId).then((data) => {
+        const map = {};
+        data.forEach((g) => { map[g.id] = g; });
+        setStandings(map);
+      });
+      fetchWC2022PredictionDeadline(poolId).then((data) => {
+        if (data.deadline) {
+          setDeadline(data.deadline);
+          setLocked(data.locked);
+        }
+      });
+    } else {
+      fetchMatches().then(setMatches);
+      fetchGroups().then(setGroups);
+      fetchStandings().then((data) => {
+        const map = {};
+        data.forEach((g) => { map[g.id] = g; });
+        setStandings(map);
+      });
+      fetchPredictionDeadline().then((data) => {
+        if (data.deadline) {
+          setDeadline(data.deadline);
+          const dl = new Date(data.deadline.replace(" ", "T"));
+          setLocked(new Date() >= dl);
+        }
+      });
+    }
+  }, [isWC2022, poolId, mockDate]);
 
   useEffect(() => {
     if (currentUser) {
-      fetchGroupPredictions(currentUser.id).then((preds) => {
+      const fetchFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
+      fetchFn(currentUser.id).then((preds) => {
         const map = {};
         const sel = {};
         preds.forEach((p) => {
@@ -89,7 +110,7 @@ function Matches({ currentUser }) {
         setSelections(sel);
       });
     }
-  }, [currentUser]);
+  }, [currentUser, isWC2022]);
 
   const toggleGroup = (groupName) => {
     setExpandedGroup((prev) => (prev === groupName ? null : groupName));
@@ -112,11 +133,17 @@ function Matches({ currentUser }) {
     const picked = selections[groupId] || [];
     if (picked.length !== 2) return;
     setSaving(groupId);
-    await submitGroupPrediction(currentUser.id, groupId, picked[0], picked[1]);
-    const preds = await fetchGroupPredictions(currentUser.id);
+    const submitFn = isWC2022 ? submitWC2022GroupPrediction : submitGroupPrediction;
+    await submitFn(currentUser.id, groupId, picked[0], picked[1]);
+    const preds = await (isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions)(currentUser.id);
     const map = {};
-    preds.forEach((p) => { map[p.group_id] = p; });
+    const sel = {};
+    preds.forEach((p) => {
+      map[p.group_id] = p;
+      sel[p.group_id] = [p.team1_id, p.team2_id];
+    });
     setPredictions(map);
+    setSelections((prev) => ({ ...prev, ...sel }));
     setSaving(null);
   };
 
@@ -142,6 +169,15 @@ function Matches({ currentUser }) {
   return (
     <div className="page">
       <h2>Group Stages</h2>
+
+      <div className="ko-rules">
+        <p className="ko-rules-title">How predictions work</p>
+        <ul>
+          <li>Pick the 2 teams you think will qualify from each group.</li>
+          <li>Both correct = 5 pts &middot; One correct = 2 pts.</li>
+          <li>Predictions lock once the first match of the group stage kicks off — you can update your picks until that time.</li>
+        </ul>
+      </div>
 
       {deadline && !locked && countdown && (
         <div className="deadline-banner">
@@ -177,12 +213,6 @@ function Matches({ currentUser }) {
           <span className="deadline-locked-text">Predictions are locked - the tournament has started</span>
         </div>
       )}
-      {currentUser && !locked && (
-        <p className="select-subtitle" style={{ marginBottom: 16 }}>
-          Pick 2 teams to advance from each group. Both correct = 5 pts, one correct = 2 pts.
-        </p>
-      )}
-
       <div className="group-grid">
         {groups.map((g) => {
           const isExpanded = expandedGroup === g.name;
@@ -195,7 +225,7 @@ function Matches({ currentUser }) {
           const gMatches = groupMatches[g.name] || [];
 
           return (
-            <div key={g.id} className={`group-card ${score ? score.cls : ""} ${isExpanded ? "expanded" : ""}`}>
+            <div key={g.id} className={`group-card ${score ? score.cls : !saved && !locked ? "unpicked" : ""} ${isExpanded ? "expanded" : ""}`}>
               <div className="group-card-header" onClick={() => toggleGroup(g.name)}>
                 <span className="group-badge">Group {g.name}</span>
                 {score && (
@@ -242,6 +272,12 @@ function Matches({ currentUser }) {
 
               {currentUser && !locked && (
                 <div className="group-card-footer">
+                  {picked.length < 2 && (
+                    <span className="pick-hint">Pick {2 - picked.length} more</span>
+                  )}
+                  {picked.length === 2 && !hasChanged && (
+                    <span className="saved-label">Saved ✓</span>
+                  )}
                   {picked.length === 2 && hasChanged && (
                     <button
                       className="btn-submit"
@@ -250,9 +286,6 @@ function Matches({ currentUser }) {
                     >
                       {saving === g.id ? "Saving..." : saved ? "Update" : "Save"}
                     </button>
-                  )}
-                  {picked.length < 2 && (
-                    <span className="pick-hint">Pick {2 - picked.length} more</span>
                   )}
                 </div>
               )}
