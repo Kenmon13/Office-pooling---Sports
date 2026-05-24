@@ -55,8 +55,8 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   const awayLabel = ko?.away_team_name ? <>{flag(ko.away_team_code)} {ko.away_team_name}</> : <SlotLabel />;
 
   const timeLabel = matchOpen
-    ? { text: "Closes: " + formatKoTime(meta.closesAt), red: true }
-    : { text: "Opens after: " + formatKoTime(meta.opensAfter), red: false };
+    ? { text: "Closes " + formatKoTime(meta.closesAt), red: true }
+    : { text: "Opens " + formatKoTime(meta.opensAfter), red: false };
 
   return (
     <div
@@ -151,7 +151,7 @@ function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMat
   const CONN_W = 30;
   const TITLE_H = 28;
   const TOTAL_H = 16 * SLOT - BASE_GAP + TITLE_H;
-  const TOTAL_W = rounds.length * ROUND_W + (rounds.length - 1) * CONN_W;
+  const TOTAL_W = rounds.length * ROUND_W + (rounds.length - 1) * CONN_W + 80;
 
   const matchCenterY = (r, m) => TITLE_H + (Math.pow(2, r) - 1) * SLOT / 2 + m * Math.pow(2, r) * SLOT + MATCH_H / 2;
   const roundLeft = (r) => r * (ROUND_W + CONN_W);
