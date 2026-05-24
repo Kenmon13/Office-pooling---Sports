@@ -221,7 +221,7 @@ function WinnerRules() {
           <strong>Two change windows:</strong>
           <ul>
             <li><strong>Before the group stage kicks off</strong> — change as many times as you like, completely free.</li>
-            <li><strong>After the final group match, before the first knockout match</strong> — your first change costs <strong>−10 pts</strong>; all further changes in this window are free.</li>
+            <li><strong>After the final group match, before the first knockout match</strong> — your first change costs <strong>−5 pts</strong>; all further changes in this window are free.</li>
           </ul>
         </li>
         <li>Pick is <strong>locked</strong> during the group stage and permanently once the knockouts begin.</li>
