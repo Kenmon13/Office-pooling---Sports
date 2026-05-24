@@ -109,30 +109,30 @@ function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMat
     {
       name: "Round of 32",
       matches: [
-        { id: "R32-1", home: "1A", away: "3C/D/E" }, { id: "R32-2", home: "2B", away: "2C" },
-        { id: "R32-3", home: "1D", away: "3A/B/F" }, { id: "R32-4", home: "1B", away: "3A/C/D" },
-        { id: "R32-5", home: "1E", away: "3B/F/G" }, { id: "R32-6", home: "2F", away: "2E" },
-        { id: "R32-7", home: "1C", away: "3D/E/F" }, { id: "R32-8", home: "2A", away: "2D" },
-        { id: "R32-9", home: "1G", away: "3H/I/J" }, { id: "R32-10", home: "2H", away: "2I" },
-        { id: "R32-11", home: "1J", away: "3G/K/L" }, { id: "R32-12", home: "1H", away: "3G/I/J" },
-        { id: "R32-13", home: "1K", away: "3H/K/L" }, { id: "R32-14", home: "2L", away: "2K" },
-        { id: "R32-15", home: "1I", away: "3J/K/L" }, { id: "R32-16", home: "2G", away: "2J" },
+        { id: "R32-1", home: "2A", away: "2B" }, { id: "R32-3", home: "1F", away: "2C" },
+        { id: "R32-2", home: "1E", away: "3A/B/C/D/F" }, { id: "R32-5", home: "1I", away: "3C/D/F/G/H" },
+        { id: "R32-4", home: "1C", away: "2F" }, { id: "R32-6", home: "2E", away: "2I" },
+        { id: "R32-7", home: "1A", away: "3C/E/F/H/I" }, { id: "R32-8", home: "1L", away: "3E/H/I/J/K" },
+        { id: "R32-11", home: "2K", away: "2L" }, { id: "R32-12", home: "1H", away: "2J" },
+        { id: "R32-9", home: "1D", away: "3B/E/F/I/J" }, { id: "R32-10", home: "1G", away: "3A/E/H/I/J" },
+        { id: "R32-14", home: "1J", away: "2H" }, { id: "R32-16", home: "2D", away: "2G" },
+        { id: "R32-13", home: "1B", away: "3E/F/G/I/J" }, { id: "R32-15", home: "1K", away: "3D/E/I/J/L" },
       ],
     },
     {
       name: "Round of 16",
       matches: [
-        { id: "R16-1", home: "W R32-1", away: "W R32-2" }, { id: "R16-2", home: "W R32-3", away: "W R32-4" },
-        { id: "R16-3", home: "W R32-5", away: "W R32-6" }, { id: "R16-4", home: "W R32-7", away: "W R32-8" },
-        { id: "R16-5", home: "W R32-9", away: "W R32-10" }, { id: "R16-6", home: "W R32-11", away: "W R32-12" },
-        { id: "R16-7", home: "W R32-13", away: "W R32-14" }, { id: "R16-8", home: "W R32-15", away: "W R32-16" },
+        { id: "R16-2", home: "W R32-1", away: "W R32-3" }, { id: "R16-1", home: "W R32-2", away: "W R32-5" },
+        { id: "R16-3", home: "W R32-4", away: "W R32-6" }, { id: "R16-4", home: "W R32-7", away: "W R32-8" },
+        { id: "R16-5", home: "W R32-11", away: "W R32-12" }, { id: "R16-6", home: "W R32-9", away: "W R32-10" },
+        { id: "R16-7", home: "W R32-14", away: "W R32-16" }, { id: "R16-8", home: "W R32-13", away: "W R32-15" },
       ],
     },
     {
       name: "Quarter-Finals",
       matches: [
-        { id: "QF-1", home: "W R16-1", away: "W R16-2" }, { id: "QF-2", home: "W R16-3", away: "W R16-4" },
-        { id: "QF-3", home: "W R16-5", away: "W R16-6" }, { id: "QF-4", home: "W R16-7", away: "W R16-8" },
+        { id: "QF-1", home: "W R16-1", away: "W R16-2" }, { id: "QF-2", home: "W R16-5", away: "W R16-6" },
+        { id: "QF-3", home: "W R16-3", away: "W R16-4" }, { id: "QF-4", home: "W R16-7", away: "W R16-8" },
       ],
     },
     {
@@ -147,8 +147,8 @@ function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMat
   const MATCH_H = 88;
   const BASE_GAP = 10;
   const SLOT = MATCH_H + BASE_GAP;
-  const ROUND_W = 140;
-  const CONN_W = 36;
+  const ROUND_W = 170;
+  const CONN_W = 30;
   const TITLE_H = 28;
   const TOTAL_H = 16 * SLOT - BASE_GAP + TITLE_H;
   const TOTAL_W = rounds.length * ROUND_W + (rounds.length - 1) * CONN_W;

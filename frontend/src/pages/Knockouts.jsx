@@ -88,7 +88,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           <p className="ko-rules-title">How predictions work</p>
           <ul>
             <li>Round of 16 opens once all group stage matches are complete.</li>
-            <li>Each later match opens individually as soon as both of its feeder matches have confirmed winners — you don&apos;t have to wait for a full round to finish.</li>
+            <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
             <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
             <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>
             <li>Points for each correct winner prediction:
@@ -137,7 +137,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
         <p className="ko-rules-title">How predictions work</p>
         <ul>
           <li>Round of 32 opens once all group stage matches are complete.</li>
-          <li>Each later match opens individually as soon as both of its feeder matches have confirmed winners — you don't have to wait for a full round to finish.</li>
+          <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
           <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
           <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>
           <li>Points for each correct winner prediction:

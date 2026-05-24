@@ -1036,6 +1036,73 @@ nav a.active {
   background: #3a9a3a;
 }
 
+.public-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #b0b0b0;
+  cursor: pointer;
+}
+
+.public-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #4caf50;
+  cursor: pointer;
+}
+
+.public-pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.public-pool-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+
+.public-pool-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.public-pool-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #e0e0e0;
+}
+
+.public-pool-members {
+  font-size: 12px;
+  color: #888;
+}
+
+.public-pool-join-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.public-pool-join-btn:hover {
+  background: #3a9a3a;
+}
+
 .back-btn {
   background: none;
   border: none;
@@ -1436,8 +1503,7 @@ nav a.active {
   text-align: center;
   padding: 1px 4px 2px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .ko-rules {

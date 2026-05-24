@@ -105,6 +105,9 @@ try { db.exec("ALTER TABLE knockout_matches ADD COLUMN match_date TEXT"); } catc
 try { db.exec("ALTER TABLE pools ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE pools ADD COLUMN mock_date TEXT"); } catch (_) {}
 
+// Add public pool column
+try { db.exec("ALTER TABLE pools ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
 // Add actual score columns to knockout matches (for score-prediction scoring)
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_score INTEGER"); } catch (_) {}
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_score INTEGER"); } catch (_) {}
@@ -364,45 +367,44 @@ const updateKo22Score = db.prepare("UPDATE wc2022_knockout_matches SET home_scor
 for (const s of WC2022_KO_SCORES) updateKo22Score.run(s.hs, s.as, s.id);
 
 // 2026 FIFA World Cup knockout schedule (all times UTC)
-// Sources: FIFA official calendar. Exact kickoff times TBC closer to the event —
-// update match_date values here when the detailed schedule is confirmed.
+// Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
-  // Round of 32 — June 28 - July 1
-  { id: "R32-1",  round: "R32", home_slot: "1A",      away_slot: "3C/D/E",   match_date: "2026-06-28 23:00" },
-  { id: "R32-2",  round: "R32", home_slot: "2B",      away_slot: "2C",       match_date: "2026-06-29 02:00" },
-  { id: "R32-3",  round: "R32", home_slot: "1D",      away_slot: "3A/B/F",   match_date: "2026-06-29 19:00" },
-  { id: "R32-4",  round: "R32", home_slot: "1B",      away_slot: "3A/C/D",   match_date: "2026-06-29 23:00" },
-  { id: "R32-5",  round: "R32", home_slot: "1E",      away_slot: "3B/F/G",   match_date: "2026-06-30 19:00" },
-  { id: "R32-6",  round: "R32", home_slot: "2F",      away_slot: "2E",       match_date: "2026-06-30 23:00" },
-  { id: "R32-7",  round: "R32", home_slot: "1C",      away_slot: "3D/E/F",   match_date: "2026-07-01 19:00" },
-  { id: "R32-8",  round: "R32", home_slot: "2A",      away_slot: "2D",       match_date: "2026-07-01 23:00" },
-  { id: "R32-9",  round: "R32", home_slot: "1G",      away_slot: "3H/I/J",   match_date: "2026-07-02 19:00" },
-  { id: "R32-10", round: "R32", home_slot: "2H",      away_slot: "2I",       match_date: "2026-07-02 23:00" },
-  { id: "R32-11", round: "R32", home_slot: "1J",      away_slot: "3G/K/L",   match_date: "2026-07-03 19:00" },
-  { id: "R32-12", round: "R32", home_slot: "1H",      away_slot: "3G/I/J",   match_date: "2026-07-03 23:00" },
-  { id: "R32-13", round: "R32", home_slot: "1K",      away_slot: "3H/K/L",   match_date: "2026-07-04 19:00" },
-  { id: "R32-14", round: "R32", home_slot: "2L",      away_slot: "2K",       match_date: "2026-07-04 23:00" },
-  { id: "R32-15", round: "R32", home_slot: "1I",      away_slot: "3J/K/L",   match_date: "2026-07-05 19:00" },
-  { id: "R32-16", round: "R32", home_slot: "2G",      away_slot: "2J",       match_date: "2026-07-05 23:00" },
-  // Round of 16 — July 7-10
-  { id: "R16-1",  round: "R16", home_slot: "W R32-1", away_slot: "W R32-2",  match_date: "2026-07-07 23:00" },
-  { id: "R16-2",  round: "R16", home_slot: "W R32-3", away_slot: "W R32-4",  match_date: "2026-07-08 02:00" },
-  { id: "R16-3",  round: "R16", home_slot: "W R32-5", away_slot: "W R32-6",  match_date: "2026-07-08 19:00" },
-  { id: "R16-4",  round: "R16", home_slot: "W R32-7", away_slot: "W R32-8",  match_date: "2026-07-08 23:00" },
-  { id: "R16-5",  round: "R16", home_slot: "W R32-9", away_slot: "W R32-10", match_date: "2026-07-09 19:00" },
-  { id: "R16-6",  round: "R16", home_slot: "W R32-11",away_slot: "W R32-12", match_date: "2026-07-09 23:00" },
-  { id: "R16-7",  round: "R16", home_slot: "W R32-13",away_slot: "W R32-14", match_date: "2026-07-10 19:00" },
-  { id: "R16-8",  round: "R16", home_slot: "W R32-15",away_slot: "W R32-16", match_date: "2026-07-10 23:00" },
-  // Quarter-finals — July 13-14
-  { id: "QF-1",   round: "QF",  home_slot: "W R16-1", away_slot: "W R16-2",  match_date: "2026-07-13 23:00" },
-  { id: "QF-2",   round: "QF",  home_slot: "W R16-3", away_slot: "W R16-4",  match_date: "2026-07-14 02:00" },
-  { id: "QF-3",   round: "QF",  home_slot: "W R16-5", away_slot: "W R16-6",  match_date: "2026-07-14 19:00" },
-  { id: "QF-4",   round: "QF",  home_slot: "W R16-7", away_slot: "W R16-8",  match_date: "2026-07-14 23:00" },
-  // Semi-finals — July 17-18
-  { id: "SF-1",   round: "SF",  home_slot: "W QF-1",  away_slot: "W QF-2",   match_date: "2026-07-17 23:00" },
-  { id: "SF-2",   round: "SF",  home_slot: "W QF-3",  away_slot: "W QF-4",   match_date: "2026-07-18 23:00" },
-  // Final — July 22
-  { id: "F",      round: "F",   home_slot: "W SF-1",  away_slot: "W SF-2",   match_date: "2026-07-22 23:00" },
+  // Round of 32 — June 28 - July 4
+  { id: "R32-1",  round: "R32", home_slot: "2A",      away_slot: "2B",           match_date: "2026-06-28 19:00" },
+  { id: "R32-2",  round: "R32", home_slot: "1E",      away_slot: "3A/B/C/D/F",   match_date: "2026-06-29 20:30" },
+  { id: "R32-3",  round: "R32", home_slot: "1F",      away_slot: "2C",           match_date: "2026-06-29 01:00" },
+  { id: "R32-4",  round: "R32", home_slot: "1C",      away_slot: "2F",           match_date: "2026-06-29 16:00" },
+  { id: "R32-5",  round: "R32", home_slot: "1I",      away_slot: "3C/D/F/G/H",   match_date: "2026-06-30 21:00" },
+  { id: "R32-6",  round: "R32", home_slot: "2E",      away_slot: "2I",           match_date: "2026-06-30 17:00" },
+  { id: "R32-7",  round: "R32", home_slot: "1A",      away_slot: "3C/E/F/H/I",   match_date: "2026-06-30 01:00" },
+  { id: "R32-8",  round: "R32", home_slot: "1L",      away_slot: "3E/H/I/J/K",   match_date: "2026-07-01 16:00" },
+  { id: "R32-9",  round: "R32", home_slot: "1D",      away_slot: "3B/E/F/I/J",   match_date: "2026-07-01 00:00" },
+  { id: "R32-10", round: "R32", home_slot: "1G",      away_slot: "3A/E/H/I/J",   match_date: "2026-07-01 20:00" },
+  { id: "R32-11", round: "R32", home_slot: "2K",      away_slot: "2L",           match_date: "2026-07-02 23:00" },
+  { id: "R32-12", round: "R32", home_slot: "1H",      away_slot: "2J",           match_date: "2026-07-02 19:00" },
+  { id: "R32-13", round: "R32", home_slot: "1B",      away_slot: "3E/F/G/I/J",   match_date: "2026-07-02 03:00" },
+  { id: "R32-14", round: "R32", home_slot: "1J",      away_slot: "2H",           match_date: "2026-07-03 22:00" },
+  { id: "R32-15", round: "R32", home_slot: "1K",      away_slot: "3D/E/I/J/L",   match_date: "2026-07-04 01:30" },
+  { id: "R32-16", round: "R32", home_slot: "2D",      away_slot: "2G",           match_date: "2026-07-03 18:00" },
+  // Round of 16 — July 4-7
+  { id: "R16-1",  round: "R16", home_slot: "W R32-2", away_slot: "W R32-5",  match_date: "2026-07-04 21:00" },
+  { id: "R16-2",  round: "R16", home_slot: "W R32-1", away_slot: "W R32-3",  match_date: "2026-07-04 17:00" },
+  { id: "R16-3",  round: "R16", home_slot: "W R32-4", away_slot: "W R32-6",  match_date: "2026-07-05 20:00" },
+  { id: "R16-4",  round: "R16", home_slot: "W R32-7", away_slot: "W R32-8",  match_date: "2026-07-05 00:00" },
+  { id: "R16-5",  round: "R16", home_slot: "W R32-11",away_slot: "W R32-12", match_date: "2026-07-06 19:00" },
+  { id: "R16-6",  round: "R16", home_slot: "W R32-9", away_slot: "W R32-10", match_date: "2026-07-06 00:00" },
+  { id: "R16-7",  round: "R16", home_slot: "W R32-14",away_slot: "W R32-16", match_date: "2026-07-07 16:00" },
+  { id: "R16-8",  round: "R16", home_slot: "W R32-13",away_slot: "W R32-15", match_date: "2026-07-07 20:00" },
+  // Quarter-finals — July 9-12
+  { id: "QF-1",   round: "QF",  home_slot: "W R16-1", away_slot: "W R16-2",  match_date: "2026-07-09 20:00" },
+  { id: "QF-2",   round: "QF",  home_slot: "W R16-5", away_slot: "W R16-6",  match_date: "2026-07-10 19:00" },
+  { id: "QF-3",   round: "QF",  home_slot: "W R16-3", away_slot: "W R16-4",  match_date: "2026-07-11 21:00" },
+  { id: "QF-4",   round: "QF",  home_slot: "W R16-7", away_slot: "W R16-8",  match_date: "2026-07-12 00:00" },
+  // Semi-finals — July 14-15
+  { id: "SF-1",   round: "SF",  home_slot: "W QF-1",  away_slot: "W QF-2",   match_date: "2026-07-14 19:00" },
+  { id: "SF-2",   round: "SF",  home_slot: "W QF-3",  away_slot: "W QF-4",   match_date: "2026-07-15 19:00" },
+  // Final — July 19
+  { id: "F",      round: "F",   home_slot: "W SF-1",  away_slot: "W SF-2",   match_date: "2026-07-19 19:00" },
 ];
 
 // Seed knockout matches if table is empty
@@ -414,10 +416,10 @@ if (koExists.c === 0) {
   }
 }
 
-// Migration: backfill match_date for existing rows that were seeded without dates
-const updateKoDate = db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ? AND match_date IS NULL");
+// Migration: update knockout match dates and slots to official FIFA schedule
+const updateKo = db.prepare("UPDATE knockout_matches SET match_date = ?, home_slot = ?, away_slot = ? WHERE id = ?");
 for (const m of KO_SCHEDULE) {
-  updateKoDate.run(m.match_date, m.id);
+  updateKo.run(m.match_date, m.home_slot, m.away_slot, m.id);
 }
 
 // Seed admin user
@@ -426,6 +428,110 @@ const adminPassword = process.env.ADMIN_PASSWORD || "messi";
 const existingAdmin = db.prepare("SELECT id FROM users WHERE username = ?").get(adminUsername);
 if (!existingAdmin) {
   db.prepare("INSERT INTO users (username, password, display_name, is_admin) VALUES (?, ?, ?, 1)").run(adminUsername, adminPassword, "Admin");
+}
+
+// Seed default public pool for WC2026
+const existingPublicPool = db.prepare("SELECT id FROM pools WHERE name = 'World Cup 2026 Open' AND is_public = 1").get();
+if (!existingPublicPool) {
+  db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("World Cup 2026 Open", "soccer", "wc2026", "");
+}
+
+// Migration: update WC2026 group stage match dates to official FIFA schedule
+const WC2026_MATCH_DATES = [
+  // Group A
+  { home: "MEX", away: "RSA", date: "2026-06-11 19:00" },
+  { home: "KOR", away: "CZE", date: "2026-06-12 02:00" },
+  { home: "CZE", away: "RSA", date: "2026-06-18 16:00" },
+  { home: "MEX", away: "KOR", date: "2026-06-19 01:00" },
+  { home: "CZE", away: "MEX", date: "2026-06-25 01:00" },
+  { home: "KOR", away: "RSA", date: "2026-06-25 01:00" },
+  // Group B
+  { home: "CAN", away: "BIH", date: "2026-06-12 19:00" },
+  { home: "SUI", away: "QAT", date: "2026-06-12 22:00" },
+  { home: "SUI", away: "BIH", date: "2026-06-18 19:00" },
+  { home: "CAN", away: "QAT", date: "2026-06-18 22:00" },
+  { home: "SUI", away: "CAN", date: "2026-06-24 19:00" },
+  { home: "BIH", away: "QAT", date: "2026-06-24 19:00" },
+  // Group C
+  { home: "BRA", away: "MAR", date: "2026-06-13 22:00" },
+  { home: "HAI", away: "SCO", date: "2026-06-14 01:00" },
+  { home: "SCO", away: "MAR", date: "2026-06-19 22:00" },
+  { home: "BRA", away: "HAI", date: "2026-06-20 00:30" },
+  { home: "SCO", away: "BRA", date: "2026-06-24 22:00" },
+  { home: "MAR", away: "HAI", date: "2026-06-24 22:00" },
+  // Group D
+  { home: "USA", away: "PAR", date: "2026-06-13 01:00" },
+  { home: "AUS", away: "TUR", date: "2026-06-13 04:00" },
+  { home: "USA", away: "AUS", date: "2026-06-19 19:00" },
+  { home: "TUR", away: "PAR", date: "2026-06-20 03:00" },
+  { home: "TUR", away: "USA", date: "2026-06-25 02:00" },
+  { home: "PAR", away: "AUS", date: "2026-06-25 02:00" },
+  // Group E
+  { home: "GER", away: "CUW", date: "2026-06-14 17:00" },
+  { home: "CIV", away: "ECU", date: "2026-06-14 23:00" },
+  { home: "GER", away: "CIV", date: "2026-06-20 20:00" },
+  { home: "ECU", away: "CUW", date: "2026-06-21 00:00" },
+  { home: "ECU", away: "GER", date: "2026-06-25 20:00" },
+  { home: "CUW", away: "CIV", date: "2026-06-25 20:00" },
+  // Group F
+  { home: "NED", away: "JPN", date: "2026-06-14 20:00" },
+  { home: "SWE", away: "TUN", date: "2026-06-15 02:00" },
+  { home: "NED", away: "SWE", date: "2026-06-20 17:00" },
+  { home: "TUN", away: "JPN", date: "2026-06-21 04:00" },
+  { home: "JPN", away: "SWE", date: "2026-06-25 23:00" },
+  { home: "TUN", away: "NED", date: "2026-06-25 23:00" },
+  // Group G
+  { home: "BEL", away: "EGY", date: "2026-06-15 19:00" },
+  { home: "IRN", away: "NZL", date: "2026-06-16 01:00" },
+  { home: "BEL", away: "IRN", date: "2026-06-21 19:00" },
+  { home: "NZL", away: "EGY", date: "2026-06-22 01:00" },
+  { home: "EGY", away: "IRN", date: "2026-06-27 03:00" },
+  { home: "NZL", away: "BEL", date: "2026-06-27 03:00" },
+  // Group H
+  { home: "ESP", away: "CPV", date: "2026-06-15 16:00" },
+  { home: "KSA", away: "URU", date: "2026-06-15 22:00" },
+  { home: "ESP", away: "KSA", date: "2026-06-21 16:00" },
+  { home: "URU", away: "CPV", date: "2026-06-21 22:00" },
+  { home: "CPV", away: "KSA", date: "2026-06-27 00:00" },
+  { home: "URU", away: "ESP", date: "2026-06-27 00:00" },
+  // Group I
+  { home: "FRA", away: "SEN", date: "2026-06-16 19:00" },
+  { home: "IRQ", away: "NOR", date: "2026-06-16 22:00" },
+  { home: "FRA", away: "IRQ", date: "2026-06-22 21:00" },
+  { home: "NOR", away: "SEN", date: "2026-06-23 00:00" },
+  { home: "NOR", away: "FRA", date: "2026-06-26 19:00" },
+  { home: "SEN", away: "IRQ", date: "2026-06-26 19:00" },
+  // Group J
+  { home: "ARG", away: "ALG", date: "2026-06-17 01:00" },
+  { home: "AUT", away: "JOR", date: "2026-06-17 04:00" },
+  { home: "ARG", away: "AUT", date: "2026-06-22 17:00" },
+  { home: "JOR", away: "ALG", date: "2026-06-23 03:00" },
+  { home: "JOR", away: "ARG", date: "2026-06-28 02:00" },
+  { home: "ALG", away: "AUT", date: "2026-06-28 02:00" },
+  // Group K
+  { home: "POR", away: "COD", date: "2026-06-17 17:00" },
+  { home: "UZB", away: "COL", date: "2026-06-18 02:00" },
+  { home: "POR", away: "UZB", date: "2026-06-23 17:00" },
+  { home: "COL", away: "COD", date: "2026-06-24 02:00" },
+  { home: "COD", away: "UZB", date: "2026-06-27 23:30" },
+  { home: "COL", away: "POR", date: "2026-06-27 23:30" },
+  // Group L
+  { home: "ENG", away: "CRO", date: "2026-06-17 20:00" },
+  { home: "GHA", away: "PAN", date: "2026-06-17 23:00" },
+  { home: "ENG", away: "GHA", date: "2026-06-23 20:00" },
+  { home: "PAN", away: "CRO", date: "2026-06-23 23:00" },
+  { home: "PAN", away: "ENG", date: "2026-06-27 21:00" },
+  { home: "CRO", away: "GHA", date: "2026-06-27 21:00" },
+];
+
+// Update match dates for existing seeded matches
+const updateMatchDate = db.prepare(`
+  UPDATE matches SET match_date = ?
+  WHERE home_team_id = (SELECT id FROM teams WHERE code = ?)
+    AND away_team_id = (SELECT id FROM teams WHERE code = ?)
+`);
+for (const m of WC2026_MATCH_DATES) {
+  updateMatchDate.run(m.date, m.home, m.away);
 }
 
 module.exports = db;

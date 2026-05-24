@@ -51,11 +51,11 @@ export async function adminDeletePool(poolId, userId) {
   return res.json();
 }
 
-export async function createPool(name, sport, tournament, password) {
+export async function createPool(name, sport, tournament, password, is_public) {
   const res = await fetch(`${API}/pools`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, sport, tournament, password }),
+    body: JSON.stringify({ name, sport, tournament, password, is_public }),
   });
   return res.json();
 }
@@ -66,6 +66,14 @@ export async function joinPool(name, password) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, password }),
   });
+  return res.json();
+}
+
+export async function fetchPublicPools(sport, tournament) {
+  const params = new URLSearchParams();
+  if (sport) params.set("sport", sport);
+  if (tournament) params.set("tournament", tournament);
+  const res = await fetch(`${API}/pools/public?${params}`);
   return res.json();
 }
 

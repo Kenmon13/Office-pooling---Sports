@@ -106,12 +106,13 @@ app.delete("/api/admin/pools/:id", (req, res) => {
 // --- Pools ---
 
 app.post("/api/pools", (req, res) => {
-  const { name, sport, tournament, password } = req.body;
+  const { name, sport, tournament, password, is_public } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Pool name is required" });
-  if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
+  if (!is_public && (!password || !password.trim())) return res.status(400).json({ error: "Password is required" });
   try {
-    const result = db.prepare("INSERT INTO pools (name, sport, tournament, password) VALUES (?, ?, ?, ?)").run(name.trim(), sport || "soccer", tournament || "wc2026", password.trim());
-    res.json({ id: result.lastInsertRowid, name: name.trim(), sport: sport || "soccer", tournament: tournament || "wc2026" });
+    const pwd = is_public ? "" : password.trim();
+    const result = db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, ?)").run(name.trim(), sport || "soccer", tournament || "wc2026", pwd, is_public ? 1 : 0);
+    res.json({ id: result.lastInsertRowid, name: name.trim(), sport: sport || "soccer", tournament: tournament || "wc2026", is_public: is_public ? 1 : 0 });
   } catch (err) {
     if (err.message.includes("UNIQUE")) {
       return res.status(409).json({ error: "Pool name already taken" });
@@ -123,11 +124,24 @@ app.post("/api/pools", (req, res) => {
 app.post("/api/pools/join", (req, res) => {
   const { name, password } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Pool name is required" });
-  if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
   const pool = db.prepare("SELECT * FROM pools WHERE name = ?").get(name.trim());
   if (!pool) return res.status(404).json({ error: "Pool not found" });
-  if (pool.password !== password.trim()) return res.status(401).json({ error: "Wrong password" });
-  res.json({ id: pool.id, name: pool.name, sport: pool.sport, tournament: pool.tournament, is_test: pool.is_test, mock_date: pool.mock_date });
+  if (!pool.is_public) {
+    if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
+    if (pool.password !== password.trim()) return res.status(401).json({ error: "Wrong password" });
+  }
+  res.json({ id: pool.id, name: pool.name, sport: pool.sport, tournament: pool.tournament, is_test: pool.is_test, mock_date: pool.mock_date, is_public: pool.is_public });
+});
+
+app.get("/api/pools/public", (req, res) => {
+  const { sport, tournament } = req.query;
+  let query = "SELECT id, name, sport, tournament, created_at, (SELECT COUNT(*) FROM participants WHERE pool_id = pools.id) as member_count FROM pools WHERE is_public = 1";
+  const params = [];
+  if (sport) { query += " AND sport = ?"; params.push(sport); }
+  if (tournament) { query += " AND tournament = ?"; params.push(tournament); }
+  query += " ORDER BY member_count DESC, created_at DESC";
+  const pools = db.prepare(query).all(...params);
+  res.json(pools);
 });
 
 // --- Participants ---
