@@ -3,7 +3,7 @@
 Pool funds and predict sports events. Full-stack JS app deployed on Railway.
 
 **GitHub:** https://github.com/Kenmon13/Office-pooling---Sports  
-**Live app:** https://office-pooling-sports-production.up.railway.app/  
+**Live app:** https://sportspooling.com/  
 **Default branch:** `main`
 
 ---
@@ -96,4 +96,4 @@ npm run build   # from repo root
 ## Before Finishing Any Task
 1. Run `cd frontend && npm run lint` — fix all issues before committing.
 2. No backend test suite exists — note this explicitly if relevant.
-3. Verify the live app at https://office-pooling-sports-production.up.railway.app/ after any Railway deploy.
+3. Verify the live app at https://sportspooling.com/ after any Railway deploy.
