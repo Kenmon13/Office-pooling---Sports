@@ -69,6 +69,20 @@ export async function joinPool(name, password) {
   return res.json();
 }
 
+export async function fetchPoolById(poolId) {
+  const res = await fetch(`${API}/pools/${poolId}`);
+  return res.json();
+}
+
+export async function joinPoolById(pool_id, password) {
+  const res = await fetch(`${API}/pools/join-by-id`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pool_id, password }),
+  });
+  return res.json();
+}
+
 export async function fetchPublicPools(sport, tournament) {
   const params = new URLSearchParams();
   if (sport) params.set("sport", sport);

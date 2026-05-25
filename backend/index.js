@@ -144,6 +144,24 @@ app.get("/api/pools/public", (req, res) => {
   res.json(pools);
 });
 
+app.get("/api/pools/:id", (req, res) => {
+  const pool = db.prepare("SELECT id, name, sport, tournament, is_public, is_test, mock_date FROM pools WHERE id = ?").get(req.params.id);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json(pool);
+});
+
+app.post("/api/pools/join-by-id", (req, res) => {
+  const { pool_id, password } = req.body;
+  if (!pool_id) return res.status(400).json({ error: "pool_id is required" });
+  const pool = db.prepare("SELECT * FROM pools WHERE id = ?").get(pool_id);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  if (!pool.is_public) {
+    if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
+    if (pool.password !== password.trim()) return res.status(401).json({ error: "Wrong password" });
+  }
+  res.json({ id: pool.id, name: pool.name, sport: pool.sport, tournament: pool.tournament, is_test: pool.is_test, mock_date: pool.mock_date, is_public: pool.is_public });
+});
+
 // --- Participants ---
 
 app.get("/api/participants", (req, res) => {

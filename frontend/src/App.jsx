@@ -5,12 +5,13 @@ import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
 import Champion from "./pages/Champion";
 import History from "./pages/History";
+import ViewPicks from "./pages/ViewPicks";
 import SelectSport from "./pages/SelectSport";
 import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById } from "./api";
 import "./App.css";
 
 const TOURNAMENT_META = {
@@ -47,6 +48,23 @@ function App() {
     if (!saved) return null;
     return JSON.parse(saved).pool ?? null;
   });
+
+  // Invite link handling
+  const [invitePool, setInvitePool] = useState(null);
+  const [inviteLoading, setInviteLoading] = useState(() => {
+    return /^\/join\/\d+/.test(window.location.pathname);
+  });
+
+  useEffect(() => {
+    const match = window.location.pathname.match(/^\/join\/(\d+)/);
+    if (match) {
+      fetchPoolById(match[1]).then((data) => {
+        if (!data.error) setInvitePool(data);
+        setInviteLoading(false);
+      }).catch(() => setInviteLoading(false));
+      window.history.replaceState(null, "", "/");
+    }
+  }, []);
 
   // Auto-join pool when user and pool are both set
   useEffect(() => {
@@ -126,6 +144,31 @@ function App() {
     );
   }
 
+  // Invite link flow — after auth, before normal flow
+  if (invitePool && !pool) {
+    return (
+      <div className="app">
+        <div className="auth-bar">
+          Signed in as <strong>{user.display_name}</strong>
+          <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+        </div>
+        <InviteJoin
+          pool={invitePool}
+          onJoin={(poolData) => { setInvitePool(null); handleJoinPool(poolData); }}
+          onCancel={() => setInvitePool(null)}
+        />
+      </div>
+    );
+  }
+
+  if (inviteLoading) {
+    return (
+      <div className="app">
+        <p className="notice">Loading invite...</p>
+      </div>
+    );
+  }
+
   // Admin panel
   if (showAdmin) {
     return (
@@ -192,6 +235,15 @@ function App() {
                 <button onClick={handleLeavePool} className="btn-small">
                   Leave Pool
                 </button>
+                <button onClick={(e) => {
+                  const url = `${window.location.origin}/join/${pool.id}`;
+                  navigator.clipboard.writeText(url);
+                  const btn = e.currentTarget;
+                  btn.textContent = "Copied!";
+                  setTimeout(() => { btn.textContent = "Share Link"; }, 2000);
+                }} className="btn-small btn-share">
+                  Share Link
+                </button>
               </p>
             </div>
             <div className="header-right">
@@ -238,6 +290,7 @@ function App() {
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
           </Routes>
         </main>
       </div>
@@ -342,6 +395,73 @@ function TestControls({ userId, pool, onMockDateChange }) {
         )}
       </div>
       {msg && <span className="test-msg">{msg}</span>}
+    </div>
+  );
+}
+
+function InviteJoin({ pool, onJoin, onCancel }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [joining, setJoining] = useState(pool.is_public);
+  const [joinResult, setJoinResult] = useState(null);
+
+  useEffect(() => {
+    if (pool.is_public) {
+      joinPoolById(pool.id, "").then((result) => {
+        if (result.error) {
+          setError(result.error);
+          setJoining(false);
+        } else {
+          setJoinResult(result);
+        }
+      });
+    }
+  }, [pool]);
+
+  useEffect(() => {
+    if (joinResult) onJoin(joinResult);
+  }, [joinResult, onJoin]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setJoining(true);
+    const result = await joinPoolById(pool.id, password.trim());
+    if (result.error) {
+      setError(result.error);
+      setJoining(false);
+    } else {
+      onJoin(result);
+    }
+  };
+
+  if (pool.is_public) {
+    return (
+      <div className="select-page">
+        <p className="select-subtitle">Joining <strong>{pool.name}</strong>...</p>
+        {error && <p className="error">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="select-page">
+      <h2>Join "{pool.name}"</h2>
+      <p className="select-subtitle">This pool requires a password to join.</p>
+      <form onSubmit={handleSubmit} className="pool-form-vertical">
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Pool password"
+          autoFocus
+        />
+        <button type="submit" disabled={joining}>
+          {joining ? "Joining..." : "Join Pool"}
+        </button>
+        {error && <p className="error">{error}</p>}
+      </form>
+      <button className="btn-small" onClick={onCancel} style={{ marginTop: 12 }}>Cancel</button>
     </div>
   );
 }

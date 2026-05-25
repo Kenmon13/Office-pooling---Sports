@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { fetchLeaderboard, fetchWC2022Leaderboard } from "../api";
 
 function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
+  const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState([]);
   const prevRankRef = useRef({});
 
@@ -52,7 +54,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                   <td className="rank-change">
                     {delta > 0 ? <span className="rank-up">↑</span> : delta < 0 ? <span className="rank-down">↓</span> : <span className="rank-static">–</span>}
                   </td>
-                  <td className="name">{p.name}</td>
+                  <td className="name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</td>
                   <td className="pts-sub">{p.group_pts}</td>
                   <td className="pts-sub">{p.ko_points || 0}</td>
                   <td className={`pts-sub ${champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}`}>
