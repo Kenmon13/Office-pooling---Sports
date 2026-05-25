@@ -16,6 +16,8 @@ RUN cd frontend && npm install
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build && rm -rf ../backend/public && cp -r dist ../backend/public
 
+RUN mkdir -p /data
+
 EXPOSE 3001
 
 CMD ["node", "backend/index.js"]
