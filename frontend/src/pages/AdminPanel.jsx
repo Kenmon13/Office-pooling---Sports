@@ -23,19 +23,19 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    adminFetchPools(user.id).then((data) => { if (!data.error) setPools(data); });
-    adminFetchUsers(user.id).then((data) => { if (!data.error) setUsers(data); });
-    adminFetchTestPools(user.id).then((d) => { if (!d.error) setTestPools(d); });
+    adminFetchPools().then((data) => { if (!data.error) setPools(data); });
+    adminFetchUsers().then((data) => { if (!data.error) setUsers(data); });
+    adminFetchTestPools().then((d) => { if (!d.error) setTestPools(d); });
   }, [user.id]);
 
   const handleCreateTestPool = async () => {
     if (!newTestName.trim() || !newTestPwd.trim()) return;
     setCreating(true);
     try {
-      const res = await adminCreateTestPool(user.id, newTestName.trim(), newTestPwd.trim());
+      const res = await adminCreateTestPool(newTestName.trim(), newTestPwd.trim());
       if (!res.error) {
         setNewTestName(""); setNewTestPwd("");
-        adminFetchTestPools(user.id).then((d) => { if (!d.error) setTestPools(d); });
+        adminFetchTestPools().then((d) => { if (!d.error) setTestPools(d); });
       } else {
         alert(res.error);
       }
@@ -48,20 +48,20 @@ function AdminPanel({ user, onSelectPool, onBack }) {
 
   const handleDeleteTestPool = async (poolId) => {
     if (!confirm("Delete this test pool and all its data?")) return;
-    await deletePool(poolId, user.id);
+    await deletePool(poolId);
     setTestPools((prev) => prev.filter((p) => p.id !== poolId));
   };
 
   const handleDeletePool = async (e, poolId) => {
     e.stopPropagation();
     if (!confirm("Delete this pool? All participants and predictions will be removed.")) return;
-    await adminDeletePool(poolId, user.id);
+    await adminDeletePool(poolId);
     setPools((prev) => prev.filter((p) => p.id !== poolId));
   };
 
   const handleDeleteUser = async (targetId) => {
     if (!confirm("Delete this user? All their data will be removed.")) return;
-    const result = await adminDeleteUser(targetId, user.id);
+    const result = await adminDeleteUser(targetId);
     if (result.error) {
       alert(result.error);
       return;

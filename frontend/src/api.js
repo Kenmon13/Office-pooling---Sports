@@ -1,12 +1,25 @@
 const API = "/api";
 
+function getToken() {
+  return localStorage.getItem("auth_token");
+}
+
+function authHeaders() {
+  const token = getToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
 export async function signUp(username, password, display_name) {
   const res = await fetch(`${API}/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password, display_name }),
   });
-  return res.json();
+  const data = await res.json();
+  if (data.token) localStorage.setItem("auth_token", data.token);
+  return data;
 }
 
 export async function signIn(username, password) {
@@ -15,7 +28,9 @@ export async function signIn(username, password) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  return res.json();
+  const data = await res.json();
+  if (data.token) localStorage.setItem("auth_token", data.token);
+  return data;
 }
 
 export async function autoJoinPool(user_id, pool_id) {
@@ -27,26 +42,28 @@ export async function autoJoinPool(user_id, pool_id) {
   return res.json();
 }
 
-export async function adminFetchUsers(userId) {
-  const res = await fetch(`${API}/admin/users?user_id=${userId}`);
+export async function adminFetchUsers() {
+  const res = await fetch(`${API}/admin/users`, { headers: authHeaders() });
   return res.json();
 }
 
-export async function adminDeleteUser(targetId, userId) {
-  const res = await fetch(`${API}/admin/users/${targetId}?user_id=${userId}`, {
+export async function adminDeleteUser(targetId) {
+  const res = await fetch(`${API}/admin/users/${targetId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   return res.json();
 }
 
-export async function adminFetchPools(userId) {
-  const res = await fetch(`${API}/admin/pools?user_id=${userId}`);
+export async function adminFetchPools() {
+  const res = await fetch(`${API}/admin/pools`, { headers: authHeaders() });
   return res.json();
 }
 
-export async function adminDeletePool(poolId, userId) {
-  const res = await fetch(`${API}/admin/pools/${poolId}?user_id=${userId}`, {
+export async function adminDeletePool(poolId) {
+  const res = await fetch(`${API}/admin/pools/${poolId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   return res.json();
 }
@@ -258,45 +275,62 @@ export async function fetchHistory(participantId, poolId) {
   return (await fetch(url)).json();
 }
 
+// ── Pool Chat ────────────────────────────────────────────────────────────────
+
+export async function fetchMessages(poolId, afterId = 0) {
+  const url = afterId ? `${API}/pools/${poolId}/messages?after=${afterId}` : `${API}/pools/${poolId}/messages`;
+  return (await fetch(url)).json();
+}
+
+export async function sendMessage(poolId, body) {
+  const res = await fetch(`${API}/pools/${poolId}/messages`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ body }),
+  });
+  return res.json();
+}
+
 // ── Admin test pool ───────────────────────────────────────────────────────────
 
-export async function adminFetchTestPools(userId) {
-  return (await fetch(`${API}/admin/test/pools?user_id=${userId}`)).json();
+export async function adminFetchTestPools() {
+  return (await fetch(`${API}/admin/test/pools`, { headers: authHeaders() })).json();
 }
-export async function adminCreateTestPool(userId, name, password) {
-  const res = await fetch(`${API}/admin/test/pool?user_id=${userId}`, {
+export async function adminCreateTestPool(name, password) {
+  const res = await fetch(`${API}/admin/test/pool`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({ name, password }),
   });
   return res.json();
 }
-export async function adminAddTestParticipants(userId, poolId, count) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/participants?user_id=${userId}`, {
+export async function adminAddTestParticipants(poolId, count) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/participants`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({ count }),
   });
   return res.json();
 }
-export async function adminRandomizePicks(userId, poolId) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/randomize-picks?user_id=${userId}`, {
+export async function adminRandomizePicks(poolId) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/randomize-picks`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
   });
   return res.json();
 }
-export async function adminSetMockDate(userId, poolId, mock_date) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date?user_id=${userId}`, {
+export async function adminSetMockDate(poolId, mock_date) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({ mock_date }),
   });
   return res.json();
 }
-export async function adminClearMockDate(userId, poolId) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date?user_id=${userId}`, {
+export async function adminClearMockDate(poolId) {
+  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   return res.json();
 }

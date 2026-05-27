@@ -1,5 +1,6 @@
 const Database = require("better-sqlite3");
 const path = require("path");
+const bcrypt = require("bcryptjs");
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, "worldcup.db");
 const db = new Database(dbPath);
@@ -95,6 +96,15 @@ db.exec(`
     predicted_winner TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(participant_id, match_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pool_id INTEGER NOT NULL REFERENCES pools(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    display_name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
   );
 `);
 
@@ -427,7 +437,20 @@ const adminUsername = process.env.ADMIN_USERNAME || "admin";
 const adminPassword = process.env.ADMIN_PASSWORD || "messi";
 const existingAdmin = db.prepare("SELECT id FROM users WHERE username = ?").get(adminUsername);
 if (!existingAdmin) {
-  db.prepare("INSERT INTO users (username, password, display_name, is_admin) VALUES (?, ?, ?, 1)").run(adminUsername, adminPassword, "Admin");
+  const hashedAdminPw = bcrypt.hashSync(adminPassword, 10);
+  db.prepare("INSERT INTO users (username, password, display_name, is_admin) VALUES (?, ?, ?, 1)").run(adminUsername, hashedAdminPw, "Admin");
+}
+
+// Migrate existing plaintext passwords to bcrypt
+const plaintextUsers = db.prepare("SELECT id, password FROM users WHERE password NOT LIKE '$2%'").all();
+if (plaintextUsers.length > 0) {
+  const updatePw = db.prepare("UPDATE users SET password = ? WHERE id = ?");
+  const migrateAll = db.transaction(() => {
+    for (const u of plaintextUsers) {
+      updatePw.run(bcrypt.hashSync(u.password, 10), u.id);
+    }
+  });
+  migrateAll();
 }
 
 // Seed default public pool for WC2026
