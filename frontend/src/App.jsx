@@ -11,6 +11,7 @@ import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
+import Chat from "./pages/Chat";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById } from "./api";
 import "./App.css";
 
@@ -98,6 +99,7 @@ function App() {
     setSelectedTournament(null);
     setPool(null);
     localStorage.removeItem("auth_user");
+    localStorage.removeItem("auth_token");
     localStorage.removeItem("pool_session");
   };
 
@@ -277,12 +279,13 @@ function App() {
             <NavLink to="/champion">Winner</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
             <NavLink to="/history">History</NavLink>
+            <NavLink to="/chat">Chat</NavLink>
           </nav>
         </header>
 
         <main>
           {!!pool.is_test && !!user.is_admin && (
-            <TestControls userId={user.id} pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} />
+            <TestControls pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} />
           )}
           <Routes>
             <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
@@ -290,6 +293,7 @@ function App() {
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} />} />
             <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
           </Routes>
         </main>
@@ -305,7 +309,7 @@ function utcToSGTParts(utcStr) {
   return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
 
-function TestControls({ userId, pool, onMockDateChange }) {
+function TestControls({ pool, onMockDateChange }) {
   const [mockDate, setMockDate] = useState(() => utcToSGTParts(pool.mock_date).date);
   const [mockTime, setMockTime] = useState(() => utcToSGTParts(pool.mock_date).time);
   const [busy, setBusy] = useState(false);
@@ -324,7 +328,7 @@ function TestControls({ userId, pool, onMockDateChange }) {
     const base = pool.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
     const next = new Date(base.getTime() + offsetMs);
     const utcStr = next.toISOString().slice(0, 16).replace("T", " ");
-    await adminSetMockDate(userId, pool.id, utcStr);
+    await adminSetMockDate(pool.id, utcStr);
     onMockDateChange(utcStr);
     syncInputs(utcStr);
     flash("Date adjusted");
@@ -337,7 +341,7 @@ function TestControls({ userId, pool, onMockDateChange }) {
     if (!/^\d{2}:\d{2}$/.test(mockTime)) { flash("Time: HH:MM"); return; }
     setBusy(true);
     const utcStr = new Date(`${mockDate}T${mockTime}+08:00`).toISOString().slice(0, 16).replace("T", " ");
-    await adminSetMockDate(userId, pool.id, utcStr);
+    await adminSetMockDate(pool.id, utcStr);
     onMockDateChange(utcStr);
     flash("Date set");
     setBusy(false);
@@ -345,7 +349,7 @@ function TestControls({ userId, pool, onMockDateChange }) {
 
   const clearDate = async () => {
     setBusy(true);
-    await adminClearMockDate(userId, pool.id);
+    await adminClearMockDate(pool.id);
     setMockDate("");
     setMockTime("00:00");
     onMockDateChange(null);
@@ -355,14 +359,14 @@ function TestControls({ userId, pool, onMockDateChange }) {
 
   const addPlayers = async (n) => {
     setBusy(true);
-    const res = await adminAddTestParticipants(userId, pool.id, n);
+    const res = await adminAddTestParticipants(pool.id, n);
     flash(res.added?.length ? `Added ${res.added.length} player(s)` : (res.error || "No more names available"));
     setBusy(false);
   };
 
   const randomize = async () => {
     setBusy(true);
-    const res = await adminRandomizePicks(userId, pool.id);
+    const res = await adminRandomizePicks(pool.id);
     flash(res.success ? `Randomized picks for ${res.participants} players` : (res.error || "Error"));
     setBusy(false);
   };

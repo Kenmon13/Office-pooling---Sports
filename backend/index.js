@@ -1,7 +1,11 @@
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const db = require("./db");
+
+const JWT_SECRET = process.env.JWT_SECRET || "office-pooling-secret-change-me";
 
 // Seed on first run
 require("./seed");
@@ -22,8 +26,11 @@ app.post("/api/auth/signup", (req, res) => {
   if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
   if (!display_name || !display_name.trim()) return res.status(400).json({ error: "Display name is required" });
   try {
-    const result = db.prepare("INSERT INTO users (username, password, display_name) VALUES (?, ?, ?)").run(username.trim().toLowerCase(), password.trim(), display_name.trim());
-    res.json({ id: result.lastInsertRowid, username: username.trim().toLowerCase(), display_name: display_name.trim() });
+    const hashed = bcrypt.hashSync(password.trim(), 10);
+    const result = db.prepare("INSERT INTO users (username, password, display_name) VALUES (?, ?, ?)").run(username.trim().toLowerCase(), hashed, display_name.trim());
+    const user = { id: result.lastInsertRowid, username: username.trim().toLowerCase(), display_name: display_name.trim(), is_admin: 0 };
+    const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ ...user, token });
   } catch (err) {
     if (err.message.includes("UNIQUE")) {
       return res.status(409).json({ error: "Username already taken" });
@@ -35,30 +42,48 @@ app.post("/api/auth/signup", (req, res) => {
 app.post("/api/auth/signin", (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Username and password are required" });
-  const user = db.prepare("SELECT id, username, display_name, is_admin FROM users WHERE username = ? AND password = ?").get(username.trim().toLowerCase(), password.trim());
-  if (!user) return res.status(401).json({ error: "Invalid username or password" });
-  res.json(user);
+  const row = db.prepare("SELECT id, username, password, display_name, is_admin FROM users WHERE username = ?").get(username.trim().toLowerCase());
+  if (!row || !bcrypt.compareSync(password.trim(), row.password)) {
+    return res.status(401).json({ error: "Invalid username or password" });
+  }
+  const user = { id: row.id, username: row.username, display_name: row.display_name, is_admin: row.is_admin };
+  const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
+  res.json({ ...user, token });
 });
+
+// --- JWT Auth Middleware ---
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Authentication required" });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+function requireAdminToken(req, res, next) {
+  authenticateToken(req, res, () => {
+    const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(req.user.id);
+    if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+    next();
+  });
+}
 
 // --- Admin ---
 
-app.get("/api/admin/users", (req, res) => {
-  const userId = req.query.user_id;
-  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
-  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
-
+app.get("/api/admin/users", requireAdminToken, (req, res) => {
   const users = db.prepare("SELECT id, username, display_name, is_admin, created_at FROM users ORDER BY created_at DESC").all();
   res.json(users);
 });
 
-app.delete("/api/admin/users/:id", (req, res) => {
-  const userId = req.query.user_id;
-  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
-  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
-
+app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
   const targetId = req.params.id;
   // Don't allow deleting yourself
-  if (String(targetId) === String(userId)) return res.status(400).json({ error: "Cannot delete yourself" });
+  if (String(targetId) === String(req.user.id)) return res.status(400).json({ error: "Cannot delete yourself" });
 
   // Delete all their data
   db.prepare("DELETE FROM wc2022_champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
@@ -71,10 +96,7 @@ app.delete("/api/admin/users/:id", (req, res) => {
   res.json({ success: true });
 });
 
-app.get("/api/admin/pools", (req, res) => {
-  const userId = req.query.user_id;
-  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
-  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+app.get("/api/admin/pools", requireAdminToken, (req, res) => {
 
   const pools = db.prepare(`
     SELECT p.id, p.name, p.sport, p.tournament, p.is_test, p.created_at,
@@ -85,11 +107,7 @@ app.get("/api/admin/pools", (req, res) => {
   res.json(pools);
 });
 
-app.delete("/api/admin/pools/:id", (req, res) => {
-  const userId = req.query.user_id;
-  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
-  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
-
+app.delete("/api/admin/pools/:id", requireAdminToken, (req, res) => {
   const poolId = req.params.id;
   db.prepare("DELETE FROM wc2022_champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
@@ -557,14 +575,7 @@ app.get("/api/knockout-deadline", (req, res) => {
 
 // ── Admin: test pool management ──────────────────────────────────────────────
 
-function requireAdmin(req, res) {
-  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(req.query.user_id);
-  if (!user || !user.is_admin) { res.status(401).json({ error: "Not authorized" }); return null; }
-  return user;
-}
-
-app.post("/api/admin/test/pool", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+app.post("/api/admin/test/pool", requireAdminToken, (req, res) => {
   const { name, password } = req.body;
   if (!name || !password) return res.status(400).json({ error: "name and password required" });
   try {
@@ -583,8 +594,7 @@ const TEST_NAMES = [
   "Yusuf","Zara","Aaron","Bella","Carlos","Demi",
 ];
 
-app.post("/api/admin/test/pool/:poolId/participants", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+app.post("/api/admin/test/pool/:poolId/participants", requireAdminToken, (req, res) => {
   const { count = 5 } = req.body;
   const poolId = req.params.poolId;
   const pool = db.prepare("SELECT is_test FROM pools WHERE id = ?").get(poolId);
@@ -603,8 +613,7 @@ app.post("/api/admin/test/pool/:poolId/participants", (req, res) => {
   res.json({ added });
 });
 
-app.post("/api/admin/test/pool/:poolId/randomize-picks", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+app.post("/api/admin/test/pool/:poolId/randomize-picks", requireAdminToken, (req, res) => {
   const poolId = req.params.poolId;
   const pool = db.prepare("SELECT is_test FROM pools WHERE id = ?").get(poolId);
   if (!pool || !pool.is_test) return res.status(400).json({ error: "Not a test pool" });
@@ -647,15 +656,13 @@ app.post("/api/admin/test/pool/:poolId/randomize-picks", (req, res) => {
   res.json({ success: true, participants: participants.length });
 });
 
-app.put("/api/admin/test/pool/:poolId/mock-date", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+app.put("/api/admin/test/pool/:poolId/mock-date", requireAdminToken, (req, res) => {
   const { mock_date } = req.body;
   db.prepare("UPDATE pools SET mock_date = ? WHERE id = ? AND is_test = 1").run(mock_date || null, req.params.poolId);
   res.json({ success: true });
 });
 
-app.delete("/api/admin/test/pool/:poolId/mock-date", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+app.delete("/api/admin/test/pool/:poolId/mock-date", requireAdminToken, (req, res) => {
   db.prepare("UPDATE pools SET mock_date = NULL WHERE id = ? AND is_test = 1").run(req.params.poolId);
   res.json({ success: true });
 });
@@ -969,8 +976,7 @@ app.get("/api/wc2022/prediction-deadline", (req, res) => {
   res.json({ deadline, locked });
 });
 
-app.get("/api/admin/test/pools", (req, res) => {
-  if (!requireAdmin(req, res)) return;
+app.get("/api/admin/test/pools", requireAdminToken, (req, res) => {
   const pools = db.prepare(`
     SELECT p.id, p.name, p.mock_date,
       (SELECT COUNT(*) FROM participants pt WHERE pt.pool_id = p.id) as participant_count
@@ -1283,13 +1289,34 @@ app.get("/api/history/:participantId", (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.put("/api/admin/knockout-matches/:id", (req, res) => {
-  const userId = req.query.user_id;
-  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
-  if (!user || !user.is_admin) return res.status(401).json({ error: "Not authorized" });
+app.put("/api/admin/knockout-matches/:id", requireAdminToken, (req, res) => {
   const { match_date } = req.body;
   db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ?").run(match_date || null, req.params.id);
   res.json({ success: true });
+});
+
+// --- Pool Chat ---
+
+app.get("/api/pools/:poolId/messages", (req, res) => {
+  const { poolId } = req.params;
+  const afterId = req.query.after ? Number(req.query.after) : 0;
+  const messages = db.prepare(
+    "SELECT id, pool_id, user_id, display_name, body, created_at FROM messages WHERE pool_id = ? AND id > ? ORDER BY id ASC LIMIT 200"
+  ).all(poolId, afterId);
+  res.json(messages);
+});
+
+app.post("/api/pools/:poolId/messages", authenticateToken, (req, res) => {
+  const { poolId } = req.params;
+  const { body } = req.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: "Message cannot be empty" });
+  if (body.trim().length > 500) return res.status(400).json({ error: "Message too long (max 500 characters)" });
+  const user = db.prepare("SELECT display_name FROM users WHERE id = ?").get(req.user.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const result = db.prepare(
+    "INSERT INTO messages (pool_id, user_id, display_name, body) VALUES (?, ?, ?, ?)"
+  ).run(poolId, req.user.id, user.display_name, body.trim());
+  res.json({ id: result.lastInsertRowid, pool_id: Number(poolId), user_id: req.user.id, display_name: user.display_name, body: body.trim(), created_at: new Date().toISOString() });
 });
 
 // Client-side routing fallback

@@ -1,0 +1,133 @@
+import { useState, useEffect, useRef } from "react";
+import { fetchMessages, sendMessage } from "../api";
+
+function Chat({ currentUser, poolId }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef(null);
+  const lastIdRef = useRef(0);
+  const isAtBottomRef = useRef(true);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleScroll = (e) => {
+    const el = e.target;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
+
+  // Initial load + polling
+  useEffect(() => {
+    let active = true;
+
+    const poll = async () => {
+      const data = await fetchMessages(poolId, lastIdRef.current);
+      if (!active || data.error) return;
+      if (data.length > 0) {
+        lastIdRef.current = data[data.length - 1].id;
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = data.filter((m) => !existingIds.has(m.id));
+          return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
+        });
+      }
+    };
+
+    // Initial fetch (all messages)
+    fetchMessages(poolId).then((data) => {
+      if (!active || data.error) return;
+      setMessages(data);
+      if (data.length > 0) lastIdRef.current = data[data.length - 1].id;
+      setTimeout(scrollToBottom, 50);
+    });
+
+    const interval = setInterval(poll, 5000);
+    return () => { active = false; clearInterval(interval); };
+  }, [poolId]);
+
+  // Auto-scroll when new messages arrive (only if already at bottom)
+  useEffect(() => {
+    if (isAtBottomRef.current) scrollToBottom();
+  }, [messages]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || sending) return;
+    setSending(true);
+    const result = await sendMessage(poolId, input.trim());
+    if (!result.error) {
+      setInput("");
+      // Add immediately so sender sees it instantly
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === result.id)) return prev;
+        return [...prev, result];
+      });
+      lastIdRef.current = Math.max(lastIdRef.current, result.id);
+      isAtBottomRef.current = true;
+      setTimeout(scrollToBottom, 50);
+    }
+    setSending(false);
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr.endsWith("Z") ? dateStr : dateStr + "Z");
+    const now = new Date();
+    const diffMs = now - d;
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (diffDays === 0) return time;
+    if (diffDays === 1) return `Yesterday ${time}`;
+    if (diffDays < 7) return `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+    return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
+  };
+
+  if (!currentUser) {
+    return (
+      <div className="page">
+        <p className="notice">Join the pool to use chat.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-page">
+      <div className="chat-messages" onScroll={handleScroll}>
+        {messages.length === 0 && (
+          <p className="chat-empty">No messages yet. Start the conversation!</p>
+        )}
+        {messages.map((msg) => {
+          const isMe = msg.user_id === currentUser.user_id;
+          return (
+            <div key={msg.id} className={`chat-msg ${isMe ? "chat-msg-me" : ""}`}>
+              <div className="chat-msg-header">
+                <span className="chat-msg-name">{msg.display_name}</span>
+                <span className="chat-msg-time">{formatTime(msg.created_at)}</span>
+              </div>
+              <div className="chat-msg-body">{msg.body}</div>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} />
+      </div>
+      <form className="chat-input-bar" onSubmit={handleSend}>
+        <input
+          className="chat-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type a message..."
+          maxLength={500}
+          autoFocus
+        />
+        <button className="chat-send-btn" type="submit" disabled={sending || !input.trim()}>
+          Send
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default Chat;
