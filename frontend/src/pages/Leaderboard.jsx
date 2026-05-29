@@ -14,9 +14,10 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
         const currentRank = i + 1;
         const prevRank = prevRankRef.current[p.id] !== undefined ? prevRankRef.current[p.id] : currentRank;
         const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
+        const thirdPts = p.third_points || 0;
         return {
           ...p,
-          group_pts: (p.points || 0) - (p.ko_points || 0) - champNet,
+          group_pts: (p.points || 0) - (p.ko_points || 0) - champNet - thirdPts,
           currentRank,
           prevRank,
         };
@@ -39,6 +40,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
               <th></th>
               <th>Name</th>
               <th>Group</th>
+              <th>3rd</th>
               <th>KO</th>
               <th>Champ</th>
               <th>Total</th>
@@ -56,6 +58,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                   </td>
                   <td className="name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</td>
                   <td className="pts-sub">{p.group_pts}</td>
+                  <td className="pts-sub">{p.third_points || 0}</td>
                   <td className="pts-sub">{p.ko_points || 0}</td>
                   <td className={`pts-sub ${champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}`}>
                     {champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}

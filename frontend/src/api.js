@@ -147,6 +147,22 @@ export async function submitGroupPrediction(participant_id, group_id, team1_id, 
   return res.json();
 }
 
+// ── Third-Place Qualifier Predictions ─────────────────────────────────────────
+
+export async function fetchThirdPlacePredictions(participantId) {
+  const res = await fetch(`${API}/third-place-predictions/${participantId}`);
+  return res.json();
+}
+
+export async function submitThirdPlacePredictions(participant_id, team_ids) {
+  const res = await fetch(`${API}/third-place-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participant_id, team_ids }),
+  });
+  return res.json();
+}
+
 export async function fetchKnockoutMatches() {
   const res = await fetch(`${API}/knockout-matches`);
   return res.json();
@@ -296,6 +312,65 @@ export async function sendMessage(poolId, body) {
 export async function adminFetchTestPools() {
   return (await fetch(`${API}/admin/test/pools`, { headers: authHeaders() })).json();
 }
+// ── Backup & Restore ─────────────────────────────────────────────────────────
+
+export async function adminDownloadBackup() {
+  const res = await fetch(`${API}/admin/backup`, { headers: authHeaders() });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Backup download failed");
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `sportspooling-backup-${new Date().toISOString().slice(0, 10)}.db`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function adminSaveBackup() {
+  const res = await fetch(`${API}/admin/backup/save`, { method: "POST", headers: authHeaders() });
+  return res.json();
+}
+
+export async function adminListBackups() {
+  const res = await fetch(`${API}/admin/backup/list`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function adminDeleteBackup(name) {
+  const res = await fetch(`${API}/admin/backup/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
+export async function adminRestoreFromUpload(file) {
+  const token = getToken();
+  const res = await fetch(`${API}/admin/restore`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: file,
+  });
+  return res.json();
+}
+
+export async function adminRestoreFromBackup(name) {
+  const res = await fetch(`${API}/admin/restore/${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
 export async function adminCreateTestPool(name, password) {
   const res = await fetch(`${API}/admin/test/pool`, {
     method: "POST",

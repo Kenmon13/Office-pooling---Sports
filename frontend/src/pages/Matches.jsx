@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   fetchMatches, fetchGroups, fetchGroupPredictions, submitGroupPrediction, fetchStandings, fetchPredictionDeadline,
   fetchWC2022Matches, fetchWC2022Groups, fetchWC2022GroupPredictions, submitWC2022GroupPrediction, fetchWC2022Standings, fetchWC2022PredictionDeadline,
+  fetchThirdPlacePredictions, submitThirdPlacePredictions,
 } from "../api";
 import { flag } from "../flags";
 
@@ -62,6 +63,10 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   const [saving, setSaving] = useState(null);
   const [deadline, setDeadline] = useState(null);
   const [locked, setLocked] = useState(false);
+  const [thirdPicks, setThirdPicks] = useState([]);
+  const [savedThirdPicks, setSavedThirdPicks] = useState([]);
+  const [savingThird, setSavingThird] = useState(false);
+  const [thirdError, setThirdError] = useState("");
 
   useEffect(() => {
     if (isWC2022) {
@@ -109,6 +114,13 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
         setPredictions(map);
         setSelections(sel);
       });
+      if (!isWC2022) {
+        fetchThirdPlacePredictions(currentUser.id).then((preds) => {
+          const ids = preds.map((p) => p.team_id);
+          setThirdPicks(ids);
+          setSavedThirdPicks(ids);
+        });
+      }
     }
   }, [currentUser, isWC2022]);
 
@@ -161,6 +173,44 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     setSaving(null);
   };
 
+  // Build set of teams the user picked as top-2 in group predictions
+  const top2Set = new Set();
+  for (const groupId in selections) {
+    for (const tid of (selections[groupId] || [])) {
+      // Only count if this group prediction was saved
+      if (predictions[groupId]) top2Set.add(tid);
+    }
+  }
+
+  const toggleThirdPick = (teamId) => {
+    setThirdError("");
+    setThirdPicks((prev) => {
+      if (prev.includes(teamId)) return prev.filter((id) => id !== teamId);
+      if (prev.length >= 8) return prev;
+      return [...prev, teamId];
+    });
+  };
+
+  const handleSaveThird = async () => {
+    if (thirdPicks.length !== 8) return;
+    setSavingThird(true);
+    setThirdError("");
+    const res = await submitThirdPlacePredictions(currentUser.id, thirdPicks);
+    if (res.error) {
+      setThirdError(res.error);
+    } else {
+      setSavedThirdPicks([...thirdPicks]);
+    }
+    setSavingThird(false);
+  };
+
+  const thirdHasChanged = (() => {
+    if (thirdPicks.length !== savedThirdPicks.length) return true;
+    const a = [...thirdPicks].sort();
+    const b = [...savedThirdPicks].sort();
+    return a.some((v, i) => v !== b[i]);
+  })();
+
   const getScore = (groupId) => {
     const pred = predictions[groupId];
     const standing = standings[groupId];
@@ -187,8 +237,8 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
       <div className="ko-rules">
         <p className="ko-rules-title">How predictions work</p>
         <ul>
-          <li>Pick the 2 teams you think will qualify from each group.</li>
-          <li>Both correct = 5 pts &middot; One correct = 2 pts.</li>
+          <li>Pick the 2 teams you think will qualify from each group. Both correct = 5 pts &middot; One correct = 2 pts.</li>
+          {!isWC2022 && <li>Pick 8 third-place teams you think will still qualify for the knockouts. Each correct pick = 1 pt. You cannot pick teams you already selected as top 2.</li>}
           <li>Predictions lock once the first match of the group stage kicks off — you can update your picks until that time.</li>
         </ul>
       </div>
@@ -333,6 +383,81 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           );
         })}
       </div>
+
+      {/* Third-Place Qualifier Predictions — WC2026 only */}
+      {!isWC2022 && currentUser && (
+        <div className="third-place-section">
+          <h3>Third-Place Qualifiers</h3>
+          <p className="third-place-desc">
+            Pick 8 teams you think will finish 3rd in their group but still qualify for the knockouts.
+            Each correct pick = 1 pt. Teams you already picked as top 2 are excluded.
+          </p>
+          {thirdError && <p className="error">{thirdError}</p>}
+
+          <div className="third-place-counter">
+            {thirdPicks.length}/8 selected
+          </div>
+
+          <div className="third-place-grid">
+            {groups.map((g) => {
+              // Available teams = those NOT in this group's saved top-2 picks
+              const availableTeams = (g.teams || []).filter((t) => {
+                const tid = t.team_id || t.id;
+                return !top2Set.has(tid);
+              });
+              if (availableTeams.length === 0) return null;
+              return (
+                <div key={g.id} className="third-place-group">
+                  <div className="third-place-group-label">Group {g.name}</div>
+                  <div className="third-place-group-teams">
+                    {availableTeams.map((t) => {
+                      const tid = t.team_id || t.id;
+                      const code = t.code;
+                      const isSelected = thirdPicks.includes(tid);
+                      const isDisabled = locked || (!isSelected && thirdPicks.length >= 8);
+                      return (
+                        <button
+                          key={tid}
+                          className={`third-place-team-btn ${isSelected ? "selected" : ""}`}
+                          onClick={() => !locked && toggleThirdPick(tid)}
+                          disabled={isDisabled}
+                        >
+                          {flag(code)} {t.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!locked && (
+            <div className="third-place-footer">
+              {thirdPicks.length === 8 && thirdHasChanged && (
+                <button
+                  className="btn-submit"
+                  onClick={handleSaveThird}
+                  disabled={savingThird}
+                >
+                  {savingThird ? "Saving..." : savedThirdPicks.length > 0 ? "Update" : "Save"}
+                </button>
+              )}
+              {thirdPicks.length === 8 && !thirdHasChanged && savedThirdPicks.length > 0 && (
+                <span className="saved-label">Saved</span>
+              )}
+              {thirdPicks.length < 8 && (
+                <span className="pick-hint">Pick {8 - thirdPicks.length} more</span>
+              )}
+            </div>
+          )}
+          {locked && savedThirdPicks.length > 0 && (
+            <div className="third-place-footer">
+              <span className="saved-label">Locked</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

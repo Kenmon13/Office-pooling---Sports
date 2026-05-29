@@ -4,7 +4,7 @@ import {
   fetchGroupPredictions, fetchKnockoutPredictions, fetchChampionPick,
   fetchWC2022GroupPredictions, fetchWC2022KnockoutPredictions, fetchWC2022ChampionPick,
   fetchGroups, fetchWC2022Groups, fetchKnockoutMatches, fetchWC2022KnockoutMatches,
-  fetchLeaderboard, fetchWC2022Leaderboard,
+  fetchLeaderboard, fetchWC2022Leaderboard, fetchThirdPlacePredictions,
 } from "../api";
 import { flag } from "../flags";
 
@@ -20,6 +20,7 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
   const [koScores, setKoScores] = useState({});
   const [koMatches, setKoMatches] = useState([]);
   const [championPick, setChampionPick] = useState(null);
+  const [thirdPicks, setThirdPicks] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -37,13 +38,16 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
     const koMatchesFn = isWC2022 ? fetchWC2022KnockoutMatches : fetchKnockoutMatches;
     const champFn = isWC2022 ? fetchWC2022ChampionPick : fetchChampionPick;
 
-    Promise.all([
+    const promises = [
       groupsFn(),
       groupPredsFn(participantId),
       koPredsFn(participantId),
       isWC2022 ? koMatchesFn(poolId) : koMatchesFn(),
       champFn(participantId, poolId),
-    ]).then(([groupsData, gPreds, kPreds, koData, champData]) => {
+    ];
+    if (!isWC2022) promises.push(fetchThirdPlacePredictions(participantId));
+
+    Promise.all(promises).then(([groupsData, gPreds, kPreds, koData, champData, thirdData]) => {
       setGroups(groupsData);
 
       const gMap = {};
@@ -62,6 +66,7 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
       setKoScores(sMap);
       setKoMatches(koData);
       setChampionPick(champData?.pick || null);
+      if (thirdData && !thirdData.error) setThirdPicks(thirdData);
       setLoaded(true);
     });
   }, [participantId, poolId, isWC2022]);
@@ -117,6 +122,24 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
           })}
         </div>
       </section>
+
+      {/* Third-Place Picks — WC2026 only */}
+      {!isWC2022 && (
+        <section className="view-picks-section">
+          <h3>Third-Place Qualifiers</h3>
+          {thirdPicks.length === 0 ? (
+            <p className="notice">No third-place picks yet.</p>
+          ) : (
+            <div className="view-picks-third-place">
+              {thirdPicks.map((tp) => (
+                <span key={tp.team_id} className="view-picks-third-team">
+                  {flag(tp.team_code)} {tp.team_name}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Knockout Picks */}
       <section className="view-picks-section">

@@ -106,6 +106,14 @@ db.exec(`
     body TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS third_place_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    team_id INTEGER NOT NULL REFERENCES teams(id),
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, team_id)
+  );
 `);
 
 // Add match_date to knockout_matches if not already present

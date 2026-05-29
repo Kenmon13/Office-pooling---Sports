@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
@@ -309,6 +310,79 @@ app.post("/api/group-predictions", (req, res) => {
   }
 });
 
+// --- Third-Place Qualifier Predictions ---
+
+app.get("/api/third-place-predictions/:participantId", (req, res) => {
+  const preds = db.prepare(`
+    SELECT tp.*, t.name as team_name, t.code as team_code, t.group_id
+    FROM third_place_predictions tp
+    JOIN teams t ON tp.team_id = t.id
+    WHERE tp.participant_id = ?
+  `).all(req.params.participantId);
+  res.json(preds);
+});
+
+app.post("/api/third-place-predictions", (req, res) => {
+  const { participant_id, team_ids } = req.body;
+  if (!participant_id || !Array.isArray(team_ids)) {
+    return res.status(400).json({ error: "participant_id and team_ids array required" });
+  }
+  if (team_ids.length !== 8) {
+    return res.status(400).json({ error: "Must pick exactly 8 third-place qualifiers" });
+  }
+
+  // Check deadline - lock predictions before first match
+  const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
+  if (firstMatch) {
+    const deadline = new Date(firstMatch.match_date.replace(" ", "T"));
+    if (new Date() >= deadline) {
+      return res.status(403).json({ error: "Predictions are locked - the tournament has started" });
+    }
+  }
+
+  // Validate all team_ids are real teams
+  const validTeams = db.prepare(
+    `SELECT id FROM teams WHERE id IN (${team_ids.map(() => "?").join(",")})`
+  ).all(...team_ids);
+  if (validTeams.length !== 8) {
+    return res.status(400).json({ error: "Some team IDs are invalid" });
+  }
+
+  // Validate no duplicates
+  if (new Set(team_ids).size !== 8) {
+    return res.status(400).json({ error: "Duplicate teams not allowed" });
+  }
+
+  // Validate none of the picked teams are in this participant's group top-2 predictions
+  const groupPreds = db.prepare(
+    "SELECT team1_id, team2_id FROM group_predictions WHERE participant_id = ?"
+  ).all(participant_id);
+  const top2Set = new Set();
+  for (const gp of groupPreds) {
+    top2Set.add(gp.team1_id);
+    top2Set.add(gp.team2_id);
+  }
+  const conflict = team_ids.find((tid) => top2Set.has(tid));
+  if (conflict) {
+    const conflictTeam = db.prepare("SELECT name FROM teams WHERE id = ?").get(conflict);
+    return res.status(400).json({ error: `${conflictTeam?.name || "Team"} is already in your top-2 group picks` });
+  }
+
+  try {
+    const txn = db.transaction(() => {
+      db.prepare("DELETE FROM third_place_predictions WHERE participant_id = ?").run(participant_id);
+      const insert = db.prepare("INSERT INTO third_place_predictions (participant_id, team_id) VALUES (?, ?)");
+      for (const tid of team_ids) {
+        insert.run(participant_id, tid);
+      }
+    });
+    txn();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Knockout Matches & Predictions ---
 
 app.get("/api/knockout-matches", (req, res) => {
@@ -444,6 +518,30 @@ app.get("/api/leaderboard", (req, res) => {
   // Get all group predictions
   const allPredictions = db.prepare("SELECT * FROM group_predictions").all();
 
+  // Determine third-place qualifiers (best 8 third-place teams across all groups)
+  const allGroupsDone = groups.every((g) => {
+    const gt = Object.values(stats).filter((t) => t.group_id === g.id);
+    return gt.every((t) => t.played >= 3);
+  });
+  const thirdPlaceQualifiers = new Set();
+  if (allGroupsDone) {
+    const thirdPlaceTeams = [];
+    for (const g of groups) {
+      const gt = Object.values(stats)
+        .filter((t) => t.group_id === g.id)
+        .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+      if (gt.length >= 3) thirdPlaceTeams.push(gt[2]);
+    }
+    // Rank third-place teams by points, GD, GF
+    thirdPlaceTeams.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    for (let i = 0; i < Math.min(8, thirdPlaceTeams.length); i++) {
+      thirdPlaceQualifiers.add(thirdPlaceTeams[i].team_id);
+    }
+  }
+
+  // Get all third-place predictions
+  const allThirdPreds = db.prepare("SELECT * FROM third_place_predictions").all();
+
   // Get knockout data for scoring
   const koMatches = db.prepare("SELECT * FROM knockout_matches WHERE status = 'finished'").all();
   const allKoPredictions = db.prepare("SELECT * FROM knockout_predictions").all();
@@ -460,6 +558,8 @@ app.get("/api/leaderboard", (req, res) => {
     let groups_predicted = myPreds.length;
     let ko_correct = 0;
     let ko_points = 0;
+    let third_correct = 0;
+    let third_points = 0;
 
     for (const pred of myPreds) {
       const q = qualified[pred.group_id];
@@ -468,6 +568,18 @@ app.get("/api/leaderboard", (req, res) => {
       const correctCount = picked.filter((t) => q.includes(t)).length;
       if (correctCount === 2) { points += 5; groups_correct++; }
       else if (correctCount === 1) { points += 2; groups_half++; }
+    }
+
+    // Third-place prediction scoring — 1 pt per correct pick
+    if (thirdPlaceQualifiers.size > 0) {
+      const myThirdPreds = allThirdPreds.filter((tp) => tp.participant_id === p.id);
+      for (const tp of myThirdPreds) {
+        if (thirdPlaceQualifiers.has(tp.team_id)) {
+          third_correct++;
+          third_points++;
+        }
+      }
+      points += third_points;
     }
 
     // Knockout prediction scoring — predicted_winner stored as "home"/"away"
@@ -500,7 +612,7 @@ app.get("/api/leaderboard", (req, res) => {
     const champion_change_cost = champPick?.change_cost || 0;
     points += champion_bonus - champion_change_cost;
 
-    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, ko_correct, ko_points, champion_bonus, champion_change_cost };
+    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, third_correct, third_points, ko_correct, ko_points, champion_bonus, champion_change_cost };
   });
 
   leaderboard.sort((a, b) => b.points - a.points || b.groups_correct - a.groups_correct || a.name.localeCompare(b.name));
@@ -1233,6 +1345,44 @@ app.get("/api/history/:participantId", (req, res) => {
     events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${t1} & ${t2} — ${label}`, pts_change: pts });
   }
 
+  // Third-place qualifier scoring
+  const allGroupsDoneH = groups.every((g) => {
+    const gt = Object.values(stats).filter((t) => t.group_id === g.id);
+    return gt.every((t) => t.played >= 3);
+  });
+  if (allGroupsDoneH) {
+    const thirdPlaceTeamsH = [];
+    for (const g of groups) {
+      const gt = Object.values(stats).filter((t) => t.group_id === g.id)
+        .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+      if (gt.length >= 3) thirdPlaceTeamsH.push(gt[2]);
+    }
+    thirdPlaceTeamsH.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    const qualifiedThird = new Set(thirdPlaceTeamsH.slice(0, 8).map((t) => t.team_id));
+    const myThirdPreds = db.prepare(`
+      SELECT tp.*, t.name as team_name FROM third_place_predictions tp
+      JOIN teams t ON tp.team_id = t.id WHERE tp.participant_id = ?
+    `).all(participantId);
+    if (myThirdPreds.length > 0) {
+      const correctNames = [];
+      const wrongNames = [];
+      let thirdPts = 0;
+      for (const tp of myThirdPreds) {
+        if (qualifiedThird.has(tp.team_id)) {
+          correctNames.push(tp.team_name);
+          thirdPts++;
+        } else {
+          wrongNames.push(tp.team_name);
+        }
+      }
+      // Use the last group match date as the event date
+      const lastGroupDate = Object.values(groupLastDate).sort().pop();
+      const desc = `Third-place qualifiers: ${correctNames.length}/8 correct` +
+        (correctNames.length > 0 ? ` (${correctNames.join(", ")})` : "");
+      events.push({ event_date: lastGroupDate, type: "third_place", description: desc, pts_change: thirdPts });
+    }
+  }
+
   const koMatches = db.prepare("SELECT * FROM knockout_matches WHERE status='finished'").all();
   const koPointsMap2 = { R32: 3, R16: 5, QF: 7, SF: 10, F: 15 };
   const koRoundLabels2 = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-Final", SF: "Semi-Final", F: "Final" };
@@ -1317,6 +1467,134 @@ app.post("/api/pools/:poolId/messages", authenticateToken, (req, res) => {
     "INSERT INTO messages (pool_id, user_id, display_name, body) VALUES (?, ?, ?, ?)"
   ).run(poolId, req.user.id, user.display_name, body.trim());
   res.json({ id: result.lastInsertRowid, pool_id: Number(poolId), user_id: req.user.id, display_name: user.display_name, body: body.trim(), created_at: new Date().toISOString() });
+});
+
+// ── Database Backup & Restore ───────────────────────────────────────────────
+
+const BACKUP_DIR = path.join(path.dirname(db.name), "backups");
+
+app.get("/api/admin/backup", requireAdminToken, async (req, res) => {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const backupFile = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
+    await db.backup(backupFile);
+    res.download(backupFile, `sportspooling-backup-${timestamp}.db`, (err) => {
+      // Clean up temp backup file after download
+      try { fs.unlinkSync(backupFile); } catch (_) {}
+      if (err && !res.headersSent) res.status(500).json({ error: "Download failed" });
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Backup failed: " + err.message });
+  }
+});
+
+app.get("/api/admin/backup/list", requireAdminToken, (req, res) => {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) return res.json([]);
+    const files = fs.readdirSync(BACKUP_DIR)
+      .filter((f) => f.endsWith(".db"))
+      .map((f) => {
+        const stat = fs.statSync(path.join(BACKUP_DIR, f));
+        return { name: f, size: stat.size, created: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => b.created.localeCompare(a.created));
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/backup/save", requireAdminToken, async (req, res) => {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const backupFile = path.join(BACKUP_DIR, `backup-${timestamp}.db`);
+    await db.backup(backupFile);
+    const stat = fs.statSync(backupFile);
+    res.json({ success: true, name: `backup-${timestamp}.db`, size: stat.size, created: stat.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: "Backup failed: " + err.message });
+  }
+});
+
+app.delete("/api/admin/backup/:name", requireAdminToken, (req, res) => {
+  const name = req.params.name;
+  if (!name.endsWith(".db") || name.includes("..") || name.includes("/")) {
+    return res.status(400).json({ error: "Invalid backup name" });
+  }
+  const filePath = path.join(BACKUP_DIR, name);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Backup not found" });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/restore", requireAdminToken, express.raw({ type: "application/octet-stream", limit: "50mb" }), async (req, res) => {
+  if (!req.body || req.body.length === 0) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  try {
+    // Save uploaded file to a temp location
+    const tempFile = path.join(BACKUP_DIR || path.dirname(db.name), `restore-temp-${Date.now()}.db`);
+    if (!fs.existsSync(path.dirname(tempFile))) fs.mkdirSync(path.dirname(tempFile), { recursive: true });
+    fs.writeFileSync(tempFile, req.body);
+
+    // Validate it's a real SQLite database by trying to open it
+    const Database = require("better-sqlite3");
+    let testDb;
+    try {
+      testDb = new Database(tempFile, { readonly: true });
+      // Check it has at least the users table
+      testDb.prepare("SELECT COUNT(*) FROM users").get();
+      testDb.close();
+    } catch (validationErr) {
+      if (testDb) testDb.close();
+      fs.unlinkSync(tempFile);
+      return res.status(400).json({ error: "Invalid backup file — not a valid Sports Pooling database" });
+    }
+
+    // Auto-save a backup before restoring
+    const preRestoreBackup = path.join(BACKUP_DIR, `pre-restore-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.db`);
+    await db.backup(preRestoreBackup);
+
+    // Restore: read the uploaded DB and write it over the current one
+    const restoreDb = new Database(tempFile, { readonly: true });
+    await restoreDb.backup(db.name);
+    restoreDb.close();
+    fs.unlinkSync(tempFile);
+
+    res.json({ success: true, message: "Database restored. Restart the server for changes to take full effect." });
+  } catch (err) {
+    res.status(500).json({ error: "Restore failed: " + err.message });
+  }
+});
+
+app.post("/api/admin/restore/:name", requireAdminToken, async (req, res) => {
+  const name = req.params.name;
+  if (!name.endsWith(".db") || name.includes("..") || name.includes("/")) {
+    return res.status(400).json({ error: "Invalid backup name" });
+  }
+  const filePath = path.join(BACKUP_DIR, name);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Backup not found" });
+
+  try {
+    // Auto-save a backup before restoring
+    const preRestoreBackup = path.join(BACKUP_DIR, `pre-restore-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.db`);
+    await db.backup(preRestoreBackup);
+
+    const Database = require("better-sqlite3");
+    const restoreDb = new Database(filePath, { readonly: true });
+    await restoreDb.backup(db.name);
+    restoreDb.close();
+
+    res.json({ success: true, message: "Database restored from " + name + ". Restart the server for changes to take full effect." });
+  } catch (err) {
+    res.status(500).json({ error: "Restore failed: " + err.message });
+  }
 });
 
 // Client-side routing fallback
