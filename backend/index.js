@@ -6,7 +6,10 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
 
+const { Resend } = require("resend");
 const JWT_SECRET = process.env.JWT_SECRET || "office-pooling-secret-change-me";
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const APP_URL = process.env.APP_URL || "https://sportspooling.com";
 
 // Seed on first run
 require("./seed");
@@ -43,13 +46,107 @@ app.post("/api/auth/signup", (req, res) => {
 app.post("/api/auth/signin", (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Username and password are required" });
-  const row = db.prepare("SELECT id, username, password, display_name, is_admin FROM users WHERE username = ?").get(username.trim().toLowerCase());
+  const row = db.prepare("SELECT id, username, password, display_name, email, is_admin FROM users WHERE username = ?").get(username.trim().toLowerCase());
   if (!row || !bcrypt.compareSync(password.trim(), row.password)) {
     return res.status(401).json({ error: "Invalid username or password" });
   }
-  const user = { id: row.id, username: row.username, display_name: row.display_name, is_admin: row.is_admin };
+  const user = { id: row.id, username: row.username, display_name: row.display_name, email: row.email, is_admin: row.is_admin };
   const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
   res.json({ ...user, token });
+});
+
+// --- Profile ---
+
+app.get("/api/auth/profile", authenticateToken, (req, res) => {
+  const user = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE id = ?").get(req.user.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  res.json(user);
+});
+
+app.put("/api/auth/profile", authenticateToken, (req, res) => {
+  const { email } = req.body;
+  if (email !== undefined) {
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+    // Check email uniqueness (if not empty)
+    if (email) {
+      const existing = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email.toLowerCase(), req.user.id);
+      if (existing) return res.status(409).json({ error: "Email already linked to another account" });
+    }
+    db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email ? email.toLowerCase() : null, req.user.id);
+  }
+  const user = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE id = ?").get(req.user.id);
+  res.json(user);
+});
+
+// --- Forgot / Reset Password ---
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email is required" });
+
+  const user = db.prepare("SELECT id, username, display_name, email FROM users WHERE email = ?").get(email.trim().toLowerCase());
+  // Always return success to prevent email enumeration
+  if (!user) return res.json({ success: true });
+
+  if (!RESEND_API_KEY) {
+    console.error("RESEND_API_KEY not set — cannot send password reset email");
+    return res.status(500).json({ error: "Email service not configured" });
+  }
+
+  const resetToken = jwt.sign({ id: user.id, purpose: "password-reset" }, JWT_SECRET, { expiresIn: "15m" });
+  const resetUrl = `${APP_URL}/reset-password?token=${resetToken}`;
+
+  try {
+    const resend = new Resend(RESEND_API_KEY);
+    await resend.emails.send({
+      from: "Sports Pooling <noreply@sportspooling.com>",
+      to: user.email,
+      subject: "Reset your password — Sports Pooling",
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2 style="color: #1b5e20;">Reset Your Password</h2>
+          <p>Hi ${user.display_name},</p>
+          <p>We received a request to reset your password. Click the button below to set a new one:</p>
+          <p style="text-align: center; margin: 24px 0;">
+            <a href="${resetUrl}" style="background: #2e7d32; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+              Reset Password
+            </a>
+          </p>
+          <p style="color: #888; font-size: 13px;">This link expires in 15 minutes. If you didn't request this, you can ignore this email.</p>
+        </div>
+      `,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to send reset email:", err);
+    res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
+app.post("/api/auth/reset-password", (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: "Token and new password are required" });
+  if (password.trim().length < 3) return res.status(400).json({ error: "Password must be at least 3 characters" });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.purpose !== "password-reset") {
+      return res.status(400).json({ error: "Invalid reset token" });
+    }
+    const user = db.prepare("SELECT id FROM users WHERE id = ?").get(payload.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const hashed = bcrypt.hashSync(password.trim(), 10);
+    db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashed, user.id);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(400).json({ error: "Reset link has expired. Please request a new one." });
+    }
+    return res.status(400).json({ error: "Invalid or expired reset token" });
+  }
 });
 
 // --- JWT Auth Middleware ---

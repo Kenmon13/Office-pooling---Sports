@@ -12,6 +12,7 @@ import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
+import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById } from "./api";
 import "./App.css";
 
@@ -29,6 +30,11 @@ function App() {
   const [points, setPoints] = useState(0);
 
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [initialAuthView] = useState(() => {
+    if (window.location.pathname === "/reset-password") return "reset";
+    return null;
+  });
   const [selectedSport, setSelectedSport] = useState(() => {
     const saved = localStorage.getItem("pool_session");
     if (!saved) return null;
@@ -137,11 +143,11 @@ function App() {
     localStorage.removeItem("pool_session");
   };
 
-  // Step 0: Sign in / Sign up
-  if (!user) {
+  // Step 0: Sign in / Sign up / Reset password
+  if (!user || initialAuthView === "reset") {
     return (
       <div className="app">
-        <Auth onAuth={handleAuth} />
+        <Auth onAuth={handleAuth} initialView={initialAuthView} />
       </div>
     );
   }
@@ -184,12 +190,30 @@ function App() {
     );
   }
 
+  // Settings page
+  if (showSettings) {
+    return (
+      <div className="app">
+        <Settings
+          user={user}
+          onBack={() => setShowSettings(false)}
+          onUpdateUser={(updated) => {
+            const newUser = { ...user, email: updated.email };
+            setUser(newUser);
+            localStorage.setItem("auth_user", JSON.stringify(newUser));
+          }}
+        />
+      </div>
+    );
+  }
+
   // Step 1: Pick a sport
   if (!selectedSport) {
     return (
       <div className="app">
         <div className="auth-bar">
           Signed in as <strong>{user.display_name}</strong>
+          <button onClick={() => setShowSettings(true)} className="btn-small btn-settings" title="Settings">&#9881;</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
         <SelectSport onSelect={handleSelectSport} onAdminLogin={user.is_admin ? () => setShowAdmin(true) : null} />
@@ -254,7 +278,10 @@ function App() {
                 {participant && (
                   <span className="header-user-points">{points} pts</span>
                 )}
-                <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+                <span className="header-user-actions">
+                  <button onClick={() => setShowSettings(true)} className="btn-small btn-settings" title="Settings">&#9881;</button>
+                  <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+                </span>
               </div>
               <svg className="soccer-ball" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="50" cy="50" r="48" fill="#fff" stroke="#222" strokeWidth="2"/>

@@ -1,12 +1,28 @@
 import { useState } from "react";
-import { signUp, signIn } from "../api";
+import { signUp, signIn, forgotPassword, resetPassword } from "../api";
 
-function Auth({ onAuth }) {
-  const [mode, setMode] = useState("signin"); // "signin" or "signup"
+function Auth({ onAuth, initialView }) {
+  const [mode, setMode] = useState(initialView || "signin"); // "signin", "signup", "forgot", "reset"
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [resetToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("token") || "";
+  });
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Auto-detect reset-password mode from URL
+  useState(() => {
+    if (window.location.pathname === "/reset-password" && resetToken) {
+      setMode("reset");
+    }
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,6 +52,106 @@ function Auth({ onAuth }) {
       onAuth(result);
     }
   };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    if (!email.trim()) {
+      setError("Email is required");
+      return;
+    }
+    setSubmitting(true);
+    const res = await forgotPassword(email.trim());
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setSuccessMsg("If an account with that email exists, a reset link has been sent. Check your inbox.");
+    }
+    setSubmitting(false);
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    if (!newPassword.trim()) {
+      setError("New password is required");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    setSubmitting(true);
+    const res = await resetPassword(resetToken, newPassword.trim());
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setSuccessMsg("Password reset successfully! You can now sign in.");
+      window.history.replaceState(null, "", "/");
+      setTimeout(() => { setMode("signin"); setSuccessMsg(""); }, 2000);
+    }
+    setSubmitting(false);
+  };
+
+  if (mode === "reset") {
+    return (
+      <div className="select-page">
+        <h2>Reset Password</h2>
+        <p className="select-subtitle">Enter your new password.</p>
+        <form onSubmit={handleResetPassword} className="pool-form-vertical">
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password"
+            autoFocus
+          />
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+          />
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Resetting..." : "Reset Password"}
+          </button>
+          {error && <p className="error">{error}</p>}
+          {successMsg && <p className="success-msg">{successMsg}</p>}
+        </form>
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div className="select-page">
+        <h2>Forgot Password</h2>
+        <p className="select-subtitle">Enter your email and we will send you a reset link.</p>
+        <form onSubmit={handleForgotPassword} className="pool-form-vertical">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="your@email.com"
+            autoFocus
+          />
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Sending..." : "Send Reset Link"}
+          </button>
+          {error && <p className="error">{error}</p>}
+          {successMsg && <p className="success-msg">{successMsg}</p>}
+        </form>
+        <button
+          className="auth-toggle"
+          onClick={() => { setMode("signin"); setError(""); setSuccessMsg(""); }}
+        >
+          Back to Sign In
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="select-page">
@@ -71,6 +187,14 @@ function Auth({ onAuth }) {
         </button>
         {error && <p className="error">{error}</p>}
       </form>
+      {mode === "signin" && (
+        <button
+          className="auth-toggle forgot-link"
+          onClick={() => { setMode("forgot"); setError(""); }}
+        >
+          Forgot your password?
+        </button>
+      )}
       <button
         className="auth-toggle"
         onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}

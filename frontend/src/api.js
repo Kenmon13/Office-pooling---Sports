@@ -33,6 +33,40 @@ export async function signIn(username, password) {
   return data;
 }
 
+// ── Profile & Password Reset ─────────────────────────────────────────────────
+
+export async function fetchProfile() {
+  const res = await fetch(`${API}/auth/profile`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function updateProfile(data) {
+  const res = await fetch(`${API}/auth/profile`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function forgotPassword(email) {
+  const res = await fetch(`${API}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+export async function resetPassword(token, password) {
+  const res = await fetch(`${API}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  return res.json();
+}
+
 export async function autoJoinPool(user_id, pool_id) {
   const res = await fetch(`${API}/participants/auto-join`, {
     method: "POST",

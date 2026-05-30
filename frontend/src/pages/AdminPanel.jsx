@@ -162,7 +162,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
     grouped[p.sport][p.tournament].push(p);
   }
 
-  const totalPoolUsers = pools.reduce((sum, p) => sum + (p.user_count || 0), 0);
+  const totalPoolUsers = pools.filter((p) => !p.is_test).reduce((sum, p) => sum + (p.user_count || 0), 0);
 
   return (
     <div className="select-page admin-dashboard">
@@ -192,8 +192,9 @@ function AdminPanel({ user, onSelectPool, onBack }) {
 
           {Object.entries(grouped).map(([sport, tournaments]) => {
             const sportLabel = SPORT_LABELS[sport] || { name: sport, emoji: "" };
-            const sportUsers = Object.values(tournaments).flat().reduce((sum, p) => sum + (p.user_count || 0), 0);
-            const sportPools = Object.values(tournaments).flat().length;
+            const realPools = Object.values(tournaments).flat().filter((p) => !p.is_test);
+            const sportUsers = realPools.reduce((sum, p) => sum + (p.user_count || 0), 0);
+            const sportPools = realPools.length;
 
             return (
               <div key={sport} className="admin-sport-section">
@@ -204,7 +205,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
 
                 {Object.entries(tournaments).map(([tournament, tournamentPools]) => {
                   const tournamentLabel = TOURNAMENT_LABELS[tournament] || tournament;
-                  const tournamentUsers = tournamentPools.reduce((sum, p) => sum + (p.user_count || 0), 0);
+                  const tournamentUsers = tournamentPools.filter((p) => !p.is_test).reduce((sum, p) => sum + (p.user_count || 0), 0);
 
                   return (
                     <div key={tournament} className="admin-tournament-section">
