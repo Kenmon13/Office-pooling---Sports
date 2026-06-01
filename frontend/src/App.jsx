@@ -75,7 +75,7 @@ function App() {
 
   // Auto-join pool when user and pool are both set
   useEffect(() => {
-    if (user && pool) {
+    if (user && pool && !user.is_admin) {
       autoJoinPool(user.id, pool.id).then((p) => {
         if (!p.error) setParticipant(p);
       });
@@ -294,7 +294,10 @@ function App() {
             <div className="header-right">
               <div className="header-user">
                 <button onClick={() => setShowSettings(true)} className="btn-link header-user-name">{user.display_name}</button>
-                {participant && (
+                {!!user.is_admin && (
+                  <span className="header-admin-badge">Admin</span>
+                )}
+                {participant && !user.is_admin && (
                   <span className="header-user-points">{points} pts</span>
                 )}
                 <span className="header-user-actions">

@@ -2545,3 +2545,15 @@ nav a.active {
   margin-top: 4px;
 }
 
+/* Admin badge */
+.header-admin-badge {
+  background: #ff9800;
+  color: #000;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+

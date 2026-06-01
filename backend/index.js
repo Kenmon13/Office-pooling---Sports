@@ -673,12 +673,12 @@ app.get("/api/leaderboard", (req, res) => {
     qualified[g.id] = allFinished ? [groupTeams[0]?.team_id, groupTeams[1]?.team_id] : null;
   }
 
-  // Get participants
+  // Get participants (exclude admins)
   let participants;
   if (poolId) {
-    participants = db.prepare("SELECT * FROM participants WHERE pool_id = ?").all(poolId);
+    participants = db.prepare("SELECT p.* FROM participants p LEFT JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND (u.is_admin = 0 OR u.is_admin IS NULL OR p.user_id IS NULL)").all(poolId);
   } else {
-    participants = db.prepare("SELECT * FROM participants").all();
+    participants = db.prepare("SELECT p.* FROM participants p LEFT JOIN users u ON p.user_id = u.id WHERE (u.is_admin = 0 OR u.is_admin IS NULL OR p.user_id IS NULL)").all();
   }
 
   // Get all group predictions
@@ -1178,8 +1178,8 @@ app.get("/api/wc2022/leaderboard", (req, res) => {
   const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
 
   const participants = poolId
-    ? db.prepare("SELECT * FROM participants WHERE pool_id = ?").all(poolId)
-    : db.prepare("SELECT * FROM participants").all();
+    ? db.prepare("SELECT p.* FROM participants p LEFT JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND (u.is_admin = 0 OR u.is_admin IS NULL OR p.user_id IS NULL)").all(poolId)
+    : db.prepare("SELECT p.* FROM participants p LEFT JOIN users u ON p.user_id = u.id WHERE (u.is_admin = 0 OR u.is_admin IS NULL OR p.user_id IS NULL)").all();
 
   // Compute group qualifiers from WC2022 results filtered by effectiveNow
   const allGroupMatches = db.prepare("SELECT * FROM wc2022_matches WHERE status = 'finished'").all();
