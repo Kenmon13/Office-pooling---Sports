@@ -2557,3 +2557,84 @@ nav a.active {
   letter-spacing: 0.5px;
 }
 
+/* Report Issue button */
+.btn-report {
+  background: #ff5722 !important;
+  color: #fff !important;
+  border-color: #ff5722 !important;
+  font-weight: 600;
+}
+.btn-report:hover {
+  background: #e64a19 !important;
+}
+
+/* Issue textarea in modal */
+.issue-textarea {
+  width: 100%;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #eee;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  margin-bottom: 12px;
+}
+.issue-textarea:focus {
+  outline: none;
+  border-color: #4fc3f7;
+}
+
+/* Admin Issues tab */
+.issue-item {
+  flex-direction: column;
+  align-items: stretch !important;
+}
+.issue-item .pool-list-btn {
+  cursor: default;
+}
+.issue-list-info {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 6px;
+}
+.issue-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.issue-status-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.issue-status-badge.open {
+  background: #ff5722;
+  color: #fff;
+}
+.issue-status-badge.resolved {
+  background: #4caf50;
+  color: #fff;
+}
+.issue-author {
+  font-weight: 600;
+  color: #ccc;
+}
+.issue-body {
+  color: #aaa;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.issue-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+

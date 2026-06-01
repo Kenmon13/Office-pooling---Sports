@@ -114,6 +114,15 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(participant_id, team_id)
   );
+
+  CREATE TABLE IF NOT EXISTS issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    display_name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Add match_date to knockout_matches if not already present

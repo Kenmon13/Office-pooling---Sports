@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -24,15 +24,18 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const [backups, setBackups] = useState([]);
   const [backupLoading, setBackupLoading] = useState("");
   const [backupMsg, setBackupMsg] = useState(null);
+  const [issues, setIssues] = useState([]);
   const fileInputRef = useRef(null);
 
   const loadBackups = () => adminListBackups().then((d) => { if (!d.error) setBackups(d); });
+  const loadIssues = () => adminFetchIssues().then((d) => { if (!d.error) setIssues(d); });
 
   useEffect(() => {
     adminFetchPools().then((data) => { if (!data.error) setPools(data); });
     adminFetchUsers().then((data) => { if (!data.error) setUsers(data); });
     adminFetchTestPools().then((d) => { if (!d.error) setTestPools(d); });
     loadBackups();
+    loadIssues();
   }, [user.id]);
 
   const handleCreateTestPool = async () => {
@@ -181,6 +184,9 @@ function AdminPanel({ user, onSelectPool, onBack }) {
         </button>
         <button className={`admin-tab ${tab === "backup" ? "active" : ""}`} onClick={() => { setTab("backup"); loadBackups(); }}>
           Backup
+        </button>
+        <button className={`admin-tab ${tab === "issues" ? "active" : ""}`} onClick={() => { setTab("issues"); loadIssues(); }}>
+          Issues {issues.filter((i) => i.status === "open").length > 0 ? `(${issues.filter((i) => i.status === "open").length})` : ""}
         </button>
       </div>
 
@@ -386,6 +392,53 @@ function AdminPanel({ user, onSelectPool, onBack }) {
               </div>
             </div>
           )}
+        </>
+      )}
+
+      {tab === "issues" && (
+        <>
+          <p className="select-subtitle">
+            {issues.filter((i) => i.status === "open").length} open issue{issues.filter((i) => i.status === "open").length !== 1 ? "s" : ""}
+            {issues.filter((i) => i.status === "resolved").length > 0 && ` · ${issues.filter((i) => i.status === "resolved").length} resolved`}
+          </p>
+          {issues.length === 0 && <p className="notice">No issues reported.</p>}
+          <div className="pool-list">
+            {issues.map((issue) => (
+              <div key={issue.id} className={`pool-list-item issue-item ${issue.status}`}>
+                <div className="pool-list-btn issue-list-info">
+                  <div className="issue-header">
+                    <span className={`issue-status-badge ${issue.status}`}>{issue.status}</span>
+                    <span className="issue-author">{issue.display_name}</span>
+                    <span className="pool-list-meta">{new Date(issue.created_at + "Z").toLocaleString()}</span>
+                  </div>
+                  <p className="issue-body">{issue.body}</p>
+                </div>
+                <div className="issue-actions">
+                  {issue.status === "open" ? (
+                    <button
+                      className="btn-submit backup-restore-inline"
+                      onClick={async () => { await adminUpdateIssue(issue.id, "resolved"); loadIssues(); }}
+                    >
+                      Resolve
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-submit backup-restore-inline"
+                      onClick={async () => { await adminUpdateIssue(issue.id, "open"); loadIssues(); }}
+                    >
+                      Reopen
+                    </button>
+                  )}
+                  <button
+                    className="pool-delete-btn"
+                    onClick={async () => { if (confirm("Delete this issue?")) { await adminDeleteIssue(issue.id); loadIssues(); } }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>

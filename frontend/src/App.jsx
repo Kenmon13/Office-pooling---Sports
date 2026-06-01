@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue } from "./api";
 import "./App.css";
 
 const TOURNAMENT_META = {
@@ -136,6 +136,25 @@ function App() {
   };
 
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  const [showReportIssue, setShowReportIssue] = useState(false);
+  const [issueText, setIssueText] = useState("");
+  const [issueSubmitting, setIssueSubmitting] = useState(false);
+  const [issueMsg, setIssueMsg] = useState(null);
+
+  const handleSubmitIssue = async () => {
+    if (!issueText.trim()) return;
+    setIssueSubmitting(true);
+    setIssueMsg(null);
+    const res = await submitIssue(issueText.trim());
+    if (res.error) {
+      setIssueMsg({ type: "error", text: res.error });
+    } else {
+      setIssueMsg({ type: "success", text: "Issue reported. Thank you!" });
+      setIssueText("");
+      setTimeout(() => { setShowReportIssue(false); setIssueMsg(null); }, 1500);
+    }
+    setIssueSubmitting(false);
+  };
 
   const handleLeavePool = () => {
     setSelectedSport(null);
@@ -230,9 +249,36 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
         <SelectSport onSelect={handleSelectSport} onAdminLogin={user.is_admin ? () => setShowAdmin(true) : null} />
+
+        {showReportIssue && (
+          <div className="modal-overlay" onClick={() => setShowReportIssue(false)}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+              <h3>Report an Issue</h3>
+              <p>Describe the issue you are experiencing and we will look into it.</p>
+              <textarea
+                className="issue-textarea"
+                value={issueText}
+                onChange={(e) => setIssueText(e.target.value)}
+                placeholder="Describe the issue..."
+                rows={4}
+                autoFocus
+              />
+              {issueMsg && (
+                <div className={`backup-msg ${issueMsg.type}`}>{issueMsg.text}</div>
+              )}
+              <div className="modal-actions">
+                <button className="btn-submit btn-cancel" onClick={() => setShowReportIssue(false)}>Cancel</button>
+                <button className="btn-submit" onClick={handleSubmitIssue} disabled={issueSubmitting || !issueText.trim()}>
+                  {issueSubmitting ? "Submitting..." : "Submit"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -301,7 +347,7 @@ function App() {
                   <span className="header-user-points">{points} pts</span>
                 )}
                 <span className="header-user-actions">
-                  <button onClick={() => setShowSettings(true)} className="btn-small btn-settings" title="Settings">&#9881;</button>
+                  <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
                   <button onClick={handleSignOut} className="btn-small">Sign Out</button>
                 </span>
               </div>
@@ -355,6 +401,32 @@ function App() {
               <div className="modal-actions">
                 <button className="btn-submit btn-cancel" onClick={() => setShowQuitConfirm(false)}>Cancel</button>
                 <button className="btn-submit btn-danger" onClick={handleQuitPool}>Yes, Quit Pool</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showReportIssue && (
+          <div className="modal-overlay" onClick={() => setShowReportIssue(false)}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+              <h3>Report an Issue</h3>
+              <p>Describe the issue you are experiencing and we will look into it.</p>
+              <textarea
+                className="issue-textarea"
+                value={issueText}
+                onChange={(e) => setIssueText(e.target.value)}
+                placeholder="Describe the issue..."
+                rows={4}
+                autoFocus
+              />
+              {issueMsg && (
+                <div className={`backup-msg ${issueMsg.type}`}>{issueMsg.text}</div>
+              )}
+              <div className="modal-actions">
+                <button className="btn-submit btn-cancel" onClick={() => setShowReportIssue(false)}>Cancel</button>
+                <button className="btn-submit" onClick={handleSubmitIssue} disabled={issueSubmitting || !issueText.trim()}>
+                  {issueSubmitting ? "Submitting..." : "Submit"}
+                </button>
               </div>
             </div>
           </div>

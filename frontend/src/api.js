@@ -81,6 +81,39 @@ export async function resetPassword(token, password) {
   return res.json();
 }
 
+// ── Issues ───────────────────────────────────────────────────────────────────
+
+export async function submitIssue(body) {
+  const res = await fetch(`${API}/issues`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ body }),
+  });
+  return res.json();
+}
+
+export async function adminFetchIssues() {
+  const res = await fetch(`${API}/admin/issues`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function adminUpdateIssue(id, status) {
+  const res = await fetch(`${API}/admin/issues/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  return res.json();
+}
+
+export async function adminDeleteIssue(id) {
+  const res = await fetch(`${API}/admin/issues/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
 export async function autoJoinPool(user_id, pool_id) {
   const res = await fetch(`${API}/participants/auto-join`, {
     method: "POST",

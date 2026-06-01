@@ -117,6 +117,34 @@ app.put("/api/auth/change-password", authenticateToken, async (req, res) => {
   res.json({ success: true });
 });
 
+// --- Issues ---
+
+app.post("/api/issues", authenticateToken, (req, res) => {
+  const { body } = req.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: "Issue description is required" });
+  const user = db.prepare("SELECT display_name FROM users WHERE id = ?").get(req.user.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const result = db.prepare("INSERT INTO issues (user_id, display_name, body) VALUES (?, ?, ?)").run(req.user.id, user.display_name, body.trim());
+  res.json({ id: result.lastInsertRowid, success: true });
+});
+
+app.get("/api/admin/issues", requireAdminToken, (req, res) => {
+  const issues = db.prepare("SELECT * FROM issues ORDER BY created_at DESC").all();
+  res.json(issues);
+});
+
+app.put("/api/admin/issues/:id", requireAdminToken, (req, res) => {
+  const { status } = req.body;
+  if (!["open", "resolved"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+  db.prepare("UPDATE issues SET status = ? WHERE id = ?").run(status, req.params.id);
+  res.json({ success: true });
+});
+
+app.delete("/api/admin/issues/:id", requireAdminToken, (req, res) => {
+  db.prepare("DELETE FROM issues WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
 // --- Forgot / Reset Password ---
 
 app.post("/api/auth/forgot-password", async (req, res) => {
