@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool } from "./api";
 import "./App.css";
 
 const TOURNAMENT_META = {
@@ -135,12 +135,25 @@ function App() {
     setSelectedTournament(null);
   };
 
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+
   const handleLeavePool = () => {
     setSelectedSport(null);
     setSelectedTournament(null);
     setPool(null);
     setParticipant(null);
     localStorage.removeItem("pool_session");
+  };
+
+  const handleQuitPool = async () => {
+    if (!pool) return;
+    const res = await leavePool(pool.id);
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    setShowQuitConfirm(false);
+    handleLeavePool();
   };
 
   // Step 0: Sign in / Sign up / Reset password
@@ -259,7 +272,10 @@ function App() {
               <p className="pool-meta">
                 {selectedTournament.name}
                 <button onClick={handleLeavePool} className="btn-small">
-                  Leave Pool
+                  Switch Pool
+                </button>
+                <button onClick={() => setShowQuitConfirm(true)} className="btn-small btn-quit">
+                  Quit Pool
                 </button>
                 <button onClick={(e) => {
                   const url = `${window.location.origin}/join/${pool.id}`;
@@ -324,6 +340,19 @@ function App() {
             <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
           </Routes>
         </main>
+
+        {showQuitConfirm && (
+          <div className="modal-overlay" onClick={() => setShowQuitConfirm(false)}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+              <h3>Quit Pool</h3>
+              <p>Are you sure you want to quit <strong>{pool.name}</strong>? All your predictions and data for this pool will be permanently deleted.</p>
+              <div className="modal-actions">
+                <button className="btn-submit btn-cancel" onClick={() => setShowQuitConfirm(false)}>Cancel</button>
+                <button className="btn-submit btn-danger" onClick={handleQuitPool}>Yes, Quit Pool</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </BrowserRouter>
   );

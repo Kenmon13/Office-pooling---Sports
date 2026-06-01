@@ -278,6 +278,38 @@ app.post("/api/pools/join-by-id", (req, res) => {
   res.json({ id: pool.id, name: pool.name, sport: pool.sport, tournament: pool.tournament, is_test: pool.is_test, mock_date: pool.mock_date, is_public: pool.is_public });
 });
 
+app.delete("/api/pools/:poolId/leave", authenticateToken, (req, res) => {
+  const poolId = req.params.poolId;
+  const userId = req.user.id;
+  const participant = db.prepare("SELECT id FROM participants WHERE pool_id = ? AND user_id = ?").get(poolId, userId);
+  if (!participant) return res.status(404).json({ error: "You are not in this pool" });
+
+  const deleteParticipantData = db.transaction(() => {
+    const pid = participant.id;
+    db.prepare("DELETE FROM wc2022_champion_picks WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM champion_picks WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM wc2022_knockout_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM wc2022_group_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM knockout_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM group_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM third_place_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM participants WHERE id = ?").run(pid);
+    db.prepare("DELETE FROM messages WHERE pool_id = ? AND user_id = ?").run(poolId, userId);
+
+    const remaining = db.prepare("SELECT COUNT(*) as count FROM participants WHERE pool_id = ?").get(poolId);
+    let poolDeleted = false;
+    if (remaining.count === 0) {
+      db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
+      poolDeleted = true;
+    }
+    return poolDeleted;
+  });
+
+  const poolDeleted = deleteParticipantData();
+  res.json({ success: true, pool_deleted: poolDeleted });
+});
+
 // --- Participants ---
 
 app.get("/api/participants", (req, res) => {

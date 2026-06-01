@@ -142,6 +142,14 @@ export async function fetchPublicPools(sport, tournament) {
   return res.json();
 }
 
+export async function leavePool(poolId) {
+  const res = await fetch(`${API}/pools/${poolId}/leave`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
 export async function fetchGroups() {
   const res = await fetch(`${API}/groups`);
   return res.json();

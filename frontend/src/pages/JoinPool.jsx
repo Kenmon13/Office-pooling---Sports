@@ -1,33 +1,34 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { createPool, joinPool, fetchPublicPools } from "../api";
 
 function JoinPool({ sport, tournament, onJoin, onBack }) {
-  const [mode, setMode] = useState(null); // null, "create", "join"
+  const [mode, setMode] = useState(null); // null, "create", "join", "public"
   const [poolName, setPoolName] = useState("");
   const [password, setPassword] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [error, setError] = useState("");
-  const joiningRef = useRef(false);
+  const [publicPools, setPublicPools] = useState([]);
+  const [loadingPublic, setLoadingPublic] = useState(false);
+  const [joiningPoolId, setJoiningPoolId] = useState(null);
 
-  const handlePublicJoin = async () => {
-    if (joiningRef.current) return;
-    joiningRef.current = true;
+  const handlePublicBrowse = async () => {
     setMode("public");
     setError("");
+    setLoadingPublic(true);
     const pools = await fetchPublicPools(sport.id, tournament.id);
-    if (pools.length > 0) {
-      const result = await joinPool(pools[0].name, "");
-      if (result.error) {
-        setError(result.error);
-        setMode(null);
-        joiningRef.current = false;
-      } else {
-        onJoin(result);
-      }
+    setPublicPools(pools);
+    setLoadingPublic(false);
+  };
+
+  const handleJoinPublicPool = async (pool) => {
+    setJoiningPoolId(pool.id);
+    setError("");
+    const result = await joinPool(pool.name, "");
+    if (result.error) {
+      setError(result.error);
+      setJoiningPoolId(null);
     } else {
-      setError("No public pool available");
-      setMode(null);
-      joiningRef.current = false;
+      onJoin(result);
     }
   };
 
@@ -71,7 +72,6 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
     setPoolName("");
     setPassword("");
     setIsPublic(false);
-    joiningRef.current = false;
   };
 
   if (!mode) {
@@ -89,7 +89,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
             <span className="sport-emoji">{"\uD83D\uDD11"}</span>
             <span className="sport-name">Join Pool</span>
           </button>
-          <button className="sport-card" onClick={handlePublicJoin}>
+          <button className="sport-card" onClick={handlePublicBrowse}>
             <span className="sport-emoji">{"\uD83C\uDF0D"}</span>
             <span className="sport-name">Public Pool</span>
           </button>
@@ -101,8 +101,32 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
   if (mode === "public") {
     return (
       <div className="select-page">
-        <p className="select-subtitle">Joining public pool...</p>
+        <button className="back-btn" onClick={resetMode}>&larr; Back</button>
+        <h2>Public Pools</h2>
+        <p className="select-subtitle">Join an open pool — no password needed</p>
+        {loadingPublic && <p className="notice">Loading...</p>}
+        {!loadingPublic && publicPools.length === 0 && (
+          <p className="notice">No public pools available for this tournament yet.</p>
+        )}
         {error && <p className="error">{error}</p>}
+        {publicPools.length > 0 && (
+          <div className="pool-list">
+            {publicPools.map((p) => (
+              <div key={p.id} className="pool-list-item">
+                <button
+                  className="pool-list-btn"
+                  onClick={() => handleJoinPublicPool(p)}
+                  disabled={joiningPoolId === p.id}
+                >
+                  <span className="pool-list-name">{p.name}</span>
+                  <span className="pool-list-meta">
+                    {p.member_count} member{p.member_count !== 1 ? "s" : ""}
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
