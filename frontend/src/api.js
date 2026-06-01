@@ -40,11 +40,25 @@ export async function fetchProfile() {
   return res.json();
 }
 
+export async function fetchMyPools() {
+  const res = await fetch(`${API}/auth/my-pools`, { headers: authHeaders() });
+  return res.json();
+}
+
 export async function updateProfile(data) {
   const res = await fetch(`${API}/auth/profile`, {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function changePassword(current_password, new_password) {
+  const res = await fetch(`${API}/auth/change-password`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ current_password, new_password }),
   });
   return res.json();
 }

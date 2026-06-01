@@ -211,9 +211,13 @@ function App() {
           user={user}
           onBack={() => setShowSettings(false)}
           onUpdateUser={(updated) => {
-            const newUser = { ...user, email: updated.email };
+            const newUser = { ...user, email: updated.email, username: updated.username, display_name: updated.display_name };
             setUser(newUser);
             localStorage.setItem("auth_user", JSON.stringify(newUser));
+          }}
+          onSelectPool={(poolData) => {
+            setShowSettings(false);
+            handleJoinPool(poolData);
           }}
         />
       </div>
@@ -225,8 +229,7 @@ function App() {
     return (
       <div className="app">
         <div className="auth-bar">
-          Signed in as <strong>{user.display_name}</strong>
-          <button onClick={() => setShowSettings(true)} className="btn-small btn-settings" title="Settings">&#9881;</button>
+          Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
         <SelectSport onSelect={handleSelectSport} onAdminLogin={user.is_admin ? () => setShowAdmin(true) : null} />
@@ -290,7 +293,7 @@ function App() {
             </div>
             <div className="header-right">
               <div className="header-user">
-                <span className="header-user-name">{user.display_name}</span>
+                <button onClick={() => setShowSettings(true)} className="btn-link header-user-name">{user.display_name}</button>
                 {participant && (
                   <span className="header-user-points">{points} pts</span>
                 )}

@@ -63,21 +63,58 @@ app.get("/api/auth/profile", authenticateToken, (req, res) => {
   res.json(user);
 });
 
+app.get("/api/auth/my-pools", authenticateToken, (req, res) => {
+  const pools = db.prepare(`
+    SELECT p.id, p.name, p.sport, p.tournament, p.is_public, p.is_test, p.created_at,
+           part.id as participant_id, part.created_at as joined_at,
+           (SELECT COUNT(*) FROM participants WHERE pool_id = p.id) as member_count
+    FROM participants part
+    JOIN pools p ON p.id = part.pool_id
+    WHERE part.user_id = ?
+    ORDER BY part.created_at DESC
+  `).all(req.user.id);
+  res.json(pools);
+});
+
 app.put("/api/auth/profile", authenticateToken, (req, res) => {
-  const { email } = req.body;
+  const { email, username, display_name } = req.body;
   if (email !== undefined) {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Invalid email format" });
     }
-    // Check email uniqueness (if not empty)
     if (email) {
       const existing = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email.toLowerCase(), req.user.id);
       if (existing) return res.status(409).json({ error: "Email already linked to another account" });
     }
     db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email ? email.toLowerCase() : null, req.user.id);
   }
+  if (username !== undefined) {
+    if (!username || !username.trim()) return res.status(400).json({ error: "Username cannot be empty" });
+    const existing = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username.trim(), req.user.id);
+    if (existing) return res.status(409).json({ error: "Username already taken" });
+    db.prepare("UPDATE users SET username = ? WHERE id = ?").run(username.trim(), req.user.id);
+  }
+  if (display_name !== undefined) {
+    if (!display_name || !display_name.trim()) return res.status(400).json({ error: "Display name cannot be empty" });
+    db.prepare("UPDATE users SET display_name = ? WHERE id = ?").run(display_name.trim(), req.user.id);
+    // Update display name in participants table too
+    db.prepare("UPDATE participants SET name = ? WHERE user_id = ?").run(display_name.trim(), req.user.id);
+  }
   const user = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE id = ?").get(req.user.id);
   res.json(user);
+});
+
+app.put("/api/auth/change-password", authenticateToken, async (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) return res.status(400).json({ error: "Current and new password are required" });
+  if (new_password.trim().length < 1) return res.status(400).json({ error: "New password cannot be empty" });
+  const user = db.prepare("SELECT password FROM users WHERE id = ?").get(req.user.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const valid = await bcrypt.compare(current_password, user.password);
+  if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+  const hashed = await bcrypt.hash(new_password.trim(), 10);
+  db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashed, req.user.id);
+  res.json({ success: true });
 });
 
 // --- Forgot / Reset Password ---
