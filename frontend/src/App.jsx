@@ -287,6 +287,11 @@ function App() {
   if (!selectedTournament) {
     return (
       <div className="app">
+        <div className="auth-bar">
+          Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
+          <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+        </div>
         <SelectTournament
           sport={selectedSport}
           onSelect={(t) => setSelectedTournament(t)}
@@ -300,6 +305,11 @@ function App() {
   if (!pool) {
     return (
       <div className="app">
+        <div className="auth-bar">
+          Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
+          <button onClick={handleSignOut} className="btn-small">Sign Out</button>
+        </div>
         <JoinPool
           sport={selectedSport}
           tournament={selectedTournament}
