@@ -62,8 +62,9 @@ function parseCurrentNotes(content) {
 
 function insertEntry(content, entry, newId, newVersion) {
   const today = new Date().toISOString().slice(0, 10);
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
   const escape = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const itemsStr = entry.items.map((item) => `      "${escape(item)}",`).join("\n");
+  const itemsStr = entry.items.map((item) => `      "${escape(item)}",`).join(eol);
   const block = [
     "  {",
     `    id: ${newId},`,
@@ -75,8 +76,8 @@ function insertEntry(content, entry, newId, newVersion) {
     "    ],",
     "  },",
     "",
-  ].join("\n");
-  return content.replace("export const PATCH_NOTES = [\n", `export const PATCH_NOTES = [\n${block}`);
+  ].join(eol);
+  return content.replace(`export const PATCH_NOTES = [${eol}`, `export const PATCH_NOTES = [${eol}${block}`);
 }
 
 function main() {
