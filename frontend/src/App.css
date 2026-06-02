@@ -2652,12 +2652,18 @@ nav a.active {
   align-items: stretch !important;
 }
 .issue-item .pool-list-btn {
-  cursor: default;
+  cursor: pointer;
 }
 .issue-list-info {
   flex-direction: column !important;
   align-items: flex-start !important;
   gap: 6px;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  color: inherit;
+  font: inherit;
 }
 .issue-header {
   display: flex;
@@ -2696,5 +2702,164 @@ nav a.active {
   gap: 6px;
   justify-content: flex-end;
   margin-top: 8px;
+}
+.issue-reply-count {
+  font-size: 0.75rem;
+  color: #4fc3f7;
+  font-weight: 600;
+}
+
+/* Issue Chat Modal */
+.issue-chat-modal {
+  max-width: 500px;
+  width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.issue-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.issue-chat-header h3 {
+  margin: 0;
+}
+.btn-back {
+  background: none;
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+.btn-back:hover {
+  background: #333;
+}
+.issue-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  max-height: 50vh;
+}
+.issue-list-item {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  color: #ddd;
+  width: 100%;
+  font: inherit;
+}
+.issue-list-item:hover {
+  border-color: #4fc3f7;
+  background: #333;
+}
+.issue-list-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.issue-list-preview {
+  color: #aaa;
+  font-size: 0.85rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Chat bubbles */
+.issue-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  max-height: 50vh;
+  padding: 4px;
+}
+.issue-chat-bubble {
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 85%;
+  word-break: break-word;
+}
+.issue-chat-bubble p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.issue-chat-bubble-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #999;
+}
+.issue-chat-bubble-meta strong {
+  color: #ccc;
+  font-size: 0.8rem;
+}
+.user-bubble {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  align-self: flex-start;
+}
+.admin-bubble {
+  background: #1a3a4a;
+  border: 1px solid #2a6a8a;
+  align-self: flex-end;
+}
+.admin-bubble .issue-chat-bubble-meta strong {
+  color: #4fc3f7;
+}
+
+/* Chat input */
+.issue-chat-input {
+  display: flex;
+  gap: 8px;
+}
+.issue-chat-input input {
+  flex: 1;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.issue-chat-input input:focus {
+  outline: none;
+  border-color: #4fc3f7;
+}
+.issue-chat-input .btn-submit {
+  padding: 8px 16px;
+}
+
+/* Admin issue chat (inline in admin panel) */
+.admin-issue-chat {
+  display: flex;
+  flex-direction: column;
+  height: 60vh;
+}
+.admin-issue-chat .issue-chat-header {
+  flex-wrap: wrap;
+}
+.admin-issue-chat .issue-chat-messages {
+  flex: 1;
+  max-height: none;
+}
+.admin-issue-chat .issue-chat-input {
+  margin-top: auto;
 }
 

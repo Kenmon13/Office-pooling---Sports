@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchMyIssues, fetchIssueReplies, postIssueReply } from "./api";
 import "./App.css";
 
 const TOURNAMENT_META = {
@@ -136,22 +136,70 @@ function App() {
   };
 
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
-  const [showReportIssue, setShowReportIssue] = useState(false);
+  const [showIssueChat, setShowIssueChat] = useState(false);
+  const [myIssues, setMyIssues] = useState([]);
+  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [issueReplies, setIssueReplies] = useState([]);
   const [issueText, setIssueText] = useState("");
   const [issueSubmitting, setIssueSubmitting] = useState(false);
   const [issueMsg, setIssueMsg] = useState(null);
+  const [issueView, setIssueView] = useState("list"); // "list" | "chat" | "new"
 
-  const handleSubmitIssue = async () => {
+  const openIssueChat = async () => {
+    setShowIssueChat(true);
+    setIssueView("list");
+    setSelectedIssue(null);
+    setIssueMsg(null);
+    setIssueText("");
+    const data = await fetchMyIssues();
+    if (!data.error) setMyIssues(data);
+  };
+
+  const openIssueThread = async (issue) => {
+    setSelectedIssue(issue);
+    setIssueView("chat");
+    setIssueText("");
+    setIssueMsg(null);
+    const data = await fetchIssueReplies(issue.id);
+    if (!data.error) setIssueReplies(data.replies || []);
+  };
+
+  const handleSubmitNewIssue = async () => {
     if (!issueText.trim()) return;
     setIssueSubmitting(true);
-    setIssueMsg(null);
     const res = await submitIssue(issueText.trim());
     if (res.error) {
       setIssueMsg({ type: "error", text: res.error });
     } else {
-      setIssueMsg({ type: "success", text: "Issue reported. Thank you!" });
       setIssueText("");
-      setTimeout(() => { setShowReportIssue(false); setIssueMsg(null); }, 1500);
+      setIssueMsg(null);
+      // Refresh and open the new thread
+      const data = await fetchMyIssues();
+      if (!data.error) {
+        setMyIssues(data);
+        const newIssue = data.find((i) => i.id === res.id);
+        if (newIssue) openIssueThread(newIssue);
+      }
+    }
+    setIssueSubmitting(false);
+  };
+
+  const handleSendReply = async () => {
+    if (!issueText.trim() || !selectedIssue) return;
+    setIssueSubmitting(true);
+    const res = await postIssueReply(selectedIssue.id, issueText.trim());
+    if (res.error) {
+      setIssueMsg({ type: "error", text: res.error });
+    } else {
+      setIssueText("");
+      setIssueMsg(null);
+      const data = await fetchIssueReplies(selectedIssue.id);
+      if (!data.error) {
+        setIssueReplies(data.replies || []);
+        setSelectedIssue(data.issue);
+      }
+      const list = await fetchMyIssues();
+      if (!list.error) setMyIssues(list);
     }
     setIssueSubmitting(false);
   };
@@ -249,36 +297,22 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
-          <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
+          <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
         <SelectSport onSelect={handleSelectSport} onAdminLogin={user.is_admin ? () => setShowAdmin(true) : null} />
 
-        {showReportIssue && (
-          <div className="modal-overlay" onClick={() => setShowReportIssue(false)}>
-            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-              <h3>Report an Issue</h3>
-              <p>Describe the issue you are experiencing and we will look into it.</p>
-              <textarea
-                className="issue-textarea"
-                value={issueText}
-                onChange={(e) => setIssueText(e.target.value)}
-                placeholder="Describe the issue..."
-                rows={4}
-                autoFocus
-              />
-              {issueMsg && (
-                <div className={`backup-msg ${issueMsg.type}`}>{issueMsg.text}</div>
-              )}
-              <div className="modal-actions">
-                <button className="btn-submit btn-cancel" onClick={() => setShowReportIssue(false)}>Cancel</button>
-                <button className="btn-submit" onClick={handleSubmitIssue} disabled={issueSubmitting || !issueText.trim()}>
-                  {issueSubmitting ? "Submitting..." : "Submit"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {showIssueChat && <IssueChatModal
+          issueView={issueView} setIssueView={setIssueView}
+          myIssues={myIssues} selectedIssue={selectedIssue}
+          issueReplies={issueReplies} issueText={issueText}
+          setIssueText={setIssueText} issueSubmitting={issueSubmitting}
+          issueMsg={issueMsg}
+          onClose={() => setShowIssueChat(false)}
+          onOpenThread={openIssueThread}
+          onSubmitNew={handleSubmitNewIssue}
+          onSendReply={handleSendReply}
+        />}
       </div>
     );
   }
@@ -289,7 +323,7 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
-          <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
+          <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
         <SelectTournament
@@ -297,6 +331,18 @@ function App() {
           onSelect={(t) => setSelectedTournament(t)}
           onBack={handleBackToSport}
         />
+
+        {showIssueChat && <IssueChatModal
+          issueView={issueView} setIssueView={setIssueView}
+          myIssues={myIssues} selectedIssue={selectedIssue}
+          issueReplies={issueReplies} issueText={issueText}
+          setIssueText={setIssueText} issueSubmitting={issueSubmitting}
+          issueMsg={issueMsg}
+          onClose={() => setShowIssueChat(false)}
+          onOpenThread={openIssueThread}
+          onSubmitNew={handleSubmitNewIssue}
+          onSendReply={handleSendReply}
+        />}
       </div>
     );
   }
@@ -307,7 +353,7 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
-          <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
+          <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
         <JoinPool
@@ -316,6 +362,18 @@ function App() {
           onJoin={handleJoinPool}
           onBack={handleBackToTournament}
         />
+
+        {showIssueChat && <IssueChatModal
+          issueView={issueView} setIssueView={setIssueView}
+          myIssues={myIssues} selectedIssue={selectedIssue}
+          issueReplies={issueReplies} issueText={issueText}
+          setIssueText={setIssueText} issueSubmitting={issueSubmitting}
+          issueMsg={issueMsg}
+          onClose={() => setShowIssueChat(false)}
+          onOpenThread={openIssueThread}
+          onSubmitNew={handleSubmitNewIssue}
+          onSendReply={handleSendReply}
+        />}
       </div>
     );
   }
@@ -357,7 +415,7 @@ function App() {
                   <span className="header-user-points">{points} pts</span>
                 )}
                 <span className="header-user-actions">
-                  <button onClick={() => { setShowReportIssue(true); setIssueMsg(null); setIssueText(""); }} className="btn-small btn-report">Report Issue</button>
+                  <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
                   <button onClick={handleSignOut} className="btn-small">Sign Out</button>
                 </span>
               </div>
@@ -416,33 +474,122 @@ function App() {
           </div>
         )}
 
-        {showReportIssue && (
-          <div className="modal-overlay" onClick={() => setShowReportIssue(false)}>
-            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-              <h3>Report an Issue</h3>
-              <p>Describe the issue you are experiencing and we will look into it.</p>
-              <textarea
-                className="issue-textarea"
-                value={issueText}
-                onChange={(e) => setIssueText(e.target.value)}
-                placeholder="Describe the issue..."
-                rows={4}
-                autoFocus
-              />
-              {issueMsg && (
-                <div className={`backup-msg ${issueMsg.type}`}>{issueMsg.text}</div>
-              )}
-              <div className="modal-actions">
-                <button className="btn-submit btn-cancel" onClick={() => setShowReportIssue(false)}>Cancel</button>
-                <button className="btn-submit" onClick={handleSubmitIssue} disabled={issueSubmitting || !issueText.trim()}>
-                  {issueSubmitting ? "Submitting..." : "Submit"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {showIssueChat && <IssueChatModal
+          issueView={issueView} setIssueView={setIssueView}
+          myIssues={myIssues} selectedIssue={selectedIssue}
+          issueReplies={issueReplies} issueText={issueText}
+          setIssueText={setIssueText} issueSubmitting={issueSubmitting}
+          issueMsg={issueMsg}
+          onClose={() => setShowIssueChat(false)}
+          onOpenThread={openIssueThread}
+          onSubmitNew={handleSubmitNewIssue}
+          onSendReply={handleSendReply}
+        />}
       </div>
     </BrowserRouter>
+  );
+}
+
+function IssueChatModal({ issueView, setIssueView, myIssues, selectedIssue, issueReplies, issueText, setIssueText, issueSubmitting, issueMsg, onClose, onOpenThread, onSubmitNew, onSendReply }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box issue-chat-modal" onClick={(e) => e.stopPropagation()}>
+        {issueView === "list" && (
+          <>
+            <div className="issue-chat-header">
+              <h3>Support</h3>
+              <button className="btn-submit" onClick={() => { setIssueView("new"); setIssueText(""); }}>New Issue</button>
+            </div>
+            {myIssues.length === 0 ? (
+              <p className="notice">No issues yet. Click "New Issue" to report one.</p>
+            ) : (
+              <div className="issue-list">
+                {myIssues.map((issue) => (
+                  <button key={issue.id} className="issue-list-item" onClick={() => onOpenThread(issue)}>
+                    <div className="issue-list-top">
+                      <span className={`issue-status-badge ${issue.status}`}>{issue.status}</span>
+                      <span className="pool-list-meta">{new Date(issue.created_at + "Z").toLocaleDateString()}</span>
+                    </div>
+                    <p className="issue-list-preview">{issue.body}</p>
+                    {issue.reply_count > 0 && <span className="issue-reply-count">{issue.reply_count} repl{issue.reply_count === 1 ? "y" : "ies"}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="modal-actions">
+              <button className="btn-submit btn-cancel" onClick={onClose}>Close</button>
+            </div>
+          </>
+        )}
+
+        {issueView === "new" && (
+          <>
+            <div className="issue-chat-header">
+              <button className="btn-back" onClick={() => setIssueView("list")}>&larr;</button>
+              <h3>New Issue</h3>
+            </div>
+            <p>Describe the issue you are experiencing and we will look into it.</p>
+            <textarea
+              className="issue-textarea"
+              value={issueText}
+              onChange={(e) => setIssueText(e.target.value)}
+              placeholder="Describe the issue..."
+              rows={4}
+              autoFocus
+            />
+            {issueMsg && <div className={`backup-msg ${issueMsg.type}`}>{issueMsg.text}</div>}
+            <div className="modal-actions">
+              <button className="btn-submit btn-cancel" onClick={() => setIssueView("list")}>Cancel</button>
+              <button className="btn-submit" onClick={onSubmitNew} disabled={issueSubmitting || !issueText.trim()}>
+                {issueSubmitting ? "Sending..." : "Submit"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {issueView === "chat" && selectedIssue && (
+          <>
+            <div className="issue-chat-header">
+              <button className="btn-back" onClick={() => setIssueView("list")}>&larr;</button>
+              <h3>Issue #{selectedIssue.id}</h3>
+              <span className={`issue-status-badge ${selectedIssue.status}`}>{selectedIssue.status}</span>
+            </div>
+            <div className="issue-chat-messages">
+              <div className="issue-chat-bubble user-bubble">
+                <div className="issue-chat-bubble-meta">
+                  <strong>{selectedIssue.display_name}</strong>
+                  <span>{new Date(selectedIssue.created_at + "Z").toLocaleString()}</span>
+                </div>
+                <p>{selectedIssue.body}</p>
+              </div>
+              {issueReplies.map((r) => (
+                <div key={r.id} className={`issue-chat-bubble ${r.is_admin ? "admin-bubble" : "user-bubble"}`}>
+                  <div className="issue-chat-bubble-meta">
+                    <strong>{r.display_name}{r.is_admin ? " (Admin)" : ""}</strong>
+                    <span>{new Date(r.created_at + "Z").toLocaleString()}</span>
+                  </div>
+                  <p>{r.body}</p>
+                </div>
+              ))}
+            </div>
+            {issueMsg && <div className={`backup-msg ${issueMsg.type}`}>{issueMsg.text}</div>}
+            <div className="issue-chat-input">
+              <input
+                type="text"
+                value={issueText}
+                onChange={(e) => setIssueText(e.target.value)}
+                placeholder="Type a reply..."
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSendReply(); } }}
+                autoFocus
+              />
+              <button className="btn-submit" onClick={onSendReply} disabled={issueSubmitting || !issueText.trim()}>
+                {issueSubmitting ? "..." : "Send"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
