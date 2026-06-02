@@ -57,6 +57,18 @@ app.post("/api/auth/signin", (req, res) => {
 
 // --- Profile ---
 
+app.get("/api/user/pools", authenticateToken, (req, res) => {
+  const rows = db.prepare(`
+    SELECT p.id, p.name, p.sport, p.tournament, p.mock_date,
+           pt.id as participant_id
+    FROM participants pt
+    JOIN pools p ON pt.pool_id = p.id
+    WHERE pt.user_id = ?
+    ORDER BY p.id DESC
+  `).all(req.user.id);
+  res.json(rows);
+});
+
 app.get("/api/auth/profile", authenticateToken, (req, res) => {
   const user = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE id = ?").get(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -864,12 +876,12 @@ app.get("/api/leaderboard", (req, res) => {
 
 // Which two feeder matches must have winners before a match opens
 const KO_PREREQUISITES = {
-  "R16-1": ["R32-1", "R32-2"],  "R16-2": ["R32-3",  "R32-4"],
-  "R16-3": ["R32-5", "R32-6"],  "R16-4": ["R32-7",  "R32-8"],
-  "R16-5": ["R32-9", "R32-10"], "R16-6": ["R32-11", "R32-12"],
-  "R16-7": ["R32-13","R32-14"], "R16-8": ["R32-15", "R32-16"],
-  "QF-1":  ["R16-1", "R16-2"],  "QF-2":  ["R16-3",  "R16-4"],
-  "QF-3":  ["R16-5", "R16-6"],  "QF-4":  ["R16-7",  "R16-8"],
+  "R16-1": ["R32-2", "R32-5"],  "R16-2": ["R32-1",  "R32-3"],
+  "R16-3": ["R32-4", "R32-6"],  "R16-4": ["R32-7",  "R32-8"],
+  "R16-5": ["R32-11","R32-12"], "R16-6": ["R32-9",  "R32-10"],
+  "R16-7": ["R32-14","R32-16"], "R16-8": ["R32-13", "R32-15"],
+  "QF-1":  ["R16-1", "R16-2"],  "QF-2":  ["R16-5",  "R16-6"],
+  "QF-3":  ["R16-3", "R16-4"],  "QF-4":  ["R16-7",  "R16-8"],
   "SF-1":  ["QF-1",  "QF-2"],   "SF-2":  ["QF-3",   "QF-4"],
   "F":     ["SF-1",  "SF-2"],
 };
@@ -896,7 +908,10 @@ app.get("/api/knockout-deadline", (req, res) => {
     const prereqs = KO_PREREQUISITES[matchId];
     if (!prereqs) return lastGroupMatchDate; // R32 opens after last group match
     const dates = prereqs.map((pid) => koById[pid]?.match_date).filter(Boolean);
-    return dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+    if (!dates.length) return null;
+    const latest = dates.reduce((a, b) => (a > b ? a : b));
+    const ms = new Date(latest.replace(" ", "T") + "Z").getTime() + 3 * 3600000;
+    return new Date(ms).toISOString().replace("T", " ").slice(0, 16);
   };
 
   const isMatchOpen = (matchId) => {

@@ -5,8 +5,9 @@ import {
 } from "../api";
 import Bracket from "../components/Bracket";
 import Bracket2022 from "../components/Bracket2022";
+import { ROUND_ORDER } from "../windowsHelpers";
 
-function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
+function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset }) {
   const isWC2022 = tournament === "wc2022";
   const [koMatches, setKoMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
@@ -63,6 +64,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     const existing = scores[matchId];
     await submitFn(currentUser.id, matchId, teamId, existing?.home ?? null, existing?.away ?? null);
     setSaving(null);
+    window.dispatchEvent(new CustomEvent("picks-saved"));
   };
 
   const handleScore = async (matchId, home, away) => {
@@ -74,10 +76,44 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     await submitFn(currentUser.id, matchId, winner, home, away);
     setScores((prev) => ({ ...prev, [matchId]: { home, away } }));
     setSaving(null);
+    window.dispatchEvent(new CustomEvent("picks-saved"));
   };
 
   const pointsMap2026 = { "Round of 32": 3, "Round of 16": 5, "Quarter-Finals": 7, "Semi-Finals": 10, "Final": 15 };
   const pointsMap2022 = { "Round of 16": 5, "Quarter-Finals": 7, "Semi-Finals": 10, "Final": 15 };
+
+  const openKoMatches = koMatches.filter((m) => openMatchIds.has(m.id) && m.home_team_name && m.away_team_name);
+  const missingPickMatches = openKoMatches
+    .filter((m) => !predictions[m.id])
+    .sort((a, b) => (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99));
+  const missingScoreMatches = openKoMatches
+    .filter((m) => predictions[m.id] && !scores[m.id])
+    .sort((a, b) => (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99));
+  const koAlerts = currentUser && groupStageComplete && !koStageComplete && (missingPickMatches.length > 0 || missingScoreMatches.length > 0) ? (
+    <div className="page-alerts">
+      <div className="notif-window-card win-urgent">
+        <div className="win-card-top">
+          <span className="win-icon">🥊</span>
+          <span className="win-title">Knockout Stage Predictions</span>
+          <span className="win-badge win-badge-open">Open</span>
+        </div>
+        {missingPickMatches.length > 0 && (
+          <div className="win-missed">
+            ⚠️ {missingPickMatches.length === 1
+              ? `${missingPickMatches[0].round}: ${missingPickMatches[0].home_team_name} vs ${missingPickMatches[0].away_team_name} — missing pick and score`
+              : `${missingPickMatches.length} matches missing pick and score`}
+          </div>
+        )}
+        {missingScoreMatches.length > 0 && (
+          <div className="win-missed">
+            ⚠️ {missingScoreMatches.length === 1
+              ? `${missingScoreMatches[0].round}: ${missingScoreMatches[0].home_team_name} vs ${missingScoreMatches[0].away_team_name} — missing score`
+              : `${missingScoreMatches.length} matches missing score`}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   if (isWC2022) {
     return (
@@ -102,6 +138,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           </ul>
         </div>
 
+        {koAlerts}
+
         {koStageComplete && (
           <div className="deadline-banner" style={{ marginBottom: 16 }}>
             <span className="deadline-locked-text">Knockout stage complete — Argentina are the 2022 World Cup champions!</span>
@@ -124,6 +162,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           pointsMap={pointsMap2022}
           openMatchIds={openMatchIds}
           matchMeta={matchMeta}
+          displayTzOffset={displayTzOffset}
         />
       </div>
     );
@@ -152,6 +191,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
         </ul>
       </div>
 
+      {koAlerts}
+
       {koStageComplete && (
         <div className="deadline-banner" style={{ marginBottom: 16 }}>
           <span className="deadline-locked-text">Knockout stage complete</span>
@@ -176,6 +217,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate }) {
         pointsMap={pointsMap2026}
         openMatchIds={openMatchIds}
         matchMeta={matchMeta}
+        displayTzOffset={displayTzOffset}
       />
     </div>
   );

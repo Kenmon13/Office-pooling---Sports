@@ -1,0 +1,116 @@
+export const PATCH_NOTES = [
+  {
+    id: 9,
+    version: "v1.9",
+    date: "2026-06-02",
+    title: "Notifications, Timezones & Schedule Fixes",
+    items: [
+      "Never miss a pick — get reminders when your predictions are still open or closing soon",
+      "Track points, pick alerts, and app updates via the 🔔 bell — all in one place",
+      "In multiple pools? See all your activity across every pool at a glance",
+      "Match times now show in your local timezone so you always know exactly when to tune in",
+      "Fixed incorrect kick-off times across the group stage and knockout rounds — pick windows now open at the right time",
+      "Fixed knockout bracket layout so QF-2 visually connects to the correct R16 matches",
+    ],
+  },
+  {
+    id: 8,
+    version: "v1.8",
+    date: "2026-06-02",
+    title: "Emoji Reactions, User Details & Support Chat",
+    items: [
+      "Emoji picker in pool chat — react to the banter with one tap",
+      "Your display name and details now show consistently across all pages",
+      "Report Issue is now a full support chat — see your past issues and exchange messages with admin in real time",
+    ],
+  },
+  {
+    id: 7,
+    version: "v1.7",
+    date: "2026-06-01",
+    title: "Profiles, Pool Management & Issue Reporting",
+    items: [
+      "Profile page revamped — view your stats, edit your username, display name, email, and password all in one place",
+      "My Pools tab — see every pool you're in and switch between them in one click",
+      "Browse public pools properly — see all available pools with member counts before you join",
+      "Quit a pool permanently from within the pool, or switch pools without losing your spot",
+      "Spotted a bug? Hit Report Issue and we'll look into it",
+      { text: "Admin spectator mode — admins are excluded from leaderboards and picks", adminOnly: true },
+      { text: "Admin issues dashboard — view and manage reported issues", adminOnly: true },
+    ],
+  },
+  {
+    id: 6,
+    version: "v1.6",
+    date: "2026-05-30",
+    title: "Account Settings & Password Recovery",
+    items: [
+      "Link an email address to your account",
+      "Forgot password flow — reset via email link",
+      "New Settings page for managing your account details",
+    ],
+  },
+  {
+    id: 5,
+    version: "v1.5",
+    date: "2026-05-25",
+    title: "Third-Place Predictions",
+    items: [
+      { text: "Admins can back up and restore the database", adminOnly: true },
+      "Predict the third-place playoff match winner",
+    ],
+  },
+  {
+    id: 4,
+    version: "v1.4",
+    date: "2026-05-22",
+    title: "Chat, Auth & Security",
+    items: [
+      "Pool chat — message everyone in your pool in real time",
+      "Passwords now securely hashed with bcrypt",
+      "JWT session tokens replace cookie-based auth",
+    ],
+  },
+  {
+    id: 3,
+    version: "v1.3",
+    date: "2026-05-20",
+    title: "View Picks & Invite Links",
+    items: [
+      "Browse other players' predictions from the leaderboard",
+      "Share a direct invite link to your pool",
+    ],
+  },
+  {
+    id: 2,
+    version: "v1.2",
+    date: "2026-05-18",
+    title: "WC2026 Schedule & Public Pools",
+    items: [
+      "Official FIFA World Cup 2026 group stage schedule added",
+      "Option to create public pools that anyone can join",
+    ],
+  },
+  {
+    id: 1,
+    version: "v1.1",
+    date: "2026-05-17",
+    title: "Winner Pick, Point History & Exact Scores",
+    items: [
+      "Champion tab — predict the tournament winner for a +20 pt bonus",
+      "Point History tab — chronological log of all your scoring events",
+      "Knockout exact-score predictions — correct score earns double points",
+    ],
+  },
+  {
+    id: 0,
+    version: "v1.0",
+    date: "2026-05-10",
+    title: "Initial Launch",
+    items: [
+      "Group stage match predictions with live scoring",
+      "Interactive knockout bracket",
+      "Leaderboard with live point totals",
+    ],
+  },
+];

@@ -356,27 +356,45 @@ if (!wc2022Seeded) {
 
   // Knockout matches (15 total: R16 x8, QF x4, SF x2, F x1)
   // WC2022 bracket: SF-1 = QF-1 vs QF-3; SF-2 = QF-2 vs QF-4
+  // All times in UTC. WC2022 R16/QF had two daily slots: 15:00 UTC (18:00 Qatar) and 19:00 UTC (22:00 Qatar).
   const WC2022_KO = [
-    { id:"22-R16-1", round:"R16", home:"Netherlands",  away:"USA",          winner:"Netherlands",  home_slot:"1A", away_slot:"2B", match_date:"2022-12-03 19:00" },
-    { id:"22-R16-2", round:"R16", home:"Argentina",    away:"Australia",    winner:"Argentina",    home_slot:"1C", away_slot:"2D", match_date:"2022-12-03 23:00" },
-    { id:"22-R16-3", round:"R16", home:"France",       away:"Poland",       winner:"France",       home_slot:"1D", away_slot:"2C", match_date:"2022-12-04 19:00" },
-    { id:"22-R16-4", round:"R16", home:"England",      away:"Senegal",      winner:"England",      home_slot:"1B", away_slot:"2A", match_date:"2022-12-04 23:00" },
-    { id:"22-R16-5", round:"R16", home:"Japan",        away:"Croatia",      winner:"Croatia",      home_slot:"1E", away_slot:"2F", match_date:"2022-12-05 19:00" },
-    { id:"22-R16-6", round:"R16", home:"Brazil",       away:"South Korea",  winner:"Brazil",       home_slot:"1G", away_slot:"2H", match_date:"2022-12-05 23:00" },
-    { id:"22-R16-7", round:"R16", home:"Morocco",      away:"Spain",        winner:"Morocco",      home_slot:"1F", away_slot:"2E", match_date:"2022-12-06 19:00" },
-    { id:"22-R16-8", round:"R16", home:"Portugal",     away:"Switzerland",  winner:"Portugal",     home_slot:"1H", away_slot:"2G", match_date:"2022-12-06 23:00" },
-    { id:"22-QF-1",  round:"QF",  home:"Netherlands",  away:"Argentina",    winner:"Argentina",    home_slot:"W 22-R16-1", away_slot:"W 22-R16-2", match_date:"2022-12-09 19:00" },
-    { id:"22-QF-2",  round:"QF",  home:"France",       away:"England",      winner:"France",       home_slot:"W 22-R16-3", away_slot:"W 22-R16-4", match_date:"2022-12-10 19:00" },
-    { id:"22-QF-3",  round:"QF",  home:"Croatia",      away:"Brazil",       winner:"Croatia",      home_slot:"W 22-R16-5", away_slot:"W 22-R16-6", match_date:"2022-12-09 23:00" },
-    { id:"22-QF-4",  round:"QF",  home:"Morocco",      away:"Portugal",     winner:"Morocco",      home_slot:"W 22-R16-7", away_slot:"W 22-R16-8", match_date:"2022-12-10 23:00" },
-    { id:"22-SF-1",  round:"SF",  home:"Argentina",    away:"Croatia",      winner:"Argentina",    home_slot:"W 22-QF-1",  away_slot:"W 22-QF-3",  match_date:"2022-12-13 23:00" },
-    { id:"22-SF-2",  round:"SF",  home:"France",       away:"Morocco",      winner:"France",       home_slot:"W 22-QF-2",  away_slot:"W 22-QF-4",  match_date:"2022-12-14 23:00" },
-    { id:"22-F",     round:"F",   home:"Argentina",    away:"France",       winner:"Argentina",    home_slot:"W 22-SF-1",  away_slot:"W 22-SF-2",  match_date:"2022-12-18 19:00" },
+    { id:"22-R16-1", round:"R16", home:"Netherlands",  away:"USA",          winner:"Netherlands",  home_slot:"1A", away_slot:"2B", match_date:"2022-12-03 15:00" },
+    { id:"22-R16-2", round:"R16", home:"Argentina",    away:"Australia",    winner:"Argentina",    home_slot:"1C", away_slot:"2D", match_date:"2022-12-03 19:00" },
+    { id:"22-R16-3", round:"R16", home:"France",       away:"Poland",       winner:"France",       home_slot:"1D", away_slot:"2C", match_date:"2022-12-04 15:00" },
+    { id:"22-R16-4", round:"R16", home:"England",      away:"Senegal",      winner:"England",      home_slot:"1B", away_slot:"2A", match_date:"2022-12-04 19:00" },
+    { id:"22-R16-5", round:"R16", home:"Japan",        away:"Croatia",      winner:"Croatia",      home_slot:"1E", away_slot:"2F", match_date:"2022-12-05 15:00" },
+    { id:"22-R16-6", round:"R16", home:"Brazil",       away:"South Korea",  winner:"Brazil",       home_slot:"1G", away_slot:"2H", match_date:"2022-12-05 19:00" },
+    { id:"22-R16-7", round:"R16", home:"Morocco",      away:"Spain",        winner:"Morocco",      home_slot:"1F", away_slot:"2E", match_date:"2022-12-06 15:00" },
+    { id:"22-R16-8", round:"R16", home:"Portugal",     away:"Switzerland",  winner:"Portugal",     home_slot:"1H", away_slot:"2G", match_date:"2022-12-06 19:00" },
+    { id:"22-QF-1",  round:"QF",  home:"Netherlands",  away:"Argentina",    winner:"Argentina",    home_slot:"W 22-R16-1", away_slot:"W 22-R16-2", match_date:"2022-12-09 15:00" },
+    { id:"22-QF-2",  round:"QF",  home:"France",       away:"England",      winner:"France",       home_slot:"W 22-R16-3", away_slot:"W 22-R16-4", match_date:"2022-12-10 15:00" },
+    { id:"22-QF-3",  round:"QF",  home:"Croatia",      away:"Brazil",       winner:"Croatia",      home_slot:"W 22-R16-5", away_slot:"W 22-R16-6", match_date:"2022-12-09 19:00" },
+    { id:"22-QF-4",  round:"QF",  home:"Morocco",      away:"Portugal",     winner:"Morocco",      home_slot:"W 22-R16-7", away_slot:"W 22-R16-8", match_date:"2022-12-10 19:00" },
+    { id:"22-SF-1",  round:"SF",  home:"Argentina",    away:"Croatia",      winner:"Argentina",    home_slot:"W 22-QF-1",  away_slot:"W 22-QF-3",  match_date:"2022-12-13 19:00" },
+    { id:"22-SF-2",  round:"SF",  home:"France",       away:"Morocco",      winner:"France",       home_slot:"W 22-QF-2",  away_slot:"W 22-QF-4",  match_date:"2022-12-14 19:00" },
+    { id:"22-F",     round:"F",   home:"Argentina",    away:"France",       winner:"Argentina",    home_slot:"W 22-SF-1",  away_slot:"W 22-SF-2",  match_date:"2022-12-18 15:00" },
   ];
   const insertKo22 = db.prepare("INSERT INTO wc2022_knockout_matches (id, round, home_slot, away_slot, home_team_id, away_team_id, winner_team_id, status, match_date) VALUES (?, ?, ?, ?, ?, ?, ?, 'finished', ?)");
   for (const m of WC2022_KO) {
     insertKo22.run(m.id, m.round, m.home_slot, m.away_slot, t22[m.home], t22[m.away], t22[m.winner], m.match_date);
   }
+}
+
+// Migrate WC2022 KO match times: original seed had all times 4 hours too late
+// (Qatar local time was mistakenly stored instead of UTC). Correct times are UTC.
+const WC2022_KO_TIME_FIXES = {
+  "22-R16-1": "2022-12-03 15:00", "22-R16-2": "2022-12-03 19:00",
+  "22-R16-3": "2022-12-04 15:00", "22-R16-4": "2022-12-04 19:00",
+  "22-R16-5": "2022-12-05 15:00", "22-R16-6": "2022-12-05 19:00",
+  "22-R16-7": "2022-12-06 15:00", "22-R16-8": "2022-12-06 19:00",
+  "22-QF-1":  "2022-12-09 15:00", "22-QF-2":  "2022-12-10 15:00",
+  "22-QF-3":  "2022-12-09 19:00", "22-QF-4":  "2022-12-10 19:00",
+  "22-SF-1":  "2022-12-13 19:00", "22-SF-2":  "2022-12-14 19:00",
+  "22-F":     "2022-12-18 15:00",
+};
+const fixKo22Time = db.prepare("UPDATE wc2022_knockout_matches SET match_date = ? WHERE id = ? AND match_date != ?");
+for (const [id, date] of Object.entries(WC2022_KO_TIME_FIXES)) {
+  fixKo22Time.run(date, id, date);
 }
 
 // Add score columns to wc2022_knockout_matches (AET scores)
@@ -412,17 +430,17 @@ const KO_SCHEDULE = [
   // Round of 32 — June 28 - July 4
   { id: "R32-1",  round: "R32", home_slot: "2A",      away_slot: "2B",           match_date: "2026-06-28 19:00" },
   { id: "R32-2",  round: "R32", home_slot: "1E",      away_slot: "3A/B/C/D/F",   match_date: "2026-06-29 20:30" },
-  { id: "R32-3",  round: "R32", home_slot: "1F",      away_slot: "2C",           match_date: "2026-06-29 01:00" },
-  { id: "R32-4",  round: "R32", home_slot: "1C",      away_slot: "2F",           match_date: "2026-06-29 16:00" },
+  { id: "R32-3",  round: "R32", home_slot: "1F",      away_slot: "2C",           match_date: "2026-06-30 01:00" },
+  { id: "R32-4",  round: "R32", home_slot: "1C",      away_slot: "2F",           match_date: "2026-06-29 17:00" },
   { id: "R32-5",  round: "R32", home_slot: "1I",      away_slot: "3C/D/F/G/H",   match_date: "2026-06-30 21:00" },
   { id: "R32-6",  round: "R32", home_slot: "2E",      away_slot: "2I",           match_date: "2026-06-30 17:00" },
-  { id: "R32-7",  round: "R32", home_slot: "1A",      away_slot: "3C/E/F/H/I",   match_date: "2026-06-30 01:00" },
+  { id: "R32-7",  round: "R32", home_slot: "1A",      away_slot: "3C/E/F/H/I",   match_date: "2026-07-01 01:00" },
   { id: "R32-8",  round: "R32", home_slot: "1L",      away_slot: "3E/H/I/J/K",   match_date: "2026-07-01 16:00" },
-  { id: "R32-9",  round: "R32", home_slot: "1D",      away_slot: "3B/E/F/I/J",   match_date: "2026-07-01 00:00" },
+  { id: "R32-9",  round: "R32", home_slot: "1D",      away_slot: "3B/E/F/I/J",   match_date: "2026-07-02 00:00" },
   { id: "R32-10", round: "R32", home_slot: "1G",      away_slot: "3A/E/H/I/J",   match_date: "2026-07-01 20:00" },
   { id: "R32-11", round: "R32", home_slot: "2K",      away_slot: "2L",           match_date: "2026-07-02 23:00" },
   { id: "R32-12", round: "R32", home_slot: "1H",      away_slot: "2J",           match_date: "2026-07-02 19:00" },
-  { id: "R32-13", round: "R32", home_slot: "1B",      away_slot: "3E/F/G/I/J",   match_date: "2026-07-02 03:00" },
+  { id: "R32-13", round: "R32", home_slot: "1B",      away_slot: "3E/F/G/I/J",   match_date: "2026-07-03 03:00" },
   { id: "R32-14", round: "R32", home_slot: "1J",      away_slot: "2H",           match_date: "2026-07-03 22:00" },
   { id: "R32-15", round: "R32", home_slot: "1K",      away_slot: "3D/E/I/J/L",   match_date: "2026-07-04 01:30" },
   { id: "R32-16", round: "R32", home_slot: "2D",      away_slot: "2G",           match_date: "2026-07-03 18:00" },
@@ -430,16 +448,16 @@ const KO_SCHEDULE = [
   { id: "R16-1",  round: "R16", home_slot: "W R32-2", away_slot: "W R32-5",  match_date: "2026-07-04 21:00" },
   { id: "R16-2",  round: "R16", home_slot: "W R32-1", away_slot: "W R32-3",  match_date: "2026-07-04 17:00" },
   { id: "R16-3",  round: "R16", home_slot: "W R32-4", away_slot: "W R32-6",  match_date: "2026-07-05 20:00" },
-  { id: "R16-4",  round: "R16", home_slot: "W R32-7", away_slot: "W R32-8",  match_date: "2026-07-05 00:00" },
+  { id: "R16-4",  round: "R16", home_slot: "W R32-7", away_slot: "W R32-8",  match_date: "2026-07-06 00:00" },
   { id: "R16-5",  round: "R16", home_slot: "W R32-11",away_slot: "W R32-12", match_date: "2026-07-06 19:00" },
-  { id: "R16-6",  round: "R16", home_slot: "W R32-9", away_slot: "W R32-10", match_date: "2026-07-06 00:00" },
+  { id: "R16-6",  round: "R16", home_slot: "W R32-9", away_slot: "W R32-10", match_date: "2026-07-07 00:00" },
   { id: "R16-7",  round: "R16", home_slot: "W R32-14",away_slot: "W R32-16", match_date: "2026-07-07 16:00" },
   { id: "R16-8",  round: "R16", home_slot: "W R32-13",away_slot: "W R32-15", match_date: "2026-07-07 20:00" },
   // Quarter-finals — July 9-12
   { id: "QF-1",   round: "QF",  home_slot: "W R16-1", away_slot: "W R16-2",  match_date: "2026-07-09 20:00" },
   { id: "QF-2",   round: "QF",  home_slot: "W R16-5", away_slot: "W R16-6",  match_date: "2026-07-10 19:00" },
   { id: "QF-3",   round: "QF",  home_slot: "W R16-3", away_slot: "W R16-4",  match_date: "2026-07-11 21:00" },
-  { id: "QF-4",   round: "QF",  home_slot: "W R16-7", away_slot: "W R16-8",  match_date: "2026-07-12 00:00" },
+  { id: "QF-4",   round: "QF",  home_slot: "W R16-7", away_slot: "W R16-8",  match_date: "2026-07-12 01:00" },
   // Semi-finals — July 14-15
   { id: "SF-1",   round: "SF",  home_slot: "W QF-1",  away_slot: "W QF-2",   match_date: "2026-07-14 19:00" },
   { id: "SF-2",   round: "SF",  home_slot: "W QF-3",  away_slot: "W QF-4",   match_date: "2026-07-15 19:00" },
@@ -500,7 +518,7 @@ const WC2026_MATCH_DATES = [
   { home: "KOR", away: "RSA", date: "2026-06-25 01:00" },
   // Group B
   { home: "CAN", away: "BIH", date: "2026-06-12 19:00" },
-  { home: "SUI", away: "QAT", date: "2026-06-12 22:00" },
+  { home: "SUI", away: "QAT", date: "2026-06-13 19:00" },
   { home: "SUI", away: "BIH", date: "2026-06-18 19:00" },
   { home: "CAN", away: "QAT", date: "2026-06-18 22:00" },
   { home: "SUI", away: "CAN", date: "2026-06-24 19:00" },
@@ -514,11 +532,11 @@ const WC2026_MATCH_DATES = [
   { home: "MAR", away: "HAI", date: "2026-06-24 22:00" },
   // Group D
   { home: "USA", away: "PAR", date: "2026-06-13 01:00" },
-  { home: "AUS", away: "TUR", date: "2026-06-13 04:00" },
+  { home: "AUS", away: "TUR", date: "2026-06-14 04:00" },
   { home: "USA", away: "AUS", date: "2026-06-19 19:00" },
   { home: "TUR", away: "PAR", date: "2026-06-20 03:00" },
-  { home: "TUR", away: "USA", date: "2026-06-25 02:00" },
-  { home: "PAR", away: "AUS", date: "2026-06-25 02:00" },
+  { home: "TUR", away: "USA", date: "2026-06-26 02:00" },
+  { home: "PAR", away: "AUS", date: "2026-06-26 02:00" },
   // Group E
   { home: "GER", away: "CUW", date: "2026-06-14 17:00" },
   { home: "CIV", away: "ECU", date: "2026-06-14 23:00" },
