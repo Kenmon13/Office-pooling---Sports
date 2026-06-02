@@ -11,6 +11,11 @@ function authHeaders() {
   return headers;
 }
 
+export async function fetchUserPools() {
+  const res = await fetch(`${API}/user/pools`, { headers: authHeaders() });
+  return res.json();
+}
+
 export async function signUp(username, password, display_name) {
   const res = await fetch(`${API}/auth/signup`, {
     method: "POST",

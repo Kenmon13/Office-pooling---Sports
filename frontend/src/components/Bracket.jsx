@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { flag } from "../flags";
 
-function formatKoTime(utcStr) {
+function formatKoTime(utcStr, tzOffset) {
   if (!utcStr) return null;
-  const d = new Date(utcStr.replace(" ", "T") + "Z");
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const offset = tzOffset !== undefined ? tzOffset : (-new Date().getTimezoneOffset() / 60);
+  const ms = new Date(utcStr.replace(" ", "T") + "Z").getTime() + offset * 3600000;
+  const d = new Date(ms);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const h = d.getUTCHours();
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${h % 12 || 12}:${m} ${ampm}`;
 }
 
 const TBC_FLAG = "https://www.gstatic.com/onebox/sports/logos/crest_48dp.png";
@@ -13,28 +19,43 @@ function SlotLabel() {
   return <><img src={TBC_FLAG} className="team-flag tbc-flag" alt="" /> TBC</>;
 }
 
-function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, ko, matchOpen, meta, scoreData, onPick, onScore }) {
-  const [h, setH] = useState(scoreData?.home ?? "");
-  const [a, setA] = useState(scoreData?.away ?? "");
-  // Track which pick the error was set for — only show it when pred still matches
-  const [scoreError, setScoreError] = useState({ forPred: null, msg: "" });
-  const visibleError = scoreError.forPred === pred ? scoreError.msg : "";
+function evalPickError(pred, h, a) {
+  if (h === "" || a === "") return "";
+  const hv = parseInt(h, 10);
+  const av = parseInt(a, 10);
+  if (isNaN(hv) || isNaN(av)) return "";
+  if ((pred === "home" && hv <= av) || (pred === "away" && av <= hv))
+    return "Picked team's score must be higher";
+  return "";
+}
 
-  // Re-mount via key at call site when server scores change
+function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, ko, matchOpen, meta, scoreData, onPick, onScore, displayTzOffset }) {
+  const [h, setH] = useState(scoreData?.home != null ? String(scoreData.home) : "");
+  const [a, setA] = useState(scoreData?.away != null ? String(scoreData.away) : "");
+  const [scoreError, setScoreError] = useState(() => {
+    const h0 = scoreData?.home != null ? String(scoreData.home) : "";
+    const a0 = scoreData?.away != null ? String(scoreData.away) : "";
+    return { forPred: pred, msg: evalPickError(pred, h0, a0) };
+  });
+
+  // Event 1: pick changed — re-evaluate current scores for the new pick immediately
+  if (scoreError.forPred !== pred) {
+    setScoreError({ forPred: pred, msg: evalPickError(pred, h, a) });
+  }
+  const visibleError = scoreError.msg;
 
   const matchLocked = !matchOpen || (ko && ko.status !== "upcoming");
   const canPick = onPick && !matchLocked;
   const scoreDisabled = !onScore || matchLocked;
   const pickedNoScore = !!pred && !!ko?.home_team_name && !matchLocked && (h === "" || a === "");
 
+  // Event 2: score blur — validate and save
   const handleBlur = () => {
     if (!onScore || scoreDisabled) return;
     const hv = h === "" ? null : parseInt(h, 10);
     const av = a === "" ? null : parseInt(a, 10);
     if (hv !== null && !isNaN(hv) && av !== null && !isNaN(av)) {
-      if (pred === "home" && hv <= av) { setScoreError({ forPred: pred, msg: "Picked team's score must be higher" }); return; }
-      if (pred === "away" && av <= hv) { setScoreError({ forPred: pred, msg: "Picked team's score must be higher" }); return; }
-      setScoreError({ forPred: null, msg: "" });
+      setScoreError({ forPred: pred, msg: evalPickError(pred, h, a) });
       onScore(m.id, hv, av);
     }
   };
@@ -55,8 +76,8 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   const awayLabel = ko?.away_team_name ? <>{flag(ko.away_team_code)} {ko.away_team_name}</> : <SlotLabel />;
 
   const timeLabel = matchOpen
-    ? { text: "Closes " + formatKoTime(meta.closesAt), red: true }
-    : { text: "Opens " + formatKoTime(meta.opensAfter), red: false };
+    ? { text: "Closes " + formatKoTime(meta.closesAt, displayTzOffset), red: true }
+    : { text: "Opens " + formatKoTime(meta.opensAfter, displayTzOffset), red: false };
 
   return (
     <div
@@ -69,7 +90,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
         <div className="team-score-area" onClick={(e) => e.stopPropagation()}>
           {showInputs && (
             <input type="number" min="0" max="20" value={h}
-              onChange={(e) => { setH(e.target.value); setScoreError({ forPred: null, msg: "" }); }}
+              onChange={(e) => { setH(e.target.value); setScoreError({ forPred: pred, msg: "" }); }}
               onBlur={handleBlur}
               disabled={scoreDisabled} className="bracket-score-input" placeholder="?" />
           )}
@@ -82,7 +103,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
         <div className="team-score-area" onClick={(e) => e.stopPropagation()}>
           {showInputs && (
             <input type="number" min="0" max="20" value={a}
-              onChange={(e) => { setA(e.target.value); setScoreError({ forPred: null, msg: "" }); }}
+              onChange={(e) => { setA(e.target.value); setScoreError({ forPred: pred, msg: "" }); }}
               onBlur={handleBlur}
               disabled={scoreDisabled} className="bracket-score-input" placeholder="?" />
           )}
@@ -104,17 +125,17 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   );
 }
 
-function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {} }) {
+function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {}, displayTzOffset }) {
   const rounds = [
     {
       name: "Round of 32",
       matches: [
         { id: "R32-1", home: "2A", away: "2B" }, { id: "R32-3", home: "1F", away: "2C" },
         { id: "R32-2", home: "1E", away: "3A/B/C/D/F" }, { id: "R32-5", home: "1I", away: "3C/D/F/G/H" },
-        { id: "R32-4", home: "1C", away: "2F" }, { id: "R32-6", home: "2E", away: "2I" },
-        { id: "R32-7", home: "1A", away: "3C/E/F/H/I" }, { id: "R32-8", home: "1L", away: "3E/H/I/J/K" },
         { id: "R32-11", home: "2K", away: "2L" }, { id: "R32-12", home: "1H", away: "2J" },
         { id: "R32-9", home: "1D", away: "3B/E/F/I/J" }, { id: "R32-10", home: "1G", away: "3A/E/H/I/J" },
+        { id: "R32-4", home: "1C", away: "2F" }, { id: "R32-6", home: "2E", away: "2I" },
+        { id: "R32-7", home: "1A", away: "3C/E/F/H/I" }, { id: "R32-8", home: "1L", away: "3E/H/I/J/K" },
         { id: "R32-14", home: "1J", away: "2H" }, { id: "R32-16", home: "2D", away: "2G" },
         { id: "R32-13", home: "1B", away: "3E/F/G/I/J" }, { id: "R32-15", home: "1K", away: "3D/E/I/J/L" },
       ],
@@ -123,8 +144,8 @@ function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMat
       name: "Round of 16",
       matches: [
         { id: "R16-2", home: "W R32-1", away: "W R32-3" }, { id: "R16-1", home: "W R32-2", away: "W R32-5" },
-        { id: "R16-3", home: "W R32-4", away: "W R32-6" }, { id: "R16-4", home: "W R32-7", away: "W R32-8" },
         { id: "R16-5", home: "W R32-11", away: "W R32-12" }, { id: "R16-6", home: "W R32-9", away: "W R32-10" },
+        { id: "R16-3", home: "W R32-4", away: "W R32-6" }, { id: "R16-4", home: "W R32-7", away: "W R32-8" },
         { id: "R16-7", home: "W R32-14", away: "W R32-16" }, { id: "R16-8", home: "W R32-13", away: "W R32-15" },
       ],
     },
@@ -224,6 +245,7 @@ function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMat
                   scoreData={scoreData}
                   onPick={onPick}
                   onScore={onScore}
+                  displayTzOffset={displayTzOffset}
                 />
               );
             })}

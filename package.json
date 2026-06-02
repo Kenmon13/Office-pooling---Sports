@@ -2,6 +2,7 @@
   "name": "office-pooling-sports",
   "version": "1.0.0",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend && rm -rf backend/public && cp -r frontend/dist backend/public",
     "start": "node backend/index.js"
   }

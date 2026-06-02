@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { flag } from "../flags";
 
-function formatKoTime(utcStr) {
+function formatKoTime(utcStr, tzOffset) {
   if (!utcStr) return null;
-  const d = new Date(utcStr.replace(" ", "T") + "Z");
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const offset = tzOffset !== undefined ? tzOffset : (-new Date().getTimezoneOffset() / 60);
+  const ms = new Date(utcStr.replace(" ", "T") + "Z").getTime() + offset * 3600000;
+  const d = new Date(ms);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const h = d.getUTCHours();
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${h % 12 || 12}:${m} ${ampm}`;
 }
 
 const TBC_FLAG = "https://www.gstatic.com/onebox/sports/logos/crest_48dp.png";
@@ -62,11 +68,26 @@ function buildLines() {
 
 const LINES = buildLines();
 
-function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matchOpen, meta, scoreData, onPick, onScore }) {
-  const [h, setH] = useState(scoreData?.home ?? "");
-  const [a, setA] = useState(scoreData?.away ?? "");
-  // Track which pick the error was set for — only show it when pred still matches
-  const [scoreError, setScoreError] = useState({ forPred: null, msg: "" });
+function evalPickError2022(homePicked, awayPicked, h, a) {
+  if (h === "" || a === "") return "";
+  const hv = parseInt(h, 10);
+  const av = parseInt(a, 10);
+  if (isNaN(hv) || isNaN(av)) return "";
+  if ((homePicked && hv <= av) || (awayPicked && av <= hv))
+    return "Picked team's score must be higher";
+  return "";
+}
+
+function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matchOpen, meta, scoreData, onPick, onScore, displayTzOffset }) {
+  const [h, setH] = useState(scoreData?.home != null ? String(scoreData.home) : "");
+  const [a, setA] = useState(scoreData?.away != null ? String(scoreData.away) : "");
+  const [scoreError, setScoreError] = useState(() => {
+    const h0 = scoreData?.home != null ? String(scoreData.home) : "";
+    const a0 = scoreData?.away != null ? String(scoreData.away) : "";
+    const hp = pred && ko?.home_team_id && String(pred) === String(ko.home_team_id);
+    const ap = pred && ko?.away_team_id && String(pred) === String(ko.away_team_id);
+    return { forPred: pred, msg: evalPickError2022(hp, ap, h0, a0) };
+  });
 
   // For WC2022 the DB status is always 'finished' (tournament is over), so we
   // drive locked/finished state entirely from the mock-date-aware matchOpen flag.
@@ -80,16 +101,20 @@ function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matc
   const awayId = ko?.away_team_id;
   const homePicked = pred && String(pred) === String(homeId);
   const awayPicked = pred && String(pred) === String(awayId);
-  const visibleError = scoreError.forPred === pred ? scoreError.msg : "";
 
+  // Event 1: pick changed — re-evaluate current scores for the new pick immediately
+  if (scoreError.forPred !== pred) {
+    setScoreError({ forPred: pred, msg: evalPickError2022(homePicked, awayPicked, h, a) });
+  }
+  const visibleError = scoreError.msg;
+
+  // Event 2: score blur — validate and save
   const handleBlur = () => {
     if (!onScore || scoreDisabled) return;
     const hv = h === "" ? null : parseInt(h, 10);
     const av = a === "" ? null : parseInt(a, 10);
     if (hv !== null && !isNaN(hv) && av !== null && !isNaN(av)) {
-      if (homePicked && hv <= av) { setScoreError({ forPred: pred, msg: "Picked team's score must be higher" }); return; }
-      if (awayPicked && av <= hv) { setScoreError({ forPred: pred, msg: "Picked team's score must be higher" }); return; }
-      setScoreError({ forPred: null, msg: "" });
+      setScoreError({ forPred: pred, msg: evalPickError2022(homePicked, awayPicked, h, a) });
       onScore(matchId, hv, av);
     }
   };
@@ -110,8 +135,8 @@ function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matc
   const awayLabel = ko?.away_team_name ? <>{flag(ko.away_team_code)} {ko.away_team_name}</> : <SlotLabel />;
 
   const timeLabel = matchOpen
-    ? { text: "Closes: " + formatKoTime(meta.closesAt), red: true }
-    : { text: meta.opensAfter ? "Opens: " + formatKoTime(meta.opensAfter) : null, red: false };
+    ? { text: "Closes: " + formatKoTime(meta.closesAt, displayTzOffset), red: true }
+    : { text: meta.opensAfter ? "Opens: " + formatKoTime(meta.opensAfter, displayTzOffset) : null, red: false };
 
   return (
     <div
@@ -124,7 +149,7 @@ function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matc
         <div className="team-score-area" onClick={(e) => e.stopPropagation()}>
           {showInputs && (
             <input type="number" min="0" max="20" value={h}
-              onChange={(e) => { setH(e.target.value); setScoreError({ forPred: null, msg: "" }); }}
+              onChange={(e) => { setH(e.target.value); setScoreError({ forPred: pred, msg: "" }); }}
               onBlur={handleBlur}
               disabled={scoreDisabled} className="bracket-score-input" placeholder="?" />
           )}
@@ -137,7 +162,7 @@ function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matc
         <div className="team-score-area" onClick={(e) => e.stopPropagation()}>
           {showInputs && (
             <input type="number" min="0" max="20" value={a}
-              onChange={(e) => { setA(e.target.value); setScoreError({ forPred: null, msg: "" }); }}
+              onChange={(e) => { setA(e.target.value); setScoreError({ forPred: pred, msg: "" }); }}
               onBlur={handleBlur}
               disabled={scoreDisabled} className="bracket-score-input" placeholder="?" />
           )}
@@ -159,7 +184,7 @@ function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matc
   );
 }
 
-function Bracket2022({ predictions = {}, scores = {}, onPick, onScore, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {} }) {
+function Bracket2022({ predictions = {}, scores = {}, onPick, onScore, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {}, displayTzOffset }) {
   const getKoMatch = (id) => koMatches.find((m) => m.id === id);
 
   const getMatchStatus = (id) => {
@@ -207,6 +232,7 @@ function Bracket2022({ predictions = {}, scores = {}, onPick, onScore, saving, k
                   scoreData={scoreData}
                   onPick={onPick}
                   onScore={onScore}
+                  displayTzOffset={displayTzOffset}
                 />
               );
             })}

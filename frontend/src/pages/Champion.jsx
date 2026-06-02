@@ -67,6 +67,7 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
       setSelectedTeam(null);
       setMsg("Winner pick saved!");
       setTimeout(() => setMsg(""), 3000);
+      window.dispatchEvent(new CustomEvent("picks-saved"));
     }
     setSaving(false);
   };
@@ -101,6 +102,19 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     <div className="page">
       <h2>Winner Pick</h2>
       <WinnerRules />
+
+      {statusLoaded && canPick && !hasPick && (
+        <div className="page-alerts">
+          <div className="notif-window-card win-urgent">
+            <div className="win-card-top">
+              <span className="win-icon">🏆</span>
+              <span className="win-title">Winner Pick</span>
+              <span className="win-badge win-badge-open">Open</span>
+            </div>
+            <div className="win-missed">⚠️ No pick made yet</div>
+          </div>
+        </div>
+      )}
 
       {renderPick()}
 

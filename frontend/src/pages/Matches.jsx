@@ -6,20 +6,31 @@ import {
 } from "../api";
 import { flag } from "../flags";
 
-function formatMatchDate(dateStr) {
-  if (!dateStr) return "";
-  const [date, time] = dateStr.split(" ");
-  const d = new Date(date + "T00:00:00");
-  const formatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return time ? `${formatted}, ${time}` : formatted;
+function applyTzOffset(dateStr, tzOffset) {
+  const offset = tzOffset !== undefined ? tzOffset : (-new Date().getTimezoneOffset() / 60);
+  const ms = new Date(dateStr.replace(" ", "T") + "Z").getTime() + offset * 3600000;
+  return new Date(ms);
 }
 
-function formatDeadlineFull(dateStr) {
+function formatMatchDate(dateStr, tzOffset) {
   if (!dateStr) return "";
-  const [date, time] = dateStr.split(" ");
-  const d = new Date(date + "T00:00:00");
-  const formatted = d.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" });
-  return time ? `${formatted} at ${time}` : formatted;
+  const d = applyTzOffset(dateStr, tzOffset);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const h = d.getUTCHours();
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${h % 12 || 12}:${m} ${ampm}`;
+}
+
+function formatDeadlineFull(dateStr, tzOffset) {
+  if (!dateStr) return "";
+  const d = applyTzOffset(dateStr, tzOffset);
+  const weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const h = d.getUTCHours();
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${weekdays[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()} at ${h % 12 || 12}:${m} ${ampm}`;
 }
 
 function useCountdown(deadline) {
@@ -28,7 +39,7 @@ function useCountdown(deadline) {
 
   useEffect(() => {
     if (!deadline) return;
-    const target = new Date(deadline.replace(" ", "T")).getTime();
+    const target = new Date(deadline.replace(" ", "T") + (deadline.includes("Z") ? "" : "Z")).getTime();
 
     const update = () => {
       const diff = target - Date.now();
@@ -52,7 +63,7 @@ function useCountdown(deadline) {
   return remaining;
 }
 
-function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
+function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset }) {
   const isWC2022 = tournament === "wc2022";
   const [matches, setMatches] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -94,7 +105,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
       fetchPredictionDeadline().then((data) => {
         if (data.deadline) {
           setDeadline(data.deadline);
-          const dl = new Date(data.deadline.replace(" ", "T"));
+          const dl = new Date(data.deadline.replace(" ", "T") + "Z");
           setLocked(new Date() >= dl);
         }
       });
@@ -171,6 +182,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     setPredictions(map);
     setSelections((prev) => ({ ...prev, ...sel }));
     setSaving(null);
+    window.dispatchEvent(new CustomEvent("picks-saved"));
   };
 
   // Build set of teams the user picked as top-2 in group predictions
@@ -182,32 +194,38 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     }
   }
 
+  // Effective third-place picks: raw picks minus any teams now promoted to top-2
+  const effectiveThirdPicks = thirdPicks.filter((tid) => !top2Set.has(tid));
+  const effectiveSavedThirdPicks = savedThirdPicks.filter((tid) => !top2Set.has(tid));
+
   const toggleThirdPick = (teamId) => {
     setThirdError("");
     setThirdPicks((prev) => {
       if (prev.includes(teamId)) return prev.filter((id) => id !== teamId);
-      if (prev.length >= 8) return prev;
+      const currentEffective = prev.filter((tid) => !top2Set.has(tid));
+      if (currentEffective.length >= 8) return prev;
       return [...prev, teamId];
     });
   };
 
   const handleSaveThird = async () => {
-    if (thirdPicks.length !== 8) return;
+    if (effectiveThirdPicks.length !== 8) return;
     setSavingThird(true);
     setThirdError("");
-    const res = await submitThirdPlacePredictions(currentUser.id, thirdPicks);
+    const res = await submitThirdPlacePredictions(currentUser.id, effectiveThirdPicks);
     if (res.error) {
       setThirdError(res.error);
     } else {
-      setSavedThirdPicks([...thirdPicks]);
+      setSavedThirdPicks([...effectiveThirdPicks]);
+      window.dispatchEvent(new CustomEvent("picks-saved"));
     }
     setSavingThird(false);
   };
 
   const thirdHasChanged = (() => {
-    if (thirdPicks.length !== savedThirdPicks.length) return true;
-    const a = [...thirdPicks].sort();
-    const b = [...savedThirdPicks].sort();
+    if (effectiveThirdPicks.length !== effectiveSavedThirdPicks.length) return true;
+    const a = [...effectiveThirdPicks].sort();
+    const b = [...effectiveSavedThirdPicks].sort();
     return a.some((v, i) => v !== b[i]);
   })();
 
@@ -230,6 +248,19 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
 
   const countdown = useCountdown(deadline);
 
+  const groupMissing = groups.filter((g) => !predictions[g.id]);
+  const groupAlertDone = groupMissing.length === 0;
+  const groupAlertRed = !groupAlertDone && !locked;
+  const groupAlertMsg = !groupAlertDone
+    ? (groupMissing.length === groups.length ? "No picks made" : `Missing: ${groupMissing.map((g) => `Group ${g.name}`).join(", ")}`)
+    : null;
+
+  const thirdAlertDone = effectiveSavedThirdPicks.length >= 8;
+  const thirdAlertRed = !thirdAlertDone && !locked;
+  const thirdAlertMsg = !thirdAlertDone
+    ? (effectiveSavedThirdPicks.length === 0 ? "No picks made" : `${effectiveSavedThirdPicks.length}/8 saved — pick ${8 - effectiveSavedThirdPicks.length} more`)
+    : null;
+
   return (
     <div className="page">
       <h2>Group Stages</h2>
@@ -242,6 +273,37 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           <li>Predictions lock once the first match of the group stage kicks off — you can update your picks until that time.</li>
         </ul>
       </div>
+
+      {currentUser && (groupAlertRed || (!isWC2022 && thirdAlertRed)) && (
+        <div className="page-alerts">
+          {groupAlertRed && (
+            <div className="notif-window-card win-urgent">
+              <div className="win-card-top">
+                <span className="win-icon">⚽</span>
+                <span className="win-title">Group Stage Predictions</span>
+                <span className="win-badge win-badge-open">Open</span>
+              </div>
+              {deadline && (
+                <div className="win-card-body">Closes {formatMatchDate(deadline, displayTzOffset)}</div>
+              )}
+              {groupAlertMsg && <div className="win-missed">⚠️ {groupAlertMsg}</div>}
+            </div>
+          )}
+          {!isWC2022 && thirdAlertRed && (
+            <div className="notif-window-card win-urgent">
+              <div className="win-card-top">
+                <span className="win-icon">⚽</span>
+                <span className="win-title">Third-Place Qualifiers</span>
+                <span className="win-badge win-badge-open">Open</span>
+              </div>
+              {deadline && (
+                <div className="win-card-body">Closes {formatMatchDate(deadline, displayTzOffset)}</div>
+              )}
+              {thirdAlertMsg && <div className="win-missed">⚠️ {thirdAlertMsg}</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {deadline && !locked && countdown && (
         <div className="deadline-banner">
@@ -268,7 +330,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           </div>
           <div className="deadline-info">
             <span className="deadline-label">Predictions lock on</span>
-            <span className="deadline-date">{formatDeadlineFull(deadline)}</span>
+            <span className="deadline-date">{formatDeadlineFull(deadline, displayTzOffset)}</span>
           </div>
         </div>
       )}
@@ -364,7 +426,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
                   )}
                   {gMatches.map((m) => (
                     <div key={m.id} className={`match-card ${m.status}`}>
-                      <div className="match-date">{formatMatchDate(m.match_date)}</div>
+                      <div className="match-date">{formatMatchDate(m.match_date, displayTzOffset)}</div>
                       <div className="match-teams">
                         <span className="team home">{flag(m.home_code)} {m.home_team}</span>
                         <span className="vs">
@@ -395,7 +457,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           {thirdError && <p className="error">{thirdError}</p>}
 
           <div className="third-place-counter">
-            {thirdPicks.length}/8 selected
+            {effectiveThirdPicks.length}/8 selected
           </div>
 
           <div className="third-place-grid">
@@ -413,8 +475,8 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
                     {availableTeams.map((t) => {
                       const tid = t.team_id || t.id;
                       const code = t.code;
-                      const isSelected = thirdPicks.includes(tid);
-                      const isDisabled = locked || (!isSelected && thirdPicks.length >= 8);
+                      const isSelected = effectiveThirdPicks.includes(tid);
+                      const isDisabled = locked || (!isSelected && effectiveThirdPicks.length >= 8);
                       return (
                         <button
                           key={tid}
@@ -434,24 +496,24 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate }) {
 
           {!locked && (
             <div className="third-place-footer">
-              {thirdPicks.length === 8 && thirdHasChanged && (
+              {effectiveThirdPicks.length === 8 && thirdHasChanged && (
                 <button
                   className="btn-submit"
                   onClick={handleSaveThird}
                   disabled={savingThird}
                 >
-                  {savingThird ? "Saving..." : savedThirdPicks.length > 0 ? "Update" : "Save"}
+                  {savingThird ? "Saving..." : effectiveSavedThirdPicks.length > 0 ? "Update" : "Save"}
                 </button>
               )}
-              {thirdPicks.length === 8 && !thirdHasChanged && savedThirdPicks.length > 0 && (
+              {effectiveThirdPicks.length === 8 && !thirdHasChanged && effectiveSavedThirdPicks.length > 0 && (
                 <span className="saved-label">Saved</span>
               )}
-              {thirdPicks.length < 8 && (
-                <span className="pick-hint">Pick {8 - thirdPicks.length} more</span>
+              {effectiveThirdPicks.length < 8 && (
+                <span className="pick-hint">Pick {8 - effectiveThirdPicks.length} more</span>
               )}
             </div>
           )}
-          {locked && savedThirdPicks.length > 0 && (
+          {locked && effectiveSavedThirdPicks.length > 0 && (
             <div className="third-place-footer">
               <span className="saved-label">Locked</span>
             </div>

@@ -20,6 +20,23 @@ const isoMap = {
   AUT: "at", JOR: "jo", COD: "cd",
 };
 
+export function localTzLabel(overrideOffsetHours) {
+  if (overrideOffsetHours !== undefined && overrideOffsetHours !== null) {
+    const sign = overrideOffsetHours >= 0 ? "+" : "-";
+    const abs = Math.abs(overrideOffsetHours);
+    const h = Math.floor(abs);
+    const m = Math.round((abs % 1) * 60);
+    return `UTC${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
+  }
+  const name = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const off = -new Date().getTimezoneOffset();
+  const h = Math.floor(Math.abs(off) / 60);
+  const m = Math.abs(off) % 60;
+  const sign = off >= 0 ? "+" : "-";
+  const offset = `UTC${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
+  return `${name} (${offset})`;
+}
+
 export function flag(code) {
   const iso = isoMap[code];
   if (!iso) return null;
