@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -25,10 +25,37 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const [backupLoading, setBackupLoading] = useState("");
   const [backupMsg, setBackupMsg] = useState(null);
   const [issues, setIssues] = useState([]);
+  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [issueReplies, setIssueReplies] = useState([]);
+  const [replyText, setReplyText] = useState("");
+  const [replySending, setReplySending] = useState(false);
   const fileInputRef = useRef(null);
 
   const loadBackups = () => adminListBackups().then((d) => { if (!d.error) setBackups(d); });
   const loadIssues = () => adminFetchIssues().then((d) => { if (!d.error) setIssues(d); });
+
+  const openAdminThread = async (issue) => {
+    setSelectedIssue(issue);
+    setReplyText("");
+    const data = await fetchIssueReplies(issue.id);
+    if (!data.error) setIssueReplies(data.replies || []);
+  };
+
+  const handleAdminReply = async () => {
+    if (!replyText.trim() || !selectedIssue) return;
+    setReplySending(true);
+    const res = await postIssueReply(selectedIssue.id, replyText.trim());
+    if (!res.error) {
+      setReplyText("");
+      const data = await fetchIssueReplies(selectedIssue.id);
+      if (!data.error) {
+        setIssueReplies(data.replies || []);
+        setSelectedIssue(data.issue);
+      }
+      loadIssues();
+    }
+    setReplySending(false);
+  };
 
   useEffect(() => {
     adminFetchPools().then((data) => { if (!data.error) setPools(data); });
@@ -395,7 +422,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
         </>
       )}
 
-      {tab === "issues" && (
+      {tab === "issues" && !selectedIssue && (
         <>
           <p className="select-subtitle">
             {issues.filter((i) => i.status === "open").length} open issue{issues.filter((i) => i.status === "open").length !== 1 ? "s" : ""}
@@ -405,33 +432,34 @@ function AdminPanel({ user, onSelectPool, onBack }) {
           <div className="pool-list">
             {issues.map((issue) => (
               <div key={issue.id} className={`pool-list-item issue-item ${issue.status}`}>
-                <div className="pool-list-btn issue-list-info">
+                <button className="pool-list-btn issue-list-info" onClick={() => openAdminThread(issue)}>
                   <div className="issue-header">
                     <span className={`issue-status-badge ${issue.status}`}>{issue.status}</span>
                     <span className="issue-author">{issue.display_name}</span>
                     <span className="pool-list-meta">{new Date(issue.created_at + "Z").toLocaleString()}</span>
                   </div>
                   <p className="issue-body">{issue.body}</p>
-                </div>
+                  {issue.reply_count > 0 && <span className="issue-reply-count">{issue.reply_count} repl{issue.reply_count === 1 ? "y" : "ies"}</span>}
+                </button>
                 <div className="issue-actions">
                   {issue.status === "open" ? (
                     <button
                       className="btn-submit backup-restore-inline"
-                      onClick={async () => { await adminUpdateIssue(issue.id, "resolved"); loadIssues(); }}
+                      onClick={async (e) => { e.stopPropagation(); await adminUpdateIssue(issue.id, "resolved"); loadIssues(); }}
                     >
                       Resolve
                     </button>
                   ) : (
                     <button
                       className="btn-submit backup-restore-inline"
-                      onClick={async () => { await adminUpdateIssue(issue.id, "open"); loadIssues(); }}
+                      onClick={async (e) => { e.stopPropagation(); await adminUpdateIssue(issue.id, "open"); loadIssues(); }}
                     >
                       Reopen
                     </button>
                   )}
                   <button
                     className="pool-delete-btn"
-                    onClick={async () => { if (confirm("Delete this issue?")) { await adminDeleteIssue(issue.id); loadIssues(); } }}
+                    onClick={async (e) => { e.stopPropagation(); if (confirm("Delete this issue?")) { await adminDeleteIssue(issue.id); loadIssues(); } }}
                   >
                     &times;
                   </button>
@@ -440,6 +468,54 @@ function AdminPanel({ user, onSelectPool, onBack }) {
             ))}
           </div>
         </>
+      )}
+
+      {tab === "issues" && selectedIssue && (
+        <div className="admin-issue-chat">
+          <div className="issue-chat-header">
+            <button className="btn-back" onClick={() => { setSelectedIssue(null); loadIssues(); }}>&larr;</button>
+            <h3>Issue #{selectedIssue.id} &mdash; {selectedIssue.display_name}</h3>
+            <span className={`issue-status-badge ${selectedIssue.status}`}>{selectedIssue.status}</span>
+            <div className="issue-actions" style={{ marginLeft: "auto" }}>
+              {selectedIssue.status === "open" ? (
+                <button className="btn-submit backup-restore-inline" onClick={async () => { await adminUpdateIssue(selectedIssue.id, "resolved"); setSelectedIssue({ ...selectedIssue, status: "resolved" }); loadIssues(); }}>Resolve</button>
+              ) : (
+                <button className="btn-submit backup-restore-inline" onClick={async () => { await adminUpdateIssue(selectedIssue.id, "open"); setSelectedIssue({ ...selectedIssue, status: "open" }); loadIssues(); }}>Reopen</button>
+              )}
+            </div>
+          </div>
+          <div className="issue-chat-messages">
+            <div className="issue-chat-bubble user-bubble">
+              <div className="issue-chat-bubble-meta">
+                <strong>{selectedIssue.display_name}</strong>
+                <span>{new Date(selectedIssue.created_at + "Z").toLocaleString()}</span>
+              </div>
+              <p>{selectedIssue.body}</p>
+            </div>
+            {issueReplies.map((r) => (
+              <div key={r.id} className={`issue-chat-bubble ${r.is_admin ? "admin-bubble" : "user-bubble"}`}>
+                <div className="issue-chat-bubble-meta">
+                  <strong>{r.display_name}{r.is_admin ? " (Admin)" : ""}</strong>
+                  <span>{new Date(r.created_at + "Z").toLocaleString()}</span>
+                </div>
+                <p>{r.body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="issue-chat-input">
+            <input
+              type="text"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Type a reply..."
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdminReply(); } }}
+              autoFocus
+            />
+            <button className="btn-submit" onClick={handleAdminReply} disabled={replySending || !replyText.trim()}>
+              {replySending ? "..." : "Send"}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

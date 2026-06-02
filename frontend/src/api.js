@@ -97,6 +97,25 @@ export async function submitIssue(body) {
   return res.json();
 }
 
+export async function fetchMyIssues() {
+  const res = await fetch(`${API}/issues/mine`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function fetchIssueReplies(issueId) {
+  const res = await fetch(`${API}/issues/${issueId}/replies`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function postIssueReply(issueId, body) {
+  const res = await fetch(`${API}/issues/${issueId}/replies`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ body }),
+  });
+  return res.json();
+}
+
 export async function adminFetchIssues() {
   const res = await fetch(`${API}/admin/issues`, { headers: authHeaders() });
   return res.json();

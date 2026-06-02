@@ -17,10 +17,11 @@ export const PATCH_NOTES = [
     id: 8,
     version: "v1.8",
     date: "2026-06-02",
-    title: "Emoji Reactions & User Details",
+    title: "Emoji Reactions, User Details & Support Chat",
     items: [
       "Emoji picker in pool chat — react to the banter with one tap",
       "Your display name and details now show consistently across all pages",
+      "Report Issue is now a full support chat — see your past issues and exchange messages with admin in real time",
     ],
   },
   {

@@ -140,8 +140,55 @@ app.post("/api/issues", authenticateToken, (req, res) => {
   res.json({ id: result.lastInsertRowid, success: true });
 });
 
+// User: get my issues with reply counts
+app.get("/api/issues/mine", authenticateToken, (req, res) => {
+  const issues = db.prepare(`
+    SELECT i.*, COUNT(r.id) AS reply_count
+    FROM issues i
+    LEFT JOIN issue_replies r ON r.issue_id = i.id
+    WHERE i.user_id = ?
+    GROUP BY i.id
+    ORDER BY i.created_at DESC
+  `).all(req.user.id);
+  res.json(issues);
+});
+
+// Get replies for an issue (user can only see their own, admin can see all)
+app.get("/api/issues/:id/replies", authenticateToken, (req, res) => {
+  const issue = db.prepare("SELECT * FROM issues WHERE id = ?").get(req.params.id);
+  if (!issue) return res.status(404).json({ error: "Issue not found" });
+  const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(req.user.id);
+  if (issue.user_id !== req.user.id && !user.is_admin) return res.status(403).json({ error: "Forbidden" });
+  const replies = db.prepare("SELECT * FROM issue_replies WHERE issue_id = ? ORDER BY created_at ASC").all(req.params.id);
+  res.json({ issue, replies });
+});
+
+// Post a reply to an issue
+app.post("/api/issues/:id/replies", authenticateToken, (req, res) => {
+  const { body } = req.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: "Reply cannot be empty" });
+  const issue = db.prepare("SELECT * FROM issues WHERE id = ?").get(req.params.id);
+  if (!issue) return res.status(404).json({ error: "Issue not found" });
+  const user = db.prepare("SELECT display_name, is_admin FROM users WHERE id = ?").get(req.user.id);
+  if (issue.user_id !== req.user.id && !user.is_admin) return res.status(403).json({ error: "Forbidden" });
+  const result = db.prepare("INSERT INTO issue_replies (issue_id, user_id, display_name, body, is_admin) VALUES (?, ?, ?, ?, ?)").run(
+    req.params.id, req.user.id, user.display_name, body.trim(), user.is_admin ? 1 : 0
+  );
+  // Reopen issue if user replies to a resolved issue
+  if (!user.is_admin && issue.status === "resolved") {
+    db.prepare("UPDATE issues SET status = 'open' WHERE id = ?").run(req.params.id);
+  }
+  res.json({ id: result.lastInsertRowid, success: true });
+});
+
 app.get("/api/admin/issues", requireAdminToken, (req, res) => {
-  const issues = db.prepare("SELECT * FROM issues ORDER BY created_at DESC").all();
+  const issues = db.prepare(`
+    SELECT i.*, COUNT(r.id) AS reply_count
+    FROM issues i
+    LEFT JOIN issue_replies r ON r.issue_id = i.id
+    GROUP BY i.id
+    ORDER BY i.created_at DESC
+  `).all();
   res.json(issues);
 });
 
