@@ -1268,8 +1268,8 @@ app.get("/api/wc2022/leaderboard", (req, res) => {
   const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
 
   const participants = poolId
-    ? db.prepare("SELECT p.* FROM participants p LEFT JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND (u.is_admin = 0 OR u.is_admin IS NULL OR p.user_id IS NULL)").all(poolId)
-    : db.prepare("SELECT p.* FROM participants p LEFT JOIN users u ON p.user_id = u.id WHERE (u.is_admin = 0 OR u.is_admin IS NULL OR p.user_id IS NULL)").all();
+    ? db.prepare("SELECT p.* FROM participants p WHERE p.pool_id = ?").all(poolId)
+    : db.prepare("SELECT p.* FROM participants p").all();
 
   // Compute group qualifiers from WC2022 results filtered by effectiveNow
   const allGroupMatches = db.prepare("SELECT * FROM wc2022_matches WHERE status = 'finished'").all();
@@ -1381,7 +1381,7 @@ app.get("/api/wc2022/champion-pick/:participantId", (req, res) => {
   const canChange = windowOpen && !!pick;
   // 10pt fee applies only on the first change made in the post-group window
   const feePaid = pick && pick.change_cost > 0;
-  const changeCost = (inPostGroupWindow && !!pick && !feePaid) ? 5 : 0;
+  const changeCost = (inPostGroupWindow && !feePaid) ? 5 : 0;
   const finalMatch = db.prepare("SELECT winner_team_id, match_date FROM wc2022_knockout_matches WHERE id = '22-F'").get();
   const finalPlayed = finalMatch?.winner_team_id &&
     (!pool?.mock_date || !finalMatch.match_date || effectiveNow >= new Date(finalMatch.match_date.replace(" ", "T") + "Z").getTime());
@@ -1398,8 +1398,8 @@ app.post("/api/wc2022/champion-pick", (req, res) => {
   const inPostGroupWindow = effectiveNow >= LAST_2022_GROUP_MS && effectiveNow < FIRST_2022_R16_MS;
   if (!inPreGroupWindow && !inPostGroupWindow) return res.status(403).json({ error: "Champion pick window is closed" });
   const existing = db.prepare("SELECT * FROM wc2022_champion_picks WHERE participant_id = ?").get(participant_id);
-  // Charge 5pt fee on the first change made in the post-group window
-  const isFirstPostGroupChange = inPostGroupWindow && existing && (existing.change_cost || 0) === 0;
+  // Charge 5pt fee on the first pick/change made in the post-group window, even if no prior pick
+  const isFirstPostGroupChange = inPostGroupWindow && (existing?.change_cost || 0) === 0;
   const newChangeCost = isFirstPostGroupChange ? 5 : (existing?.change_cost || 0);
   const isChanged = existing ? 1 : 0;
   db.prepare(`
@@ -1431,7 +1431,7 @@ app.get("/api/champion-pick/:participantId", (req, res) => {
   const canInitialPick = windowOpen && !pick;
   const canChange = windowOpen && !!pick;
   const feePaid = pick && pick.change_cost > 0;
-  const changeCost = (inPostGroupWindow && !!pick && !feePaid) ? 5 : 0;
+  const changeCost = (inPostGroupWindow && !feePaid) ? 5 : 0;
   const finalMatch = db.prepare("SELECT winner_team_id FROM knockout_matches WHERE id = 'F'").get();
   const pickCorrect = !!(pick && finalMatch?.winner_team_id && String(pick.team_id) === String(finalMatch.winner_team_id));
   res.json({ canInitialPick, canChange, locked: lockedDuringGroups, changeCost, pick: pick || null, pickCorrect });
@@ -1449,8 +1449,8 @@ app.post("/api/champion-pick", (req, res) => {
   const inPostGroupWindow = groupStageComplete && !koStarted;
   if (!inPreGroupWindow && !inPostGroupWindow) return res.status(403).json({ error: "Champion pick window is closed" });
   const existing = db.prepare("SELECT * FROM champion_picks WHERE participant_id = ?").get(participant_id);
-  // Charge 5pt fee on the first change made in the post-group window
-  const isFirstPostGroupChange = inPostGroupWindow && existing && (existing.change_cost || 0) === 0;
+  // Charge 5pt fee on the first pick/change made in the post-group window, even if no prior pick
+  const isFirstPostGroupChange = inPostGroupWindow && (existing?.change_cost || 0) === 0;
   const newChangeCost = isFirstPostGroupChange ? 5 : (existing?.change_cost || 0);
   const isChanged = existing ? 1 : 0;
   db.prepare(`
@@ -1543,8 +1543,8 @@ app.get("/api/wc2022/history/:participantId", (req, res) => {
   `).get(participantId);
   if (champPick?.team_id && champPick.updated_at) {
     const pickDate = champPick.updated_at.slice(0, 16);
-    if (champPick.is_changed && champPick.change_cost > 0) {
-      events.push({ event_date: pickDate, type: "champion_change", description: `Winner pick changed to ${champPick.team_name} (−${champPick.change_cost} pts fee)`, pts_change: -champPick.change_cost });
+    if (champPick.change_cost > 0) {
+      events.push({ event_date: pickDate, type: "champion_change", description: `Winner pick: ${champPick.team_name} (−${champPick.change_cost} pts fee)`, pts_change: -champPick.change_cost });
     } else {
       events.push({ event_date: pickDate, type: "champion_pick", description: `Winner pick: ${champPick.team_name}`, pts_change: 0 });
     }
@@ -1676,8 +1676,8 @@ app.get("/api/history/:participantId", (req, res) => {
   `).get(participantId);
   if (champPick?.team_id && champPick.updated_at) {
     const pickDate = champPick.updated_at.slice(0, 16);
-    if (champPick.is_changed && champPick.change_cost > 0) {
-      events.push({ event_date: pickDate, type: "champion_change", description: `Winner pick changed to ${champPick.team_name} (−${champPick.change_cost} pts fee)`, pts_change: -champPick.change_cost });
+    if (champPick.change_cost > 0) {
+      events.push({ event_date: pickDate, type: "champion_change", description: `Winner pick: ${champPick.team_name} (−${champPick.change_cost} pts fee)`, pts_change: -champPick.change_cost });
     } else {
       events.push({ event_date: pickDate, type: "champion_pick", description: `Winner pick: ${champPick.team_name}`, pts_change: 0 });
     }

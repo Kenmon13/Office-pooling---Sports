@@ -309,6 +309,12 @@ function App() {
     localStorage.removeItem("pool_session");
   };
 
+  const handleSwitchPool = () => {
+    setPool(null);
+    setParticipant(null);
+    localStorage.removeItem("pool_session");
+  };
+
   const handleQuitPool = async () => {
     if (!pool) return;
     const res = await leavePool(pool.id);
@@ -435,6 +441,10 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          <div className="bell-wrapper">
+            <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
+            {(unreadPatchNotes + unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPatchNotes + unreadPoints + unreadWindows}</span>}
+          </div>
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
@@ -444,6 +454,17 @@ function App() {
           onBack={handleBackToSport}
         />
 
+        {showPatchNotes && (
+          <NotificationsModal
+            onClose={() => setShowPatchNotes(false)}
+            participant={null}
+            poolId={null}
+            tournament={null}
+            onReadUpdates={() => setUnreadPatchNotes(0)}
+            onReadPoints={() => setUnreadPoints(0)}
+            onUnreadWindows={handleUnreadWindows}
+          />
+        )}
         {showIssueChat && <IssueChatModal
           issueView={issueView} setIssueView={setIssueView}
           myIssues={myIssues} selectedIssue={selectedIssue}
@@ -465,6 +486,10 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          <div className="bell-wrapper">
+            <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
+            {(unreadPatchNotes + unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPatchNotes + unreadPoints + unreadWindows}</span>}
+          </div>
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
@@ -475,6 +500,17 @@ function App() {
           onBack={handleBackToTournament}
         />
 
+        {showPatchNotes && (
+          <NotificationsModal
+            onClose={() => setShowPatchNotes(false)}
+            participant={null}
+            poolId={null}
+            tournament={null}
+            onReadUpdates={() => setUnreadPatchNotes(0)}
+            onReadPoints={() => setUnreadPoints(0)}
+            onUnreadWindows={handleUnreadWindows}
+          />
+        )}
         {showIssueChat && <IssueChatModal
           issueView={issueView} setIssueView={setIssueView}
           myIssues={myIssues} selectedIssue={selectedIssue}
@@ -500,7 +536,7 @@ function App() {
               <h1>{selectedTournament.emoji} {pool.name}</h1>
               <p className="pool-meta">
                 {selectedTournament.name}
-                <button onClick={handleLeavePool} className="btn-small">
+                <button onClick={handleSwitchPool} className="btn-small">
                   Switch Pool
                 </button>
                 <button onClick={() => setShowQuitConfirm(true)} className="btn-small btn-quit">

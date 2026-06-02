@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { createPool, joinPool, fetchPublicPools } from "../api";
+import { useState, useEffect } from "react";
+import { createPool, joinPool, fetchPublicPools, fetchUserPools } from "../api";
 
 function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [mode, setMode] = useState(null); // null, "create", "join", "public"
@@ -10,6 +10,13 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [publicPools, setPublicPools] = useState([]);
   const [loadingPublic, setLoadingPublic] = useState(false);
   const [joiningPoolId, setJoiningPoolId] = useState(null);
+  const [myPools, setMyPools] = useState([]);
+
+  useEffect(() => {
+    fetchUserPools().then((data) => {
+      if (Array.isArray(data)) setMyPools(data.filter((p) => p.tournament === tournament.id));
+    }).catch(() => {});
+  }, [tournament.id]);
 
   const handlePublicBrowse = async () => {
     setMode("public");
@@ -94,6 +101,21 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
             <span className="sport-name">Public Pool</span>
           </button>
         </div>
+
+        {myPools.length > 0 && (
+          <div className="my-pools-section">
+            <p className="my-pools-title">Pools you are a member of</p>
+            <div className="pool-list">
+              {myPools.map((p) => (
+                <div key={p.id} className="pool-list-item">
+                  <button className="pool-list-btn" onClick={() => onJoin(p)}>
+                    <span className="pool-list-name">{p.name}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
