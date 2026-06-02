@@ -1,5 +1,27 @@
 export const PATCH_NOTES = [
   {
+    id: 11,
+    version: "v1.11",
+    date: "2026-06-02",
+    title: "Pool Settings & Password Reveal",
+    items: [
+      "Added a Pool Settings button so you can view your pool's name, type, and join password at any time",
+      "Private pool members can now reveal or hide the join password directly from the pool view",
+    ],
+  },
+  {
+    id: 10,
+    version: "v1.10",
+    date: "2026-06-02",
+    title: "Winner Pick Fixes & Navigation Improvements",
+    items: [
+      "Fixed winner pick fee: the −5 pts post-group window fee now applies correctly even if you skipped making a pick during the group stage",
+      "Your existing pools now appear below the Join/Create buttons so you can jump straight back in",
+      "Bell notifications now show on all screens, not just the main pool view",
+      "Switch Pool now returns you to the pool selection screen instead of the homepage",
+    ],
+  },
+  {
     id: 9,
     version: "v1.9",
     date: "2026-06-02",

@@ -373,6 +373,15 @@ app.post("/api/pools/join", (req, res) => {
   res.json({ id: pool.id, name: pool.name, sport: pool.sport, tournament: pool.tournament, is_test: pool.is_test, mock_date: pool.mock_date, is_public: pool.is_public });
 });
 
+app.get("/api/pools/:id/password", authenticateToken, (req, res) => {
+  const pool = db.prepare("SELECT id, password, is_public FROM pools WHERE id = ?").get(req.params.id);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  const member = db.prepare("SELECT id FROM participants WHERE pool_id = ? AND user_id = ?").get(req.params.id, req.user.id);
+  if (!member) return res.status(403).json({ error: "Not a member of this pool" });
+  if (pool.is_public) return res.json({ is_public: true, password: null });
+  res.json({ is_public: false, password: pool.password });
+});
+
 app.get("/api/pools/public", (req, res) => {
   const { sport, tournament } = req.query;
   let query = "SELECT id, name, sport, tournament, created_at, (SELECT COUNT(*) FROM participants WHERE pool_id = pools.id) as member_count FROM pools WHERE is_public = 1";

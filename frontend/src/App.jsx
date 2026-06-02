@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { PATCH_NOTES } from "./patchNotes";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
@@ -234,6 +234,9 @@ function App() {
 
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [showIssueChat, setShowIssueChat] = useState(false);
+  const [poolPassword, setPoolPassword] = useState(null);
+  const [showPoolSettings, setShowPoolSettings] = useState(false);
+  const [revealPassword, setRevealPassword] = useState(false);
   const [myIssues, setMyIssues] = useState([]);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [issueReplies, setIssueReplies] = useState([]);
@@ -312,6 +315,9 @@ function App() {
   const handleSwitchPool = () => {
     setPool(null);
     setParticipant(null);
+    setPoolPassword(null);
+    setShowPoolSettings(false);
+    setRevealPassword(false);
     localStorage.removeItem("pool_session");
   };
 
@@ -551,6 +557,15 @@ function App() {
                 }} className="btn-small btn-share">
                   Share Link
                 </button>
+                <button className="btn-small" onClick={async () => {
+                  if (!pool.is_public && !poolPassword) {
+                    const res = await fetchPoolPassword(pool.id);
+                    if (!res.error) setPoolPassword(res.password);
+                  }
+                  setShowPoolSettings(true);
+                }}>
+                  Pool Settings
+                </button>
               </p>
             </div>
             <div className="header-right">
@@ -613,6 +628,40 @@ function App() {
             <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
           </Routes>
         </main>
+
+        {showPoolSettings && (
+          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); }}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+              <h3>Pool Settings</h3>
+              <div className="pool-settings-row">
+                <span className="pool-settings-label">Pool name</span>
+                <span className="pool-settings-value">{pool.name}</span>
+              </div>
+              <div className="pool-settings-row">
+                <span className="pool-settings-label">Type</span>
+                <span className="pool-settings-value">{pool.is_public ? "Public" : "Private"}</span>
+              </div>
+              {!pool.is_public && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Password</span>
+                  <span className="pool-settings-value">
+                    {revealPassword ? (
+                      <span className="pool-password-display">{poolPassword}</span>
+                    ) : (
+                      <span className="pool-password-hidden">••••••••</span>
+                    )}
+                    <button className="btn-small" style={{ marginLeft: 8 }} onClick={() => setRevealPassword((v) => !v)}>
+                      {revealPassword ? "Hide" : "Reveal"}
+                    </button>
+                  </span>
+                </div>
+              )}
+              <div className="modal-actions">
+                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); }}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showQuitConfirm && (
           <div className="modal-overlay" onClick={() => setShowQuitConfirm(false)}>
