@@ -1216,6 +1216,16 @@ nav a.active {
   color: #6fdc6f;
 }
 
+.my-pools-section {
+  margin-top: 32px;
+}
+
+.my-pools-title {
+  font-size: 13px;
+  color: #5a8a5a;
+  margin-bottom: 10px;
+}
+
 .pool-list {
   display: flex;
   flex-direction: column;

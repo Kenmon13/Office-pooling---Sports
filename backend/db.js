@@ -403,6 +403,12 @@ try { db.exec("ALTER TABLE wc2022_knockout_matches ADD COLUMN away_score INTEGER
 try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_home_score INTEGER"); } catch (_) {}
 try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_away_score INTEGER"); } catch (_) {}
 
+// Add change_cost to champion pick tables (for post-group window fee tracking)
+try { db.exec("ALTER TABLE champion_picks ADD COLUMN change_cost INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE wc2022_champion_picks ADD COLUMN change_cost INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE champion_picks ADD COLUMN is_changed INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE wc2022_champion_picks ADD COLUMN is_changed INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
 // Seed WC2022 actual KO scores (AET where applicable; penalties not counted in score)
 const WC2022_KO_SCORES = [
   { id: "22-R16-1", hs: 3, as: 1 }, // Netherlands 3-1 USA

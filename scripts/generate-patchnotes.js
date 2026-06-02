@@ -34,10 +34,17 @@ function getContext() {
 }
 
 function callClaude(prompt) {
-  const result = spawnSync("claude", ["-p", prompt], {
-    encoding: "utf8",
-    timeout: 60000,
-  });
+  const os = require("os");
+  const tmpFile = path.join(os.tmpdir(), `patchnotes-${Date.now()}.txt`);
+  fs.writeFileSync(tmpFile, prompt, "utf8");
+
+  const npmBin = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "npm");
+  const claudePath = path.join(npmBin, "claude.cmd");
+  const cmd = `"${claudePath}" < "${tmpFile}"`;
+
+  const result = spawnSync(cmd, [], { encoding: "utf8", timeout: 60000, shell: true });
+  try { fs.unlinkSync(tmpFile); } catch {}
+
   if (result.error) throw new Error(`claude CLI not found: ${result.error.message}`);
   if (result.status !== 0) throw new Error(`claude exited ${result.status}: ${result.stderr}`);
   return result.stdout.trim();

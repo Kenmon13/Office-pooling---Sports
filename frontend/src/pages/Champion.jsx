@@ -136,9 +136,9 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
         </div>
       )}
 
-      {canChange && changeCost > 0 && (
+      {canInteract && changeCost > 0 && (
         <div className="champion-change-banner champion-change-cost-banner">
-          <strong>Post-group change window is open</strong> — changing your pick now costs <strong>−{changeCost} pts</strong> (one-time fee; all further changes this window are free).
+          <strong>Post-group window is open</strong> — {hasPick ? "changing your pick" : "making your first pick"} now costs <strong>−{changeCost} pts</strong> (one-time fee; all further changes this window are free).
         </div>
       )}
 
