@@ -519,10 +519,12 @@ app.get("/api/group-predictions/:participantId", (req, res) => {
   const predictions = db
     .prepare(`
       SELECT gp.*, t1.name as team1_name, t1.code as team1_code,
-        t2.name as team2_name, t2.code as team2_code
+        t2.name as team2_name, t2.code as team2_code,
+        t3.name as team3_name, t3.code as team3_code
       FROM group_predictions gp
       JOIN teams t1 ON gp.team1_id = t1.id
       JOIN teams t2 ON gp.team2_id = t2.id
+      LEFT JOIN teams t3 ON gp.team3_id = t3.id
       WHERE gp.participant_id = ?
     `)
     .all(req.params.participantId);
@@ -536,7 +538,7 @@ app.get("/api/prediction-deadline", (req, res) => {
 });
 
 app.post("/api/group-predictions", (req, res) => {
-  const { participant_id, group_id, team1_id, team2_id } = req.body;
+  const { participant_id, predictions } = req.body;
 
   // Check deadline - lock predictions before first match
   const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
@@ -547,25 +549,48 @@ app.post("/api/group-predictions", (req, res) => {
     }
   }
 
-  if (!participant_id || !group_id || !team1_id || !team2_id) {
-    return res.status(400).json({ error: "All fields are required" });
-  }
-  if (team1_id === team2_id) {
-    return res.status(400).json({ error: "Must pick two different teams" });
+  if (!participant_id || !Array.isArray(predictions) || predictions.length === 0) {
+    return res.status(400).json({ error: "participant_id and predictions array required" });
   }
 
-  // Check both teams belong to this group
-  const teams = db.prepare("SELECT id FROM teams WHERE group_id = ? AND id IN (?, ?)").all(group_id, team1_id, team2_id);
-  if (teams.length !== 2) {
-    return res.status(400).json({ error: "Teams must belong to this group" });
+  // Count how many groups have a 3rd pick — max 8 allowed
+  const thirdPickCount = predictions.filter((p) => p.team3_id).length;
+  if (thirdPickCount > 8) {
+    return res.status(400).json({ error: "You can only pick a 3rd-place team in up to 8 groups" });
+  }
+
+  // Validate each prediction
+  for (const pred of predictions) {
+    const { group_id, team1_id, team2_id, team3_id } = pred;
+    if (!group_id || !team1_id || !team2_id) {
+      return res.status(400).json({ error: "Each prediction needs group_id, team1_id, and team2_id" });
+    }
+    const allPicked = [team1_id, team2_id, team3_id].filter(Boolean);
+    if (new Set(allPicked).size !== allPicked.length) {
+      return res.status(400).json({ error: "Must pick different teams within a group" });
+    }
+    // Check teams belong to this group
+    const teams = db.prepare(
+      `SELECT id FROM teams WHERE group_id = ? AND id IN (${allPicked.map(() => "?").join(",")})`
+    ).all(group_id, ...allPicked);
+    if (teams.length !== allPicked.length) {
+      return res.status(400).json({ error: "Teams must belong to their group" });
+    }
   }
 
   try {
-    db.prepare(`
-      INSERT INTO group_predictions (participant_id, group_id, team1_id, team2_id)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(participant_id, group_id) DO UPDATE SET team1_id = excluded.team1_id, team2_id = excluded.team2_id
-    `).run(participant_id, group_id, team1_id, team2_id);
+    const upsert = db.prepare(`
+      INSERT INTO group_predictions (participant_id, group_id, team1_id, team2_id, team3_id)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(participant_id, group_id) DO UPDATE SET
+        team1_id = excluded.team1_id, team2_id = excluded.team2_id, team3_id = excluded.team3_id
+    `);
+    const txn = db.transaction(() => {
+      for (const pred of predictions) {
+        upsert.run(participant_id, pred.group_id, pred.team1_id, pred.team2_id, pred.team3_id || null);
+      }
+    });
+    txn();
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -801,9 +826,6 @@ app.get("/api/leaderboard", (req, res) => {
     }
   }
 
-  // Get all third-place predictions
-  const allThirdPreds = db.prepare("SELECT * FROM third_place_predictions").all();
-
   // Get knockout data for scoring
   const koMatches = db.prepare("SELECT * FROM knockout_matches WHERE status = 'finished'").all();
   const allKoPredictions = db.prepare("SELECT * FROM knockout_predictions").all();
@@ -832,11 +854,10 @@ app.get("/api/leaderboard", (req, res) => {
       else if (correctCount === 1) { points += 2; groups_half++; }
     }
 
-    // Third-place prediction scoring — 1 pt per correct pick
+    // Third-place prediction scoring — 1 pt per correct pick (from team3_id in group_predictions)
     if (thirdPlaceQualifiers.size > 0) {
-      const myThirdPreds = allThirdPreds.filter((tp) => tp.participant_id === p.id);
-      for (const tp of myThirdPreds) {
-        if (thirdPlaceQualifiers.has(tp.team_id)) {
+      for (const pred of myPreds) {
+        if (pred.team3_id && thirdPlaceQualifiers.has(pred.team3_id)) {
           third_correct++;
           third_points++;
         }
@@ -1624,25 +1645,22 @@ app.get("/api/history/:participantId", (req, res) => {
     }
     thirdPlaceTeamsH.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
     const qualifiedThird = new Set(thirdPlaceTeamsH.slice(0, 8).map((t) => t.team_id));
-    const myThirdPreds = db.prepare(`
-      SELECT tp.*, t.name as team_name FROM third_place_predictions tp
-      JOIN teams t ON tp.team_id = t.id WHERE tp.participant_id = ?
+    const myGroupPreds = db.prepare(`
+      SELECT gp.team3_id, t.name as team_name FROM group_predictions gp
+      LEFT JOIN teams t ON gp.team3_id = t.id
+      WHERE gp.participant_id = ? AND gp.team3_id IS NOT NULL
     `).all(participantId);
-    if (myThirdPreds.length > 0) {
+    if (myGroupPreds.length > 0) {
       const correctNames = [];
-      const wrongNames = [];
       let thirdPts = 0;
-      for (const tp of myThirdPreds) {
-        if (qualifiedThird.has(tp.team_id)) {
-          correctNames.push(tp.team_name);
+      for (const gp of myGroupPreds) {
+        if (qualifiedThird.has(gp.team3_id)) {
+          correctNames.push(gp.team_name);
           thirdPts++;
-        } else {
-          wrongNames.push(tp.team_name);
         }
       }
-      // Use the last group match date as the event date
       const lastGroupDate = Object.values(groupLastDate).sort().pop();
-      const desc = `Third-place qualifiers: ${correctNames.length}/8 correct` +
+      const desc = `Third-place qualifiers: ${correctNames.length}/${myGroupPreds.length} correct` +
         (correctNames.length > 0 ? ` (${correctNames.join(", ")})` : "");
       events.push({ event_date: lastGroupDate, type: "third_place", description: desc, pts_change: thirdPts });
     }

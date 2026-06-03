@@ -74,6 +74,7 @@ db.exec(`
     group_id INTEGER NOT NULL REFERENCES groups(id),
     team1_id INTEGER NOT NULL REFERENCES teams(id),
     team2_id INTEGER NOT NULL REFERENCES teams(id),
+    team3_id INTEGER REFERENCES teams(id),
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(participant_id, group_id)
   );
@@ -134,6 +135,28 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 `);
+
+// Add team3_id (third-place qualifier) to group_predictions
+try { db.exec("ALTER TABLE group_predictions ADD COLUMN team3_id INTEGER REFERENCES teams(id)"); } catch (_) {}
+
+// Migrate existing third_place_predictions into group_predictions.team3_id
+try {
+  const migrated = db.prepare("SELECT COUNT(*) as n FROM group_predictions WHERE team3_id IS NOT NULL").get();
+  const thirdPreds = db.prepare("SELECT participant_id, team_id FROM third_place_predictions").all();
+  if (thirdPreds.length > 0 && migrated.n === 0) {
+    const teamGroups = db.prepare("SELECT id, group_id FROM teams").all();
+    const teamToGroup = {};
+    for (const t of teamGroups) teamToGroup[t.id] = t.group_id;
+    const update = db.prepare("UPDATE group_predictions SET team3_id = ? WHERE participant_id = ? AND group_id = ? AND team3_id IS NULL");
+    const txn = db.transaction(() => {
+      for (const tp of thirdPreds) {
+        const groupId = teamToGroup[tp.team_id];
+        if (groupId) update.run(tp.team_id, tp.participant_id, groupId);
+      }
+    });
+    txn();
+  }
+} catch (_) {}
 
 // Add match_date to knockout_matches if not already present
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN match_date TEXT"); } catch (_) {}

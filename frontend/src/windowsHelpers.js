@@ -2,7 +2,6 @@ import {
   fetchUserPools,
   fetchGroupPredictions, fetchWC2022GroupPredictions,
   fetchGroups, fetchWC2022Groups,
-  fetchThirdPlacePredictions,
   fetchPredictionDeadline, fetchWC2022PredictionDeadline,
   fetchKnockoutMatches, fetchWC2022KnockoutMatches,
   fetchKnockoutDeadline, fetchWC2022KnockoutDeadline,
@@ -115,17 +114,15 @@ export function generateSections(now, { predDeadline, koMatches, groups, koDeadl
       statusNote,
     });
 
-    // Third-place qualifier card (WC2026 only — null means WC2022 pool)
-    const hasThirdPlace = poolPicksData.some((pp) => pp.thirdPlacePreds !== null);
+    // Third-place qualifier card (WC2026 only — uses team3_id from group predictions)
+    const hasThirdPlace = poolPicksData.some((pp) => pp.groupPreds && pp.groupPreds.length > 0 && pp.groupPreds[0].team3_id !== undefined);
     if (hasThirdPlace) {
       const poolsThirdInfo = poolPicksData
-        .filter((pp) => pp.thirdPlacePreds !== null)
         .map((pp) => {
-          const top2 = new Set((pp.groupPreds || []).flatMap((g) => [g.team1_id, g.team2_id]));
-          const effective = pp.thirdPlacePreds.filter((t) => !top2.has(t.team_id));
-          return { pool: pp.pool, effectiveCount: effective.length };
+          const thirdCount = (pp.groupPreds || []).filter((g) => g.team3_id).length;
+          return { pool: pp.pool, thirdCount };
         });
-      const poolsMissingThird = poolsThirdInfo.filter((x) => x.effectiveCount < 8);
+      const poolsMissingThird = poolsThirdInfo.filter((x) => x.thirdCount < 8);
       const allThirdComplete = poolsMissingThird.length === 0;
 
       let thirdStatus, thirdMissingMsg;
@@ -138,10 +135,10 @@ export function generateSections(now, { predDeadline, koMatches, groups, koDeadl
       } else {
         thirdStatus = "red";
         if (isSingle) {
-          const { effectiveCount } = poolsMissingThird[0];
-          thirdMissingMsg = effectiveCount === 0
-            ? "No picks made"
-            : `${effectiveCount}/8 picks made — pick ${8 - effectiveCount} more`;
+          const { thirdCount } = poolsMissingThird[0];
+          thirdMissingMsg = thirdCount === 0
+            ? "No 3rd-place picks made"
+            : `${thirdCount}/8 groups picked — pick ${8 - thirdCount} more`;
         } else {
           thirdMissingMsg = `Missing in: ${poolsMissingThird.map((x) => x.pool.name).join(", ")}`;
         }
@@ -159,7 +156,7 @@ export function generateSections(now, { predDeadline, koMatches, groups, koDeadl
         title: "Third-Place Qualifiers",
         body: dl
           ? (groupWindowPast ? `Closed ${fmtDate(dl)}` : `Closes ${fmtDate(dl)}`)
-          : "Pick 8 third-place qualifiers",
+          : "Pick 3rd-place teams in up to 8 groups",
         time: dl,
         missingMsg: thirdMissingMsg,
         statusNote: thirdStatusNote,
@@ -367,11 +364,7 @@ export async function fetchWindowsForPool(p) {
   const fetchChamp = isWC22
     ? () => fetchWC2022ChampionPick(p.participant_id, p.id)
     : () => fetchChampionPick(p.participant_id, p.id);
-  const fetchThirdPreds = isWC22
-    ? () => Promise.resolve(null)
-    : () => fetchThirdPlacePredictions(p.participant_id);
-
-  const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, thirdPlacePreds] =
+  const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus] =
     await Promise.all([
       fetchDeadline(),
       fetchKoMatchesFn(),
@@ -380,7 +373,6 @@ export async function fetchWindowsForPool(p) {
       fetchGroupPreds(),
       fetchKoPreds(),
       fetchChamp(),
-      fetchThirdPreds().catch(() => null),
     ]);
 
   return {
@@ -391,7 +383,6 @@ export async function fetchWindowsForPool(p) {
     groupPreds: Array.isArray(groupPreds) ? groupPreds : [],
     koPreds: Array.isArray(koPreds) ? koPreds : [],
     champStatus,
-    thirdPlacePreds: thirdPlacePreds === null ? null : (Array.isArray(thirdPlacePreds) ? thirdPlacePreds : []),
   };
 }
 
@@ -418,10 +409,10 @@ export async function computeWindowsUnreadCount() {
     const perPoolPicks = await Promise.all(
       tourPools.map(async (p) => {
         if (p.id === firstPool.id) {
-          return { pool: p, groupPreds: shared.groupPreds, koPreds: shared.koPreds, champStatus: shared.champStatus, thirdPlacePreds: shared.thirdPlacePreds };
+          return { pool: p, groupPreds: shared.groupPreds, koPreds: shared.koPreds, champStatus: shared.champStatus,  };
         }
-        const data = await fetchWindowsForPool(p).catch(() => ({ groupPreds: [], koPreds: [], champStatus: null, thirdPlacePreds: null }));
-        return { pool: p, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus, thirdPlacePreds: data.thirdPlacePreds };
+        const data = await fetchWindowsForPool(p).catch(() => ({ groupPreds: [], koPreds: [], champStatus: null }));
+        return { pool: p, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus,  };
       })
     );
 

@@ -255,11 +255,11 @@ export async function fetchGroupPredictions(participantId) {
   return res.json();
 }
 
-export async function submitGroupPrediction(participant_id, group_id, team1_id, team2_id) {
+export async function submitGroupPredictions(participant_id, predictions) {
   const res = await fetch(`${API}/group-predictions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participant_id, group_id, team1_id, team2_id }),
+    body: JSON.stringify({ participant_id, predictions }),
   });
   return res.json();
 }

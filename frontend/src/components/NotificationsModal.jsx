@@ -305,13 +305,13 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadUp
     // Windows
     const p = { id: poolId, tournament, participant_id: participant.id };
     fetchWindowsForPool(p)
-      .then(({ predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, thirdPlacePreds }) => {
+      .then(({ predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus }) => {
         const raw = generateSections(new Date(), {
           predDeadline,
           koMatches,
           groups,
           koDeadline,
-          poolPicksData: [{ pool: { id: poolId, name: "" }, groupPreds, koPreds, champStatus, thirdPlacePreds }],
+          poolPicksData: [{ pool: { id: poolId, name: "" }, groupPreds, koPreds, champStatus }],
         });
         const sections = applyDismissals(raw, poolId);
         const wCount = countUnread(sections);
@@ -386,18 +386,16 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadUp
                   groupPreds: shared.groupPreds,
                   koPreds: shared.koPreds,
                   champStatus: shared.champStatus,
-                  thirdPlacePreds: shared.thirdPlacePreds,
                 };
               }
               const data = await fetchWindowsForPool(p).catch(() => ({
-                groupPreds: [], koPreds: [], champStatus: null, thirdPlacePreds: null,
+                groupPreds: [], koPreds: [], champStatus: null,
               }));
               return {
                 pool: p,
                 groupPreds: data.groupPreds,
                 koPreds: data.koPreds,
                 champStatus: data.champStatus,
-                thirdPlacePreds: data.thirdPlacePreds,
               };
             })
           );

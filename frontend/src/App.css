@@ -559,6 +559,41 @@ nav a.active {
   gap: 12px;
 }
 
+/* Third-pick badge & styling within group cards */
+.group-card-team-row.third-pick {
+  border-left: 3px solid #ff9800;
+}
+.third-pick-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff3e0;
+  background: #e65100;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.03em;
+}
+.view-picks-team .third-pick-badge {
+  margin-left: 6px;
+}
+
+/* Save All footer */
+.save-all-footer {
+  margin-top: 20px;
+  padding: 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-top: 1px solid #1e3a1e;
+}
+.btn-save-all {
+  font-size: 16px;
+  padding: 10px 32px;
+}
+
 /* Group section (legacy) */
 .group-section {
   margin-bottom: 32px;

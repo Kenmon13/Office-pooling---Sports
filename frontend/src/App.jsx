@@ -128,7 +128,7 @@ function App() {
             koMatches: data.koMatches,
             groups: data.groups,
             koDeadline: data.koDeadline,
-            poolPicksData: [{ pool, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus, thirdPlacePreds: data.thirdPlacePreds }],
+            poolPicksData: [{ pool, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus }],
           });
           handleUnreadWindows(countUnread(applyDismissals(sections, pool.id)));
         } catch { /* ignore */ }

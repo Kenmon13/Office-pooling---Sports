@@ -38,8 +38,10 @@ function callClaude(prompt) {
   const tmpFile = path.join(os.tmpdir(), `patchnotes-${Date.now()}.txt`);
   fs.writeFileSync(tmpFile, prompt, "utf8");
 
-  const npmBin = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "npm");
-  const claudePath = path.join(npmBin, "claude.cmd");
+  const isWin = process.platform === "win32";
+  const claudePath = isWin
+    ? path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "npm", "claude.cmd")
+    : "claude";
   const cmd = `"${claudePath}" < "${tmpFile}"`;
 
   const result = spawnSync(cmd, [], { encoding: "utf8", timeout: 60000, shell: true });

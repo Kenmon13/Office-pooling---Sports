@@ -4,7 +4,7 @@ import {
   fetchGroupPredictions, fetchKnockoutPredictions, fetchChampionPick,
   fetchWC2022GroupPredictions, fetchWC2022KnockoutPredictions, fetchWC2022ChampionPick,
   fetchGroups, fetchWC2022Groups, fetchKnockoutMatches, fetchWC2022KnockoutMatches,
-  fetchLeaderboard, fetchWC2022Leaderboard, fetchThirdPlacePredictions,
+  fetchLeaderboard, fetchWC2022Leaderboard,
 } from "../api";
 import { flag } from "../flags";
 
@@ -20,7 +20,6 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
   const [koScores, setKoScores] = useState({});
   const [koMatches, setKoMatches] = useState([]);
   const [championPick, setChampionPick] = useState(null);
-  const [thirdPicks, setThirdPicks] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -45,13 +44,16 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
       isWC2022 ? koMatchesFn(poolId) : koMatchesFn(),
       champFn(participantId, poolId),
     ];
-    if (!isWC2022) promises.push(fetchThirdPlacePredictions(participantId));
 
-    Promise.all(promises).then(([groupsData, gPreds, kPreds, koData, champData, thirdData]) => {
+    Promise.all(promises).then(([groupsData, gPreds, kPreds, koData, champData]) => {
       setGroups(groupsData);
 
       const gMap = {};
-      gPreds.forEach((p) => { gMap[p.group_id] = [p.team1_id, p.team2_id]; });
+      gPreds.forEach((p) => {
+        const picks = [p.team1_id, p.team2_id];
+        if (p.team3_id) picks.push(p.team3_id);
+        gMap[p.group_id] = picks;
+      });
       setGroupPreds(gMap);
 
       const kMap = {};
@@ -66,7 +68,6 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
       setKoScores(sMap);
       setKoMatches(koData);
       setChampionPick(champData?.pick || null);
-      if (thirdData && !thirdData.error) setThirdPicks(thirdData);
       setLoaded(true);
     });
   }, [participantId, poolId, isWC2022]);
@@ -108,10 +109,13 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
                 <div className="view-picks-group-teams">
                   {(g.teams || []).map((t) => {
                     const teamId = t.id;
-                    const isPicked = picked.includes(teamId);
+                    const pickIndex = picked.indexOf(teamId);
+                    const isTop2 = pickIndex === 0 || pickIndex === 1;
+                    const isThird = pickIndex === 2;
                     return (
-                      <div key={teamId} className={`view-picks-team ${isPicked ? "picked" : ""}`}>
+                      <div key={teamId} className={`view-picks-team ${isTop2 ? "picked" : ""} ${isThird ? "picked third-pick" : ""}`}>
                         {flag(t.code)} {t.name}
+                        {isThird && <span className="third-pick-badge">3rd</span>}
                       </div>
                     );
                   })}
@@ -122,24 +126,6 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
           })}
         </div>
       </section>
-
-      {/* Third-Place Picks — WC2026 only */}
-      {!isWC2022 && (
-        <section className="view-picks-section">
-          <h3>Third-Place Qualifiers</h3>
-          {thirdPicks.length === 0 ? (
-            <p className="notice">No third-place picks yet.</p>
-          ) : (
-            <div className="view-picks-third-place">
-              {thirdPicks.map((tp) => (
-                <span key={tp.team_id} className="view-picks-third-team">
-                  {flag(tp.team_code)} {tp.team_name}
-                </span>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
 
       {/* Knockout Picks */}
       <section className="view-picks-section">
