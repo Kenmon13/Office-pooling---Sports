@@ -76,6 +76,18 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
   const [saveError, setSaveError] = useState("");
   const [deadline, setDeadline] = useState(null);
   const [locked, setLocked] = useState(false);
+  const [groupDeadlines, setGroupDeadlines] = useState({});
+
+  // Per-group lock check: a group is locked if its first match has started
+  const isGroupLocked = (groupId) => {
+    if (isWC2022) return locked;
+    const dl = groupDeadlines[groupId];
+    if (!dl) return false;
+    return new Date() >= new Date(dl.replace(" ", "T") + "Z");
+  };
+
+  // All groups locked = fully locked
+  const allLocked = groups.length > 0 && groups.every((g) => isGroupLocked(g.id));
 
   useEffect(() => {
     if (isWC2022) {
@@ -105,6 +117,9 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
           setDeadline(data.deadline);
           const dl = new Date(data.deadline.replace(" ", "T") + "Z");
           setLocked(new Date() >= dl);
+        }
+        if (data.groupDeadlines) {
+          setGroupDeadlines(data.groupDeadlines);
         }
       });
     }
@@ -177,9 +192,10 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
     });
   };
 
-  // Check if any group selections have changed from saved predictions
+  // Check if any unlocked group selections have changed from saved predictions
   const hasAnyChanges = (() => {
     for (const g of groups) {
+      if (isGroupLocked(g.id)) continue;
       const picked = selections[g.id] || [];
       const saved = predictions[g.id];
       if (!saved && picked.length >= 2) return true;
@@ -193,8 +209,8 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
     return false;
   })();
 
-  // Check if any group has at least 2 picks (ready to save)
-  const anyGroupReady = groups.some((g) => (selections[g.id] || []).length >= 2);
+  // Check if any unlocked group has at least 2 picks (ready to save)
+  const anyGroupReady = groups.some((g) => !isGroupLocked(g.id) && (selections[g.id] || []).length >= 2);
 
   const handleSaveAll = async () => {
     if (!anyGroupReady) return;
@@ -226,6 +242,9 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         setSaveError(res.error);
         setSaving(false);
         return;
+      }
+      if (res.warning) {
+        setSaveError(res.warning);
       }
     }
 
@@ -263,11 +282,21 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
     return acc;
   }, {});
 
-  const countdown = useCountdown(deadline);
+  // Find the next upcoming group deadline (earliest unlocked group's first match)
+  const nextGroupDeadline = (() => {
+    if (isWC2022 || Object.keys(groupDeadlines).length === 0) return deadline;
+    const now = new Date();
+    const upcoming = Object.values(groupDeadlines)
+      .filter((dl) => new Date(dl.replace(" ", "T") + "Z") > now)
+      .sort();
+    return upcoming.length > 0 ? upcoming[0] : null;
+  })();
 
-  const groupMissing = groups.filter((g) => !predictions[g.id]);
+  const countdown = useCountdown(nextGroupDeadline || deadline);
+
+  const groupMissing = groups.filter((g) => !predictions[g.id] && !isGroupLocked(g.id));
   const groupAlertDone = groupMissing.length === 0;
-  const groupAlertRed = !groupAlertDone && !locked;
+  const groupAlertRed = !groupAlertDone && !allLocked;
   const groupAlertMsg = !groupAlertDone
     ? (groupMissing.length === groups.length ? "No picks made" : `Missing: ${groupMissing.map((g) => `Group ${g.name}`).join(", ")}`)
     : null;
@@ -275,7 +304,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
   // Third-place alert: count saved 3rd picks
   const savedThirdCount = Object.values(predictions).filter((p) => p.team3_id).length;
   const thirdAlertDone = isWC2022 || savedThirdCount >= MAX_THIRD_PICKS;
-  const thirdAlertRed = !isWC2022 && !thirdAlertDone && !locked;
+  const thirdAlertRed = !isWC2022 && !thirdAlertDone && !allLocked;
   const thirdAlertMsg = !thirdAlertDone
     ? (savedThirdCount === 0 ? "No 3rd-place picks made" : `${savedThirdCount}/${MAX_THIRD_PICKS} saved`)
     : null;
@@ -289,7 +318,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         <ul>
           <li>Pick the 2 teams you think will qualify from each group. Both correct = 5 pts &middot; One correct = 2 pts.</li>
           {!isWC2022 && <li>Optionally pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will still qualify for the knockouts. Each correct pick = 1 pt.</li>}
-          <li>Predictions lock once the first match of the group stage kicks off — you can update your picks until that time.</li>
+          <li>Each group locks when its first match kicks off — you can update picks for other groups until their matches start.</li>
         </ul>
       </div>
 
@@ -324,7 +353,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         </div>
       )}
 
-      {deadline && !locked && countdown && (
+      {nextGroupDeadline && !allLocked && countdown && (
         <div className="deadline-banner">
           <div className="deadline-timer">
             <div className="timer-unit">
@@ -348,21 +377,21 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
             </div>
           </div>
           <div className="deadline-info">
-            <span className="deadline-label">Predictions lock on</span>
-            <span className="deadline-date">{formatDeadlineFull(deadline, displayTzOffset)}</span>
+            <span className="deadline-label">Next group locks on</span>
+            <span className="deadline-date">{formatDeadlineFull(nextGroupDeadline, displayTzOffset)}</span>
           </div>
         </div>
       )}
-      {locked && (
+      {allLocked && (
         <div className="deadline-banner locked">
-          <span className="deadline-locked-text">Predictions are locked - the tournament has started</span>
+          <span className="deadline-locked-text">Predictions are locked - all group matches have started</span>
         </div>
       )}
       <button className="btn-toggle-all" onClick={toggleAll}>
         {allExpanded ? "Hide All Matches" : "Show All Matches"}
       </button>
 
-      {currentUser && !locked && (
+      {currentUser && !allLocked && (
         <div className="save-all-footer">
           {saveError && <p className="error">{saveError}</p>}
           {hasAnyChanges && anyGroupReady && (
@@ -380,7 +409,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         </div>
       )}
 
-      {!isWC2022 && currentUser && !locked && (
+      {!isWC2022 && currentUser && !allLocked && (
         <div className="third-place-counter">
           3rd-place picks: {thirdPickCount}/{MAX_THIRD_PICKS} groups
         </div>
@@ -393,9 +422,10 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
           const saved = predictions[g.id];
           const score = getScore(g.id);
           const gMatches = groupMatches[g.name] || [];
+          const gLocked = isGroupLocked(g.id);
 
           return (
-            <div key={g.id} className={`group-card ${score ? score.cls : !saved && !locked ? "unpicked" : ""} ${isExpanded ? "expanded" : ""}`}>
+            <div key={g.id} className={`group-card ${score ? score.cls : !saved && !gLocked ? "unpicked" : ""} ${isExpanded ? "expanded" : ""}`}>
               <div className="group-card-header" onClick={() => toggleGroup(g.name)}>
                 <span className="group-badge">Group {g.name}</span>
                 {score && (
@@ -404,6 +434,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                   </span>
                 )}
                 {!score && saved && <span className="saved-label">Saved</span>}
+                {gLocked && !saved && !score && <span className="saved-label">Locked</span>}
                 <span className="group-toggle">{isExpanded ? "\u25B2" : "\u25BC"}</span>
               </div>
 
@@ -427,8 +458,8 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                   return (
                     <div
                       key={teamId}
-                      className={`group-card-team-row ${currentUser && !locked ? "clickable" : ""} ${isTop2 ? "selected" : ""} ${isThird ? "selected third-pick" : ""}`}
-                      onClick={currentUser && !locked ? (e) => { e.stopPropagation(); toggleTeam(g.id, teamId); } : undefined}
+                      className={`group-card-team-row ${currentUser && !gLocked ? "clickable" : ""} ${isTop2 ? "selected" : ""} ${isThird ? "selected third-pick" : ""}`}
+                      onClick={currentUser && !gLocked ? (e) => { e.stopPropagation(); toggleTeam(g.id, teamId); } : undefined}
                     >
                       <span className="standings-team-col">
                         {flag(code)} {t.name}
@@ -446,7 +477,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                 })}
               </div>
 
-              {currentUser && !locked && (
+              {currentUser && !gLocked && (
                 <div className="group-card-footer">
                   {picked.length < 2 && (
                     <span className="pick-hint">Pick {2 - picked.length} more</span>
@@ -454,6 +485,11 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                   {picked.length === 2 && !isWC2022 && thirdPickCount < MAX_THIRD_PICKS && (
                     <span className="pick-hint">Pick a 3rd-place team (optional)</span>
                   )}
+                </div>
+              )}
+              {gLocked && !allLocked && (
+                <div className="group-card-footer">
+                  <span className="saved-label">Locked — match started</span>
                 </div>
               )}
 

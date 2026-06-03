@@ -542,34 +542,52 @@ app.get("/api/group-predictions/:participantId", (req, res) => {
 
 app.get("/api/prediction-deadline", (req, res) => {
   const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
-  if (!firstMatch) return res.json({ deadline: null });
-  res.json({ deadline: firstMatch.match_date });
+  if (!firstMatch) return res.json({ deadline: null, groupDeadlines: {} });
+  // Per-group deadlines: first match of each group
+  const groupFirstMatches = db.prepare("SELECT group_id, MIN(match_date) as first_match FROM matches GROUP BY group_id").all();
+  const groupDeadlines = {};
+  for (const gm of groupFirstMatches) {
+    groupDeadlines[gm.group_id] = gm.first_match;
+  }
+  res.json({ deadline: firstMatch.match_date, groupDeadlines });
 });
 
 app.post("/api/group-predictions", (req, res) => {
   const { participant_id, predictions } = req.body;
 
-  // Check deadline - lock predictions before first match
-  const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
-  if (firstMatch) {
-    const deadline = new Date(firstMatch.match_date.replace(" ", "T"));
-    if (new Date() >= deadline) {
-      return res.status(403).json({ error: "Predictions are locked - the tournament has started" });
-    }
-  }
-
   if (!participant_id || !Array.isArray(predictions) || predictions.length === 0) {
     return res.status(400).json({ error: "participant_id and predictions array required" });
   }
 
+  // Check per-group deadlines — filter out groups whose first match has started
+  const now = new Date();
+  const groupFirstMatches = db.prepare("SELECT group_id, MIN(match_date) as first_match FROM matches GROUP BY group_id").all();
+  const groupDeadlineMap = {};
+  for (const gm of groupFirstMatches) groupDeadlineMap[gm.group_id] = gm.first_match;
+
+  const lockedGroupNames = [];
+  const saveable = predictions.filter((pred) => {
+    const dl = groupDeadlineMap[pred.group_id];
+    if (dl && now >= new Date(dl.replace(" ", "T"))) {
+      const group = db.prepare("SELECT name FROM groups WHERE id = ?").get(pred.group_id);
+      lockedGroupNames.push(group ? `Group ${group.name}` : `Group ${pred.group_id}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (saveable.length === 0 && lockedGroupNames.length > 0) {
+    return res.status(403).json({ error: `Predictions locked for ${lockedGroupNames.join(", ")} — matches have started` });
+  }
+
   // Count how many groups have a 3rd pick — max 8 allowed
-  const thirdPickCount = predictions.filter((p) => p.team3_id).length;
+  const thirdPickCount = saveable.filter((p) => p.team3_id).length;
   if (thirdPickCount > 8) {
     return res.status(400).json({ error: "You can only pick a 3rd-place team in up to 8 groups" });
   }
 
   // Validate each prediction
-  for (const pred of predictions) {
+  for (const pred of saveable) {
     const { group_id, team1_id, team2_id, team3_id } = pred;
     if (!group_id || !team1_id || !team2_id) {
       return res.status(400).json({ error: "Each prediction needs group_id, team1_id, and team2_id" });
@@ -595,12 +613,16 @@ app.post("/api/group-predictions", (req, res) => {
         team1_id = excluded.team1_id, team2_id = excluded.team2_id, team3_id = excluded.team3_id
     `);
     const txn = db.transaction(() => {
-      for (const pred of predictions) {
+      for (const pred of saveable) {
         upsert.run(participant_id, pred.group_id, pred.team1_id, pred.team2_id, pred.team3_id || null);
       }
     });
     txn();
-    res.json({ success: true });
+    const result = { success: true };
+    if (lockedGroupNames.length > 0) {
+      result.warning = `${lockedGroupNames.join(", ")} skipped — matches already started`;
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
