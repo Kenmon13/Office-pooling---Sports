@@ -116,6 +116,14 @@ export async function postIssueReply(issueId, body) {
   return res.json();
 }
 
+export async function adminDeleteReply(issueId, replyId) {
+  const res = await fetch(`${API}/issues/${issueId}/replies/${replyId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
 export async function adminFetchIssues() {
   const res = await fetch(`${API}/admin/issues`, { headers: authHeaders() });
   return res.json();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -39,6 +39,14 @@ function AdminPanel({ user, onSelectPool, onBack }) {
     setReplyText("");
     const data = await fetchIssueReplies(issue.id);
     if (!data.error) setIssueReplies(data.replies || []);
+  };
+
+  const handleDeleteReply = async (replyId) => {
+    if (!selectedIssue) return;
+    const res = await adminDeleteReply(selectedIssue.id, replyId);
+    if (!res.error) {
+      setIssueReplies((prev) => prev.filter((r) => r.id !== replyId));
+    }
   };
 
   const handleAdminReply = async () => {
@@ -497,6 +505,9 @@ function AdminPanel({ user, onSelectPool, onBack }) {
                 <div className="issue-chat-bubble-meta">
                   <strong>{r.display_name}{r.is_admin ? " (Admin)" : ""}</strong>
                   <span>{new Date(r.created_at + "Z").toLocaleString()}</span>
+                  {r.is_admin && (
+                    <button className="btn-delete-reply" onClick={() => handleDeleteReply(r.id)} title="Delete reply">&times;</button>
+                  )}
                 </div>
                 <p>{r.body}</p>
               </div>

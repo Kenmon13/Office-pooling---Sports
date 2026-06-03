@@ -181,6 +181,15 @@ app.post("/api/issues/:id/replies", authenticateToken, (req, res) => {
   res.json({ id: result.lastInsertRowid, success: true });
 });
 
+// Admin: delete a reply
+app.delete("/api/issues/:issueId/replies/:replyId", requireAdminToken, (req, res) => {
+  const reply = db.prepare("SELECT * FROM issue_replies WHERE id = ? AND issue_id = ?").get(req.params.replyId, req.params.issueId);
+  if (!reply) return res.status(404).json({ error: "Reply not found" });
+  if (!reply.is_admin) return res.status(403).json({ error: "Can only delete admin replies" });
+  db.prepare("DELETE FROM issue_replies WHERE id = ?").run(req.params.replyId);
+  res.json({ success: true });
+});
+
 app.get("/api/admin/issues", requireAdminToken, (req, res) => {
   const issues = db.prepare(`
     SELECT i.*, COUNT(r.id) AS reply_count
