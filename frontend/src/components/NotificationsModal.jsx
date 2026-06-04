@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { PATCH_NOTES } from "../patchNotes";
 import { fetchUserPools, fetchHistory, fetchWC2022History } from "../api";
 import {
   generateSections, countUnread, fetchWindowsForPool, dismissWindowCards, applyDismissals,
@@ -21,42 +20,6 @@ function SeeMoreButton({ hidden, onShow }) {
     <button className="see-more-btn" onClick={onShow}>
       See {hidden} older
     </button>
-  );
-}
-
-function UpdatesTab({ unreadIds }) {
-  const [showAll, setShowAll] = useState(false);
-  const newNotes = PATCH_NOTES.filter((n) => unreadIds.has(n.id));
-  const oldNotes = PATCH_NOTES.filter((n) => !unreadIds.has(n.id));
-  const visible = showAll ? oldNotes : [];
-
-  const renderNote = (note) => {
-    const userItems = note.items.filter((item) => !item.adminOnly);
-    if (userItems.length === 0) return null;
-    return (
-      <div key={note.id} className="patch-note-entry">
-        <div className="patch-note-title">
-          <span className="patch-note-version">{note.version}</span>
-          <span className="patch-note-name">{note.title}</span>
-          <span className="patch-note-date">{note.date}</span>
-        </div>
-        <ul className="patch-note-items">
-          {userItems.map((item, i) => (
-            <li key={i}>{typeof item === "string" ? item : item.text}</li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
-
-  return (
-    <div className="notif-tab-content">
-      {newNotes.map(renderNote)}
-      {visible.map(renderNote)}
-      {!showAll && (
-        <SeeMoreButton hidden={oldNotes.length} onShow={() => setShowAll(true)} />
-      )}
-    </div>
   );
 }
 
@@ -258,17 +221,11 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
 
 // ── main component ─────────────────────────────────────────────────────────────
 
-function NotificationsModal({ onClose, participant, poolId, tournament, onReadUpdates, onReadPoints, onUnreadWindows }) {
+function NotificationsModal({ onClose, participant, poolId, tournament, onReadPoints, onUnreadWindows }) {
   const isGlobal = !participant;
   const isWC2022 = tournament === "wc2022";
 
-  const [activeTab, setActiveTab] = useState("updates");
-
-  // Patch notes unread
-  const [unreadPatchIds] = useState(() => {
-    const lastSeen = parseInt(localStorage.getItem("patch_notes_last_seen") ?? "-1");
-    return new Set(PATCH_NOTES.filter((n) => n.id > lastSeen).map((n) => n.id));
-  });
+  const [activeTab, setActiveTab] = useState("points");
 
   // Points
   const [pointsEvents, setPointsEvents] = useState([]);
@@ -458,10 +415,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadUp
   const handleTabClick = (tab) => {
     setActiveTab(tab);
 
-    if (tab === "updates") {
-      localStorage.setItem("patch_notes_last_seen", PATCH_NOTES[0].id);
-      onReadUpdates?.();
-    } else if (tab === "points") {
+    if (tab === "points") {
       if (!isGlobal) {
         const pools = [...new Set(pointsEvents.map((e) => e.poolId).filter(Boolean))];
         if (pools.length > 0) {
@@ -503,7 +457,6 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadUp
   };
 
   const tabs = [
-    { id: "updates", label: "Updates", unread: unreadPatchIds.size },
     { id: "points", label: "Points", unread: unreadPoints },
     { id: "windows", label: "Pick Reminders", unread: unreadWindows },
   ];
@@ -530,7 +483,6 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadUp
         </div>
 
         <div className="patch-notes-body">
-          {activeTab === "updates" && <UpdatesTab unreadIds={unreadPatchIds} />}
           {activeTab === "points" && (
             <PointsTab
               events={pointsEvents}
