@@ -59,7 +59,7 @@ app.post("/api/auth/signin", (req, res) => {
 
 app.get("/api/user/pools", authenticateToken, (req, res) => {
   const rows = db.prepare(`
-    SELECT p.id, p.name, p.sport, p.tournament, p.mock_date,
+    SELECT p.id, p.name, p.sport, p.tournament, p.mock_date, p.is_public,
            pt.id as participant_id
     FROM participants pt
     JOIN pools p ON pt.pool_id = p.id

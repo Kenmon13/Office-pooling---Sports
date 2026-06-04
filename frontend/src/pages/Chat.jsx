@@ -138,7 +138,9 @@ function Chat({ currentUser, poolId, chatClosed }) {
                 <span className="chat-msg-name">{msg.display_name}</span>
                 <span className="chat-msg-time">{formatTime(msg.created_at)}</span>
               </div>
-              <div className="chat-msg-body">{msg.body}</div>
+              <div className="chat-msg-body">{msg.body.split("\n").map((line, i, arr) => (
+                <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
+              ))}</div>
             </div>
           );
         })}
@@ -171,13 +173,23 @@ function Chat({ currentUser, poolId, chatClosed }) {
             >
               😀
             </button>
-            <input
+            <textarea
               ref={inputRef}
               className="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Type a message..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.altKey) {
+                  e.preventDefault();
+                  if (input.trim() && !sending) handleSend(e);
+                } else if (e.key === "Enter" && e.altKey) {
+                  e.preventDefault();
+                  setInput((prev) => prev + "\n");
+                }
+              }}
+              placeholder="Type a message... (Alt+Enter for new line)"
               maxLength={500}
+              rows={1}
               autoFocus
             />
           </div>

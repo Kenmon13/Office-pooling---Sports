@@ -369,15 +369,17 @@ function App() {
 
   const announcementBar = currentTournamentId && (!!announcement || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
-      {announcement && !editingAnnouncement && (
-        <div className="announcement-text">
-          <span>
-            {announcement.split("\n").filter(Boolean).map((line, i, arr) => (
-              <span key={i}>{line}{i < arr.length - 1 && <span className="announcement-sep"> ★ </span>}</span>
-            ))}
-          </span>
-        </div>
-      )}
+      {announcement && !editingAnnouncement && (() => {
+        const items = announcement.split("\n").filter(Boolean);
+        const renderItems = (prefix) => items.map((line, i) => (
+          <span key={`${prefix}-${i}`}>{line}<span className="announcement-sep" /></span>
+        ));
+        return (
+          <div className="announcement-text">
+            <span>{renderItems("a")}{renderItems("b")}</span>
+          </div>
+        );
+      })()}
       {!!(user && user.is_admin) && !editingAnnouncement && (
         <button className="btn-small announcement-edit-btn" onClick={() => { setAnnouncementDraft(announcement); setEditingAnnouncement(true); }}>
           {announcement ? "Edit" : "Set Announcement"}
