@@ -15,7 +15,6 @@ import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
-import { PATCH_NOTES } from "./patchNotes";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
 import "./App.css";
@@ -37,10 +36,6 @@ function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPatchNotes, setShowPatchNotes] = useState(false);
-  const [unreadPatchNotes, setUnreadPatchNotes] = useState(() => {
-    const lastSeen = parseInt(localStorage.getItem("patch_notes_last_seen") ?? "-1");
-    return PATCH_NOTES.filter((n) => n.id > lastSeen).length;
-  });
   const [unreadPoints, setUnreadPoints] = useState(0);
   const [unreadWindows, setUnreadWindowsBadge] = useState(() =>
     parseInt(localStorage.getItem("windows_unread_badge") || "0")
@@ -198,7 +193,6 @@ function App() {
   }, [user, pool]);
 
   const handleOpenPatchNotes = () => {
-    setUnreadPatchNotes(0);
     setShowPatchNotes(true);
   };
 
@@ -488,7 +482,7 @@ function App() {
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
           <div className="bell-wrapper">
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
-            {(unreadPatchNotes + unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPatchNotes + unreadPoints + unreadWindows}</span>}
+            {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
           </div>
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
@@ -501,7 +495,6 @@ function App() {
             participant={null}
             poolId={null}
             tournament={null}
-            onReadUpdates={() => setUnreadPatchNotes(0)}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
           />
@@ -529,7 +522,7 @@ function App() {
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
           <div className="bell-wrapper">
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
-            {(unreadPatchNotes + unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPatchNotes + unreadPoints + unreadWindows}</span>}
+            {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
           </div>
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
@@ -547,7 +540,6 @@ function App() {
             participant={null}
             poolId={null}
             tournament={null}
-            onReadUpdates={() => setUnreadPatchNotes(0)}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
           />
@@ -575,7 +567,7 @@ function App() {
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
           <div className="bell-wrapper">
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
-            {(unreadPatchNotes + unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPatchNotes + unreadPoints + unreadWindows}</span>}
+            {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
           </div>
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
@@ -594,7 +586,6 @@ function App() {
             participant={null}
             poolId={null}
             tournament={null}
-            onReadUpdates={() => setUnreadPatchNotes(0)}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
           />
@@ -671,7 +662,7 @@ function App() {
                 <span className="header-user-actions">
                   <div className="bell-wrapper">
                     <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
-                    {(unreadPatchNotes + unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPatchNotes + unreadPoints + unreadWindows}</span>}
+                    {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
                   </div>
                   <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
                   <button onClick={handleSignOut} className="btn-small">Sign Out</button>
@@ -883,7 +874,6 @@ function App() {
             participant={participant}
             poolId={pool.id}
             tournament={selectedTournament?.id}
-            onReadUpdates={() => setUnreadPatchNotes(0)}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
           />
