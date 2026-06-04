@@ -1,5 +1,19 @@
 export const PATCH_NOTES = [
   {
+    id: 12,
+    version: "v1.12",
+    date: "2026-06-05",
+    title: "Pool Admins for Private Pools",
+    items: [
+      "Private pool members can now become a pool admin via Pool Settings",
+      "Pool admins can promote other members to admin",
+      "Pool admins can kick non-admin members from the pool",
+      "Pool admins can close or reopen the pool chat",
+      "Pool creators are automatically assigned as admin",
+      "Members list now visible in Pool Settings for all pools",
+    ],
+  },
+  {
     id: 11,
     version: "v1.11",
     date: "2026-06-02",
