@@ -343,7 +343,9 @@ export async function fetchParticipantPoints(participantId, poolId) {
 
 export async function fetchStandings() {
   const res = await fetch(`${API}/standings`);
-  return res.json();
+  const data = await res.json();
+  // API returns { groups, thirdQualifiers }
+  return data;
 }
 
 export async function fetchLeaderboard(poolId) {

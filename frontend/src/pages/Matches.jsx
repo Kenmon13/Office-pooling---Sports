@@ -109,7 +109,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
       fetchGroups().then(setGroups);
       fetchStandings().then((data) => {
         const map = {};
-        data.forEach((g) => { map[g.id] = g; });
+        (data.groups || data).forEach((g) => { map[g.id] = g; });
         setStandings(map);
       });
       fetchPredictionDeadline().then((data) => {
@@ -321,7 +321,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         <p className="ko-rules-title">How predictions work</p>
         <ul>
           <li>Pick the 2 teams you think will qualify from each group. Both correct = 5 pts &middot; One correct = 2 pts.</li>
-          {!isWC2022 && <li>Pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will still qualify for the knockouts. Each correct pick = 1 pt.</li>}
+          {!isWC2022 && <li>Pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will qualify for the knockouts. All 3 correct = 7 pts &middot; 2 correct = 5 pts &middot; 1 correct = 2 pts.</li>}
           <li>Each group locks when its first match kicks off — you can update picks for other groups until their matches start.</li>
         </ul>
       </div>

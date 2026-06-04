@@ -808,7 +808,19 @@ app.get("/api/standings", (req, res) => {
       qualified: allFinished ? [groupTeams[0]?.team_id, groupTeams[1]?.team_id] : [],
     };
   });
-  res.json(result);
+
+  // Determine third-place qualifiers (best 8 third-place teams across all groups)
+  const allGroupsFinished = result.every((g) => g.qualified.length > 0);
+  let thirdQualifiers = [];
+  if (allGroupsFinished) {
+    const thirdPlaceTeams = result
+      .map((g) => g.teams.length >= 3 ? g.teams[2] : null)
+      .filter(Boolean)
+      .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    thirdQualifiers = thirdPlaceTeams.slice(0, 8).map((t) => t.team_id);
+  }
+
+  res.json({ groups: result, thirdQualifiers });
 });
 
 // --- Leaderboard ---
@@ -888,6 +900,21 @@ app.get("/api/leaderboard", (req, res) => {
   const koPointsMap = { R32: 3, R16: 5, QF: 7, SF: 10, F: 15 };
   const finalMatch = koMatches.find((m) => m.id === "F" && m.winner_team_id);
 
+  // Build per-group qualifying set (top 2 + 3rd if globally qualified)
+  const qualifyingByGroup = {};
+  for (const g of groups) {
+    if (!qualified[g.id]) continue;
+    qualifyingByGroup[g.id] = [...qualified[g.id]];
+    if (allGroupsDone) {
+      const gt = Object.values(stats)
+        .filter((t) => t.group_id === g.id)
+        .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+      if (gt.length >= 3 && thirdPlaceQualifiers.has(gt[2].team_id)) {
+        qualifyingByGroup[g.id].push(gt[2].team_id);
+      }
+    }
+  }
+
   const leaderboard = participants.map((p) => {
     const myPreds = allPredictions.filter((gp) => gp.participant_id === p.id);
     let points = 0;
@@ -896,27 +923,26 @@ app.get("/api/leaderboard", (req, res) => {
     let groups_predicted = myPreds.length;
     let ko_correct = 0;
     let ko_points = 0;
-    let third_correct = 0;
-    let third_points = 0;
 
     for (const pred of myPreds) {
       const q = qualified[pred.group_id];
       if (!q) continue;
-      const picked = [pred.team1_id, pred.team2_id];
-      const correctCount = picked.filter((t) => q.includes(t)).length;
-      if (correctCount === 2) { points += 5; groups_correct++; }
-      else if (correctCount === 1) { points += 2; groups_half++; }
-    }
 
-    // Third-place prediction scoring — 1 pt per correct pick (from team3_id in group_predictions)
-    if (thirdPlaceQualifiers.size > 0) {
-      for (const pred of myPreds) {
-        if (pred.team3_id && thirdPlaceQualifiers.has(pred.team3_id)) {
-          third_correct++;
-          third_points++;
-        }
+      // 3-pick group with all groups done: combined 7/5/2/0 scoring
+      if (pred.team3_id && allGroupsDone) {
+        const qualSet = qualifyingByGroup[pred.group_id] || [];
+        const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
+        const correctCount = picked.filter((t) => qualSet.includes(t)).length;
+        if (correctCount === 3) { points += 7; groups_correct++; }
+        else if (correctCount === 2) { points += 5; groups_half++; }
+        else if (correctCount === 1) { points += 2; }
+      } else {
+        // 2-pick scoring (or 3rd-place qualifiers not yet determined)
+        const picked = [pred.team1_id, pred.team2_id];
+        const correctCount = picked.filter((t) => q.includes(t)).length;
+        if (correctCount === 2) { points += 5; groups_correct++; }
+        else if (correctCount === 1) { points += 2; groups_half++; }
       }
-      points += third_points;
     }
 
     // Knockout prediction scoring — predicted_winner stored as "home"/"away"
@@ -949,7 +975,7 @@ app.get("/api/leaderboard", (req, res) => {
     const champion_change_cost = champPick?.change_cost || 0;
     points += champion_bonus - champion_change_cost;
 
-    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, third_correct, third_points, ko_correct, ko_points, champion_bonus, champion_change_cost };
+    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, ko_correct, ko_points, champion_bonus, champion_change_cost };
   });
 
   leaderboard.sort((a, b) => b.points - a.points || b.groups_correct - a.groups_correct || a.name.localeCompare(b.name));
@@ -1669,27 +1695,12 @@ app.get("/api/history/:participantId", (req, res) => {
     if (!groupLastDate[gid] || m.match_date > groupLastDate[gid]) groupLastDate[gid] = m.match_date;
   }
 
-  for (const g of groups) {
-    const gt = Object.values(stats).filter((t) => t.group_id === g.id).sort((a, b) => b.points - a.points || (b.gf-b.ga)-(a.gf-a.ga) || b.gf-a.gf);
-    if (!gt.every((t) => t.played >= 3)) continue;
-    const qualified = [gt[0]?.team_id, gt[1]?.team_id];
-    const lastDate = groupLastDate[g.id];
-    if (!lastDate) continue;
-    const pred = db.prepare("SELECT * FROM group_predictions WHERE participant_id = ? AND group_id = ?").get(participantId, g.id);
-    if (!pred) continue;
-    const correct = [pred.team1_id, pred.team2_id].filter((t) => qualified.includes(t)).length;
-    const pts = correct === 2 ? 5 : correct === 1 ? 2 : 0;
-    const t1 = teamById[pred.team1_id]?.name || "?";
-    const t2 = teamById[pred.team2_id]?.name || "?";
-    const label = correct === 2 ? "Both correct" : correct === 1 ? "1 correct" : "None correct";
-    events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${t1} & ${t2} — ${label}`, pts_change: pts });
-  }
-
-  // Third-place qualifier scoring
+  // Determine third-place qualifiers for combined scoring
   const allGroupsDoneH = groups.every((g) => {
     const gt = Object.values(stats).filter((t) => t.group_id === g.id);
     return gt.every((t) => t.played >= 3);
   });
+  const thirdQualifiersH = new Set();
   if (allGroupsDoneH) {
     const thirdPlaceTeamsH = [];
     for (const g of groups) {
@@ -1698,25 +1709,38 @@ app.get("/api/history/:participantId", (req, res) => {
       if (gt.length >= 3) thirdPlaceTeamsH.push(gt[2]);
     }
     thirdPlaceTeamsH.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
-    const qualifiedThird = new Set(thirdPlaceTeamsH.slice(0, 8).map((t) => t.team_id));
-    const myGroupPreds = db.prepare(`
-      SELECT gp.team3_id, t.name as team_name FROM group_predictions gp
-      LEFT JOIN teams t ON gp.team3_id = t.id
-      WHERE gp.participant_id = ? AND gp.team3_id IS NOT NULL
-    `).all(participantId);
-    if (myGroupPreds.length > 0) {
-      const correctNames = [];
-      let thirdPts = 0;
-      for (const gp of myGroupPreds) {
-        if (qualifiedThird.has(gp.team3_id)) {
-          correctNames.push(gp.team_name);
-          thirdPts++;
-        }
-      }
-      const lastGroupDate = Object.values(groupLastDate).sort().pop();
-      const desc = `Third-place qualifiers: ${correctNames.length}/${myGroupPreds.length} correct` +
-        (correctNames.length > 0 ? ` (${correctNames.join(", ")})` : "");
-      events.push({ event_date: lastGroupDate, type: "third_place", description: desc, pts_change: thirdPts });
+    for (let i = 0; i < Math.min(8, thirdPlaceTeamsH.length); i++) {
+      thirdQualifiersH.add(thirdPlaceTeamsH[i].team_id);
+    }
+  }
+
+  for (const g of groups) {
+    const gt = Object.values(stats).filter((t) => t.group_id === g.id).sort((a, b) => b.points - a.points || (b.gf-b.ga)-(a.gf-a.ga) || b.gf-a.gf);
+    if (!gt.every((t) => t.played >= 3)) continue;
+    const lastDate = groupLastDate[g.id];
+    if (!lastDate) continue;
+    const pred = db.prepare("SELECT * FROM group_predictions WHERE participant_id = ? AND group_id = ?").get(participantId, g.id);
+    if (!pred) continue;
+
+    if (pred.team3_id && allGroupsDoneH) {
+      // 3-pick combined scoring
+      const qualSet = [gt[0]?.team_id, gt[1]?.team_id];
+      if (gt.length >= 3 && thirdQualifiersH.has(gt[2].team_id)) qualSet.push(gt[2].team_id);
+      const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
+      const correct = picked.filter((t) => qualSet.includes(t)).length;
+      const pts = correct === 3 ? 7 : correct === 2 ? 5 : correct === 1 ? 2 : 0;
+      const names = picked.map((t) => teamById[t]?.name || "?").join(", ");
+      const label = correct === 3 ? "All 3 correct" : `${correct} correct`;
+      events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${names} — ${label}`, pts_change: pts });
+    } else {
+      // 2-pick scoring
+      const qualified = [gt[0]?.team_id, gt[1]?.team_id];
+      const correct = [pred.team1_id, pred.team2_id].filter((t) => qualified.includes(t)).length;
+      const pts = correct === 2 ? 5 : correct === 1 ? 2 : 0;
+      const t1 = teamById[pred.team1_id]?.name || "?";
+      const t2 = teamById[pred.team2_id]?.name || "?";
+      const label = correct === 2 ? "Both correct" : correct === 1 ? "1 correct" : "None correct";
+      events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${t1} & ${t2} — ${label}`, pts_change: pts });
     }
   }
 

@@ -7,14 +7,16 @@ function Predictions({ currentUser }) {
   const [predictions, setPredictions] = useState({});
   const [selections, setSelections] = useState({});
   const [standings, setStandings] = useState({});
+  const [thirdQualifiers, setThirdQualifiers] = useState([]);
   const [saving, setSaving] = useState(null);
 
   useEffect(() => {
     fetchGroups().then(setGroups);
     fetchStandings().then((data) => {
       const map = {};
-      data.forEach((g) => { map[g.id] = g; });
+      (data.groups || data).forEach((g) => { map[g.id] = g; });
       setStandings(map);
+      if (data.thirdQualifiers) setThirdQualifiers(data.thirdQualifiers);
     });
   }, []);
 
@@ -72,6 +74,24 @@ function Predictions({ currentUser }) {
     const pred = predictions[groupId];
     const standing = standings[groupId];
     if (!pred || !standing || standing.qualified.length === 0) return null;
+
+    // If 3-pick group and third-place qualifiers are known, use combined scoring
+    if (pred.team3_id && thirdQualifiers.length > 0) {
+      const qualifyingTeams = [...standing.qualified];
+      // Check if 3rd-place team from this group qualifies globally
+      if (standing.teams && standing.teams.length >= 3) {
+        const thirdTeamId = standing.teams[2].team_id;
+        if (thirdQualifiers.includes(thirdTeamId)) qualifyingTeams.push(thirdTeamId);
+      }
+      const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
+      const correct = picked.filter((t) => qualifyingTeams.includes(t)).length;
+      if (correct === 3) return { points: 7, label: "All 3 correct", cls: "correct" };
+      if (correct === 2) return { points: 5, label: "2 correct", cls: "half" };
+      if (correct === 1) return { points: 2, label: "1 correct", cls: "half" };
+      return { points: 0, label: "0 correct", cls: "wrong" };
+    }
+
+    // 2-pick scoring (or 3rd-place qualifiers not yet known)
     const picked = [pred.team1_id, pred.team2_id];
     const correct = picked.filter((t) => standing.qualified.includes(t)).length;
     if (correct === 2) return { points: 5, label: "Both correct", cls: "correct" };
@@ -83,7 +103,7 @@ function Predictions({ currentUser }) {
     <div className="page">
       <h2>My Predictions</h2>
       <p className="select-subtitle" style={{ marginBottom: 24 }}>
-        Pick 2 teams to advance from each group. Both correct = 5 pts, one correct = 2 pts.
+        Pick 2 teams to advance from each group (5/2/0 pts). Groups with a 3rd pick: 3 correct = 7 pts, 2 = 5, 1 = 2.
       </p>
 
       <div className="group-pred-list">
