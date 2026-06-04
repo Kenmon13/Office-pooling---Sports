@@ -370,7 +370,13 @@ function App() {
   const announcementBar = currentTournamentId && (!!announcement || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
       {announcement && !editingAnnouncement && (
-        <div className="announcement-text"><span>{announcement}</span></div>
+        <div className="announcement-text">
+          <span>
+            {announcement.split("\n").filter(Boolean).map((line, i, arr) => (
+              <span key={i}>{line}{i < arr.length - 1 && <span className="announcement-sep"> ★ </span>}</span>
+            ))}
+          </span>
+        </div>
       )}
       {!!(user && user.is_admin) && !editingAnnouncement && (
         <button className="btn-small announcement-edit-btn" onClick={() => { setAnnouncementDraft(announcement); setEditingAnnouncement(true); }}>
@@ -379,12 +385,12 @@ function App() {
       )}
       {editingAnnouncement && (
         <div className="announcement-editor">
-          <input
-            type="text"
+          <textarea
             value={announcementDraft}
             onChange={(e) => setAnnouncementDraft(e.target.value)}
-            placeholder="Type an announcement for all users..."
+            placeholder={"One announcement per line:\nRow 1 — first ticker item\nRow 2 — second ticker item"}
             className="announcement-input"
+            rows={3}
           />
           <button className="btn-small" onClick={async () => {
             await updateAnnouncement(announcementDraft, currentTournamentId);
