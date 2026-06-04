@@ -8,7 +8,7 @@ const EMOJI_LIST = [
   "👀","🫡","🤝","✅","❌","⏳","💰","🍀","🥇","🥈",
 ];
 
-function Chat({ currentUser, poolId }) {
+function Chat({ currentUser, poolId, chatClosed }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -35,11 +35,12 @@ function Chat({ currentUser, poolId }) {
     const poll = async () => {
       const data = await fetchMessages(poolId, lastIdRef.current);
       if (!active || data.error) return;
-      if (data.length > 0) {
-        lastIdRef.current = data[data.length - 1].id;
+      const msgs = data.messages || data;
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        lastIdRef.current = msgs[msgs.length - 1].id;
         setMessages((prev) => {
           const existingIds = new Set(prev.map((m) => m.id));
-          const newMsgs = data.filter((m) => !existingIds.has(m.id));
+          const newMsgs = msgs.filter((m) => !existingIds.has(m.id));
           return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
         });
       }
@@ -48,8 +49,11 @@ function Chat({ currentUser, poolId }) {
     // Initial fetch (all messages)
     fetchMessages(poolId).then((data) => {
       if (!active || data.error) return;
-      setMessages(data);
-      if (data.length > 0) lastIdRef.current = data[data.length - 1].id;
+      const msgs = data.messages || data;
+      if (Array.isArray(msgs)) {
+        setMessages(msgs);
+        if (msgs.length > 0) lastIdRef.current = msgs[msgs.length - 1].id;
+      }
       setTimeout(scrollToBottom, 50);
     });
 
@@ -140,44 +144,48 @@ function Chat({ currentUser, poolId }) {
         })}
         <div ref={messagesEndRef} />
       </div>
-      <form className="chat-input-bar" onSubmit={handleSend}>
-        <div className="chat-input-wrapper" ref={emojiPickerRef}>
-          {showEmojiPicker && (
-            <div className="emoji-picker">
-              {EMOJI_LIST.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="emoji-btn"
-                  onClick={() => insertEmoji(emoji)}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            className="emoji-toggle"
-            onClick={() => setShowEmojiPicker((v) => !v)}
-            title="Emoji"
-          >
-            😀
+      {chatClosed ? (
+        <div className="chat-closed-notice">Chat has been closed by a pool admin.</div>
+      ) : (
+        <form className="chat-input-bar" onSubmit={handleSend}>
+          <div className="chat-input-wrapper" ref={emojiPickerRef}>
+            {showEmojiPicker && (
+              <div className="emoji-picker">
+                {EMOJI_LIST.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className="emoji-btn"
+                    onClick={() => insertEmoji(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="emoji-toggle"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              title="Emoji"
+            >
+              😀
+            </button>
+            <input
+              ref={inputRef}
+              className="chat-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type a message..."
+              maxLength={500}
+              autoFocus
+            />
+          </div>
+          <button className="chat-send-btn" type="submit" disabled={sending || !input.trim()}>
+            Send
           </button>
-          <input
-            ref={inputRef}
-            className="chat-input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
-            maxLength={500}
-            autoFocus
-          />
-        </div>
-        <button className="chat-send-btn" type="submit" disabled={sending || !input.trim()}>
-          Send
-        </button>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

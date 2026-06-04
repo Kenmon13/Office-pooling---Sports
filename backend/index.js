@@ -348,20 +348,24 @@ app.delete("/api/admin/pools/:id", requireAdminToken, (req, res) => {
   db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM participants WHERE pool_id = ?").run(poolId);
+  db.prepare("DELETE FROM pool_admins WHERE pool_id = ?").run(poolId);
   db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
   res.json({ success: true });
 });
 
 // --- Pools ---
 
-app.post("/api/pools", (req, res) => {
+app.post("/api/pools", authenticateToken, (req, res) => {
   const { name, sport, tournament, password, is_public } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Pool name is required" });
   if (!is_public && (!password || !password.trim())) return res.status(400).json({ error: "Password is required" });
   try {
     const pwd = is_public ? "" : password.trim();
     const result = db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, ?)").run(name.trim(), sport || "soccer", tournament || "wc2026", pwd, is_public ? 1 : 0);
-    res.json({ id: result.lastInsertRowid, name: name.trim(), sport: sport || "soccer", tournament: tournament || "wc2026", is_public: is_public ? 1 : 0 });
+    const poolId = result.lastInsertRowid;
+    // Auto-add creator as pool admin
+    db.prepare("INSERT OR IGNORE INTO pool_admins (pool_id, user_id) VALUES (?, ?)").run(poolId, req.user.id);
+    res.json({ id: poolId, name: name.trim(), sport: sport || "soccer", tournament: tournament || "wc2026", is_public: is_public ? 1 : 0 });
   } catch (err) {
     if (err.message.includes("UNIQUE")) {
       return res.status(409).json({ error: "Pool name already taken" });
@@ -438,10 +442,12 @@ app.delete("/api/pools/:poolId/leave", authenticateToken, (req, res) => {
     db.prepare("DELETE FROM predictions WHERE participant_id = ?").run(pid);
     db.prepare("DELETE FROM participants WHERE id = ?").run(pid);
     db.prepare("DELETE FROM messages WHERE pool_id = ? AND user_id = ?").run(poolId, userId);
+    db.prepare("DELETE FROM pool_admins WHERE pool_id = ? AND user_id = ?").run(poolId, userId);
 
     const remaining = db.prepare("SELECT COUNT(*) as count FROM participants WHERE pool_id = ?").get(poolId);
     let poolDeleted = false;
     if (remaining.count === 0) {
+      db.prepare("DELETE FROM pool_admins WHERE pool_id = ?").run(poolId);
       db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
       poolDeleted = true;
     }
@@ -450,6 +456,88 @@ app.delete("/api/pools/:poolId/leave", authenticateToken, (req, res) => {
 
   const poolDeleted = deleteParticipantData();
   res.json({ success: true, pool_deleted: poolDeleted });
+});
+
+// --- Pool Admins ---
+
+function requirePoolAdmin(req, res, next) {
+  authenticateToken(req, res, () => {
+    const poolId = req.params.poolId;
+    const row = db.prepare("SELECT 1 FROM pool_admins WHERE pool_id = ? AND user_id = ?").get(poolId, req.user.id);
+    if (!row) return res.status(403).json({ error: "Pool admin access required" });
+    next();
+  });
+}
+
+app.get("/api/pools/:poolId/admins", authenticateToken, (req, res) => {
+  const poolId = req.params.poolId;
+  const member = db.prepare("SELECT id FROM participants WHERE pool_id = ? AND user_id = ?").get(poolId, req.user.id);
+  if (!member) return res.status(403).json({ error: "Not a member of this pool" });
+  const admins = db.prepare(`
+    SELECT pa.user_id, u.display_name
+    FROM pool_admins pa
+    JOIN users u ON u.id = pa.user_id
+    WHERE pa.pool_id = ?
+  `).all(poolId);
+  res.json(admins);
+});
+
+app.post("/api/pools/:poolId/admins", authenticateToken, (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT is_public FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  if (pool.is_public) return res.status(400).json({ error: "Admin management is only available for private pools" });
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: "user_id is required" });
+
+  const existingAdmins = db.prepare("SELECT COUNT(*) as count FROM pool_admins WHERE pool_id = ?").get(poolId);
+  const isSelfClaim = user_id === req.user.id && existingAdmins.count === 0;
+  const isAdmin = db.prepare("SELECT 1 FROM pool_admins WHERE pool_id = ? AND user_id = ?").get(poolId, req.user.id);
+
+  if (!isSelfClaim && !isAdmin) return res.status(403).json({ error: "Pool admin access required" });
+
+  const member = db.prepare("SELECT id FROM participants WHERE pool_id = ? AND user_id = ?").get(poolId, user_id);
+  if (!member) return res.status(400).json({ error: "User is not a member of this pool" });
+  db.prepare("INSERT OR IGNORE INTO pool_admins (pool_id, user_id) VALUES (?, ?)").run(poolId, user_id);
+  res.json({ success: true });
+});
+
+app.delete("/api/pools/:poolId/kick/:userId", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT is_public FROM pools WHERE id = ?").get(poolId);
+  if (pool && pool.is_public) return res.status(400).json({ error: "Kick is only available for private pools" });
+  const targetUserId = Number(req.params.userId);
+  if (targetUserId === req.user.id) return res.status(400).json({ error: "Cannot kick yourself" });
+  const isTargetAdmin = db.prepare("SELECT 1 FROM pool_admins WHERE pool_id = ? AND user_id = ?").get(poolId, targetUserId);
+  if (isTargetAdmin) return res.status(400).json({ error: "Cannot kick a pool admin" });
+  const participant = db.prepare("SELECT id FROM participants WHERE pool_id = ? AND user_id = ?").get(poolId, targetUserId);
+  if (!participant) return res.status(404).json({ error: "User is not in this pool" });
+
+  const kickMember = db.transaction(() => {
+    const pid = participant.id;
+    db.prepare("DELETE FROM wc2022_champion_picks WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM champion_picks WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM wc2022_knockout_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM wc2022_group_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM knockout_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM group_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM third_place_predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM predictions WHERE participant_id = ?").run(pid);
+    db.prepare("DELETE FROM participants WHERE id = ?").run(pid);
+    db.prepare("DELETE FROM messages WHERE pool_id = ? AND user_id = ?").run(poolId, targetUserId);
+    db.prepare("DELETE FROM pool_admins WHERE pool_id = ? AND user_id = ?").run(poolId, targetUserId);
+  });
+  kickMember();
+  res.json({ success: true });
+});
+
+app.put("/api/pools/:poolId/chat-status", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT is_public FROM pools WHERE id = ?").get(poolId);
+  if (pool && pool.is_public) return res.status(400).json({ error: "Chat management is only available for private pools" });
+  const { closed } = req.body;
+  db.prepare("UPDATE pools SET chat_closed = ? WHERE id = ?").run(closed ? 1 : 0, poolId);
+  res.json({ success: true, chat_closed: closed ? 1 : 0 });
 });
 
 // --- Participants ---
@@ -1811,14 +1899,17 @@ app.put("/api/admin/knockout-matches/:id", requireAdminToken, (req, res) => {
 app.get("/api/pools/:poolId/messages", (req, res) => {
   const { poolId } = req.params;
   const afterId = req.query.after ? Number(req.query.after) : 0;
+  const pool = db.prepare("SELECT chat_closed FROM pools WHERE id = ?").get(poolId);
   const messages = db.prepare(
     "SELECT id, pool_id, user_id, display_name, body, created_at FROM messages WHERE pool_id = ? AND id > ? ORDER BY id ASC LIMIT 200"
   ).all(poolId, afterId);
-  res.json(messages);
+  res.json({ messages, chat_closed: pool ? pool.chat_closed : 0 });
 });
 
 app.post("/api/pools/:poolId/messages", authenticateToken, (req, res) => {
   const { poolId } = req.params;
+  const pool = db.prepare("SELECT chat_closed FROM pools WHERE id = ?").get(poolId);
+  if (pool && pool.chat_closed) return res.status(403).json({ error: "Chat has been closed by a pool admin" });
   const { body } = req.body;
   if (!body || !body.trim()) return res.status(400).json({ error: "Message cannot be empty" });
   if (body.trim().length > 500) return res.status(400).json({ error: "Message too long (max 500 characters)" });

@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { PATCH_NOTES } from "./patchNotes";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
@@ -249,6 +249,29 @@ function App() {
   const [poolPassword, setPoolPassword] = useState(null);
   const [showPoolSettings, setShowPoolSettings] = useState(false);
   const [revealPassword, setRevealPassword] = useState(false);
+  const [poolAdmins, setPoolAdmins] = useState([]);
+  const [poolMembers, setPoolMembers] = useState([]);
+  const [isPoolAdmin, setIsPoolAdmin] = useState(false);
+  const [chatClosed, setChatClosed] = useState(false);
+  const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
+
+  // Load pool admin status and chat_closed when pool changes
+  useEffect(() => {
+    if (user && pool) {
+      fetchPoolAdmins(pool.id).then((data) => {
+        if (!data.error && Array.isArray(data)) {
+          setPoolAdmins(data);
+          setIsPoolAdmin(data.some((a) => a.user_id === user.id));
+        }
+      }).catch(() => {});
+      fetchMessages(pool.id).then((data) => {
+        if (data && typeof data.chat_closed !== "undefined") {
+          setChatClosed(!!data.chat_closed);
+        }
+      }).catch(() => {});
+    }
+  }, [user, pool]);
+
   const [myIssues, setMyIssues] = useState([]);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [issueReplies, setIssueReplies] = useState([]);
@@ -610,9 +633,18 @@ function App() {
                 </button>
                 <button className="btn-small" onClick={async () => {
                   if (!pool.is_public && !poolPassword) {
-                    const res = await fetchPoolPassword(pool.id);
-                    if (!res.error) setPoolPassword(res.password);
+                    const pwRes = await fetchPoolPassword(pool.id);
+                    if (!pwRes.error) setPoolPassword(pwRes.password);
                   }
+                  const [adminsData, membersData] = await Promise.all([
+                    fetchPoolAdmins(pool.id),
+                    fetchParticipants(pool.id),
+                  ]);
+                  if (!adminsData.error && Array.isArray(adminsData)) {
+                    setPoolAdmins(adminsData);
+                    setIsPoolAdmin(adminsData.some((a) => a.user_id === user.id));
+                  }
+                  if (!membersData.error && Array.isArray(membersData)) setPoolMembers(membersData);
                   setShowPoolSettings(true);
                 }}>
                   Pool Settings
@@ -676,14 +708,14 @@ function App() {
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
-            <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} />} />
+            <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
             <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
           </Routes>
         </main>
 
         {showPoolSettings && (
-          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); }}>
-            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); }}>
+            <div className="modal-box pool-settings-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Pool Settings</h3>
               <div className="pool-settings-row">
                 <span className="pool-settings-label">Pool name</span>
@@ -708,8 +740,105 @@ function App() {
                   </span>
                 </div>
               )}
+
+              {!pool.is_public && poolAdmins.length === 0 && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Admin</span>
+                  <span className="pool-settings-value">
+                    <span style={{ marginRight: 8, fontSize: 12, color: "#5a8a5a" }}>This pool has no admin.</span>
+                    <button
+                      className="btn-small"
+                      onClick={async () => {
+                        const res = await addPoolAdmin(pool.id, user.id);
+                        if (!res.error) {
+                          setPoolAdmins([{ user_id: user.id, display_name: user.display_name }]);
+                          setIsPoolAdmin(true);
+                        }
+                      }}
+                    >
+                      Become Admin
+                    </button>
+                  </span>
+                </div>
+              )}
+
+              {!pool.is_public && isPoolAdmin && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Chat</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${chatClosed ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !chatClosed;
+                        const res = await updateChatStatus(pool.id, newVal);
+                        if (!res.error) setChatClosed(newVal);
+                      }}
+                    >
+                      {chatClosed ? "Chat Closed — Reopen" : "Open — Close Chat"}
+                    </button>
+                  </span>
+                </div>
+              )}
+
+              <h4 style={{ marginTop: 16, marginBottom: 8 }}>Members ({poolMembers.length})</h4>
+              <div className="pool-members-list">
+                {poolMembers.map((m) => {
+                  const mIsAdmin = poolAdmins.some((a) => a.user_id === m.user_id);
+                  const isMe = m.user_id === user.id;
+                  return (
+                    <div key={m.id} className="pool-member-row">
+                      <span className="pool-member-name">
+                        {m.name}
+                        {mIsAdmin && <span className="pool-admin-badge">Admin</span>}
+                      </span>
+                      {!pool.is_public && isPoolAdmin && !isMe && (
+                        <span className="pool-member-actions">
+                          {!mIsAdmin && (
+                            <button
+                              className="btn-small"
+                              onClick={async () => {
+                                const res = await addPoolAdmin(pool.id, m.user_id);
+                                if (!res.error) {
+                                  setPoolAdmins((prev) => [...prev, { user_id: m.user_id, display_name: m.name }]);
+                                }
+                              }}
+                            >
+                              Make Admin
+                            </button>
+                          )}
+                          {!mIsAdmin && (
+                            kickConfirmUserId === m.user_id ? (
+                              <span className="kick-confirm">
+                                <span>Kick {m.name}?</span>
+                                <button
+                                  className="btn-small btn-danger"
+                                  onClick={async () => {
+                                    const res = await kickPoolMember(pool.id, m.user_id);
+                                    if (!res.error) {
+                                      setPoolMembers((prev) => prev.filter((p) => p.user_id !== m.user_id));
+                                      setKickConfirmUserId(null);
+                                    }
+                                  }}
+                                >
+                                  Yes
+                                </button>
+                                <button className="btn-small" onClick={() => setKickConfirmUserId(null)}>No</button>
+                              </span>
+                            ) : (
+                              <button className="btn-small btn-danger" onClick={() => setKickConfirmUserId(m.user_id)}>
+                                Kick
+                              </button>
+                            )
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="modal-actions">
-                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); }}>Close</button>
+                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); }}>Close</button>
               </div>
             </div>
           </div>

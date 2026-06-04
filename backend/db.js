@@ -116,6 +116,13 @@ db.exec(`
     UNIQUE(participant_id, team_id)
   );
 
+  CREATE TABLE IF NOT EXISTS pool_admins (
+    pool_id INTEGER NOT NULL REFERENCES pools(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(pool_id, user_id)
+  );
+
   CREATE TABLE IF NOT EXISTS issues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -177,6 +184,9 @@ try { db.exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch (_) {}
 
 // Add public pool column
 try { db.exec("ALTER TABLE pools ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
+// Add chat_closed column to pools
+try { db.exec("ALTER TABLE pools ADD COLUMN chat_closed INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 
 // Add actual score columns to knockout matches (for score-prediction scoring)
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_score INTEGER"); } catch (_) {}

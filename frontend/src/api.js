@@ -184,7 +184,7 @@ export async function adminDeletePool(poolId) {
 export async function createPool(name, sport, tournament, password, is_public) {
   const res = await fetch(`${API}/pools`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({ name, sport, tournament, password, is_public }),
   });
   return res.json();
@@ -447,6 +447,38 @@ export async function sendMessage(poolId, body) {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ body }),
+  });
+  return res.json();
+}
+
+// ── Pool Admin Management ────────────────────────────────────────────────────
+
+export async function fetchPoolAdmins(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/admins`, { headers: authHeaders() })).json();
+}
+
+export async function addPoolAdmin(poolId, userId) {
+  const res = await fetch(`${API}/pools/${poolId}/admins`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ user_id: userId }),
+  });
+  return res.json();
+}
+
+export async function kickPoolMember(poolId, userId) {
+  const res = await fetch(`${API}/pools/${poolId}/kick/${userId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
+export async function updateChatStatus(poolId, closed) {
+  const res = await fetch(`${API}/pools/${poolId}/chat-status`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ closed }),
   });
   return res.json();
 }
