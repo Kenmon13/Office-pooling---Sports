@@ -113,9 +113,8 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
                     const isTop2 = pickIndex === 0 || pickIndex === 1;
                     const isThird = pickIndex === 2;
                     return (
-                      <div key={teamId} className={`view-picks-team ${isTop2 ? "picked" : ""} ${isThird ? "picked third-pick" : ""}`}>
+                      <div key={teamId} className={`view-picks-team ${isTop2 || isThird ? "picked" : ""}`}>
                         {flag(t.code)} {t.name}
-                        {isThird && <span className="third-pick-badge">3rd</span>}
                       </div>
                     );
                   })}

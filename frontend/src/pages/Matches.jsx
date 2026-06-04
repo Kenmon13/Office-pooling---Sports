@@ -462,12 +462,11 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                   return (
                     <div
                       key={teamId}
-                      className={`group-card-team-row ${currentUser && !gLocked ? "clickable" : ""} ${isTop2 ? "selected" : ""} ${isThird ? "selected third-pick" : ""}`}
+                      className={`group-card-team-row ${currentUser && !gLocked ? "clickable" : ""} ${isTop2 || isThird ? "selected" : ""}`}
                       onClick={currentUser && !gLocked ? (e) => { e.stopPropagation(); toggleTeam(g.id, teamId); } : undefined}
                     >
                       <span className="standings-team-col">
                         {flag(code)} {t.name}
-                        {isThird && <span className="third-pick-badge">3rd</span>}
                       </span>
                       <span className="standings-stat">{t.won ?? 0}</span>
                       <span className="standings-stat">{t.drawn ?? 0}</span>
