@@ -8,10 +8,11 @@ import {
 } from "../api";
 import { flag } from "../flags";
 
-function ViewPicks({ poolId, tournament = "wc2026" }) {
+function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
   const { participantId } = useParams();
   const navigate = useNavigate();
   const isWC2022 = tournament === "wc2022";
+  const isViewingSelf = currentUser && String(currentUser.id) === String(participantId);
 
   const [participantName, setParticipantName] = useState("");
   const [groups, setGroups] = useState([]);
@@ -21,6 +22,14 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
   const [koMatches, setKoMatches] = useState([]);
   const [championPick, setChampionPick] = useState(null);
   const [loaded, setLoaded] = useState(false);
+
+  // Compare mode
+  const [comparing, setComparing] = useState(false);
+  const [myGroupPreds, setMyGroupPreds] = useState({});
+  const [myKoPreds, setMyKoPreds] = useState({});
+  const [myKoScores, setMyKoScores] = useState({});
+  const [myChampionPick, setMyChampionPick] = useState(null);
+  const [myLoaded, setMyLoaded] = useState(false);
 
   useEffect(() => {
     const fetchFn = isWC2022 ? fetchWC2022Leaderboard : fetchLeaderboard;
@@ -72,6 +81,41 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
     });
   }, [participantId, poolId, isWC2022]);
 
+  // Fetch my picks when compare mode is toggled on
+  useEffect(() => {
+    if (!comparing || !currentUser || myLoaded) return;
+    const groupPredsFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
+    const koPredsFn = isWC2022 ? fetchWC2022KnockoutPredictions : fetchKnockoutPredictions;
+    const champFn = isWC2022 ? fetchWC2022ChampionPick : fetchChampionPick;
+
+    Promise.all([
+      groupPredsFn(currentUser.id),
+      koPredsFn(currentUser.id),
+      champFn(currentUser.id, poolId),
+    ]).then(([gPreds, kPreds, champData]) => {
+      const gMap = {};
+      gPreds.forEach((p) => {
+        const picks = [p.team1_id, p.team2_id];
+        if (p.team3_id) picks.push(p.team3_id);
+        gMap[p.group_id] = picks;
+      });
+      setMyGroupPreds(gMap);
+
+      const kMap = {};
+      const sMap = {};
+      kPreds.forEach((p) => {
+        kMap[p.match_id] = p.predicted_winner;
+        if (p.predicted_home_score !== null || p.predicted_away_score !== null) {
+          sMap[p.match_id] = { home: p.predicted_home_score, away: p.predicted_away_score };
+        }
+      });
+      setMyKoPreds(kMap);
+      setMyKoScores(sMap);
+      setMyChampionPick(champData?.pick || null);
+      setMyLoaded(true);
+    });
+  }, [comparing, currentUser, poolId, isWC2022, myLoaded]);
+
   if (!loaded) {
     return (
       <div className="page">
@@ -88,12 +132,30 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
     koByRound[round].push(m);
   });
 
+  const showCompare = comparing && myLoaded;
+
   return (
     <div className="page view-picks-page">
       <div className="view-picks-header">
         <button className="btn-small" onClick={() => navigate("/leaderboard")}>&larr; Back</button>
         <h2>{participantName ? `${participantName}'s Picks` : "Picks"}</h2>
+        {currentUser && !isViewingSelf && (
+          <button
+            className={`btn-small ${comparing ? "btn-compare-active" : ""}`}
+            onClick={() => setComparing((v) => !v)}
+          >
+            {comparing ? "Hide Compare" : "Compare with Mine"}
+          </button>
+        )}
       </div>
+
+      {showCompare && (
+        <div className="compare-legend">
+          <span className="compare-legend-item"><span className="compare-dot compare-dot-theirs" /> {participantName}</span>
+          <span className="compare-legend-item"><span className="compare-dot compare-dot-mine" /> You</span>
+          <span className="compare-legend-item"><span className="compare-dot compare-dot-match" /> Same pick</span>
+        </div>
+      )}
 
       {/* Group Stage Picks */}
       <section className="view-picks-section">
@@ -102,6 +164,7 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
         <div className="view-picks-groups">
           {groups.map((g) => {
             const picked = groupPreds[g.id] || [];
+            const myPicked = myGroupPreds[g.id] || [];
             const hasPick = picked.length > 0;
             return (
               <div key={g.id} className={`view-picks-group-card ${hasPick ? "" : "no-pick"}`}>
@@ -109,11 +172,23 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
                 <div className="view-picks-group-teams">
                   {(g.teams || []).map((t) => {
                     const teamId = t.id;
-                    const pickIndex = picked.indexOf(teamId);
-                    const isTop2 = pickIndex === 0 || pickIndex === 1;
-                    const isThird = pickIndex === 2;
+                    const theirPick = picked.indexOf(teamId);
+                    const isTheirPick = theirPick === 0 || theirPick === 1 || theirPick === 2;
+                    const myPick = myPicked.indexOf(teamId);
+                    const isMyPick = showCompare && (myPick === 0 || myPick === 1 || myPick === 2);
+                    const bothPicked = isTheirPick && isMyPick;
+                    let cls = "view-picks-team";
+                    if (bothPicked) cls += " picked compare-match";
+                    else if (isTheirPick) cls += " picked";
+                    else if (isMyPick) cls += " compare-mine-only";
                     return (
-                      <div key={teamId} className={`view-picks-team ${isTop2 || isThird ? "picked" : ""}`}>
+                      <div key={teamId} className={cls}>
+                        {showCompare && (
+                          <span className="compare-indicators">
+                            <span className={`compare-indicator ${isTheirPick ? "compare-ind-theirs" : ""}`} />
+                            <span className={`compare-indicator ${isMyPick ? "compare-ind-mine" : ""}`} />
+                          </span>
+                        )}
                         {flag(t.code)} {t.name}
                       </div>
                     );
@@ -129,32 +204,52 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
       {/* Knockout Picks */}
       <section className="view-picks-section">
         <h3>Knockout Stage</h3>
-        {Object.keys(koPreds).length === 0 && <p className="notice">No knockout picks yet.</p>}
-        {Object.keys(koPreds).length > 0 && (
+        {Object.keys(koPreds).length === 0 && !showCompare && <p className="notice">No knockout picks yet.</p>}
+        {(Object.keys(koPreds).length > 0 || showCompare) && (
           <div className="view-picks-ko">
             {roundOrder.filter((r) => koByRound[r]).map((round) => (
               <div key={round} className="view-picks-ko-round">
                 <h4>{round}</h4>
                 <div className="view-picks-ko-matches">
                   {koByRound[round].map((m) => {
-                    const pick = koPreds[m.id];
-                    const score = koScores[m.id];
-                    if (!pick) return null;
-                    const homeWin = pick === m.home_team_id;
-                    const awayWin = pick === m.away_team_id;
+                    const theirPick = koPreds[m.id];
+                    const myPickVal = showCompare ? myKoPreds[m.id] : undefined;
+                    const theirScore = koScores[m.id];
+                    const myScore = showCompare ? myKoScores[m.id] : undefined;
+                    if (!theirPick && !myPickVal) return null;
+                    const homeWin = theirPick === m.home_team_id;
+                    const awayWin = theirPick === m.away_team_id;
+                    const myHomeWin = myPickVal === m.home_team_id;
+                    const myAwayWin = myPickVal === m.away_team_id;
+                    const sameWinner = theirPick && myPickVal && theirPick === myPickVal;
                     return (
-                      <div key={m.id} className="view-picks-ko-match">
-                        <span className={`view-picks-ko-team ${homeWin ? "picked" : ""}`}>
-                          {flag(m.home_code)} {m.home_team || m.home_placeholder || "TBD"}
-                        </span>
-                        <span className="view-picks-ko-vs">vs</span>
-                        <span className={`view-picks-ko-team ${awayWin ? "picked" : ""}`}>
-                          {m.away_team || m.away_placeholder || "TBD"} {flag(m.away_code)}
-                        </span>
-                        {score && (
-                          <span className="view-picks-ko-score">
-                            ({score.home} - {score.away})
+                      <div key={m.id} className={`view-picks-ko-match ${showCompare ? "compare-ko-match" : ""}`}>
+                        <div className="view-picks-ko-matchup">
+                          <span className={`view-picks-ko-team ${homeWin ? "picked" : ""}`}>
+                            {flag(m.home_code)} {m.home_team || m.home_placeholder || "TBD"}
                           </span>
+                          <span className="view-picks-ko-vs">vs</span>
+                          <span className={`view-picks-ko-team ${awayWin ? "picked" : ""}`}>
+                            {m.away_team || m.away_placeholder || "TBD"} {flag(m.away_code)}
+                          </span>
+                          {theirScore && (
+                            <span className="view-picks-ko-score">
+                              ({theirScore.home} - {theirScore.away})
+                            </span>
+                          )}
+                        </div>
+                        {showCompare && (
+                          <div className="compare-ko-my-pick">
+                            {myPickVal ? (
+                              <span className={`compare-ko-label ${sameWinner ? "compare-match" : "compare-differ"}`}>
+                                You: {myHomeWin ? (m.home_team || "TBD") : myAwayWin ? (m.away_team || "TBD") : "?"}
+                                {myScore ? ` (${myScore.home} - ${myScore.away})` : ""}
+                                {sameWinner && " ✓"}
+                              </span>
+                            ) : (
+                              <span className="compare-ko-label compare-no-pick">You: No pick</span>
+                            )}
+                          </div>
                         )}
                       </div>
                     );
@@ -169,14 +264,43 @@ function ViewPicks({ poolId, tournament = "wc2026" }) {
       {/* Champion Pick */}
       <section className="view-picks-section">
         <h3>Winner Pick</h3>
-        {championPick ? (
-          <div className="view-picks-champion">
-            <span className="view-picks-champion-team">
-              {flag(championPick.team_code)} {championPick.team_name}
-            </span>
+        {showCompare ? (
+          <div className="compare-champion">
+            <div className="compare-champion-col">
+              <div className="compare-champion-label">{participantName}</div>
+              {championPick ? (
+                <div className="view-picks-champion">
+                  <span className="view-picks-champion-team">
+                    {flag(championPick.team_code)} {championPick.team_name}
+                  </span>
+                </div>
+              ) : (
+                <p className="notice">No pick</p>
+              )}
+            </div>
+            <div className="compare-champion-col">
+              <div className="compare-champion-label">You</div>
+              {myChampionPick ? (
+                <div className={`view-picks-champion ${championPick && myChampionPick.team_id === championPick.team_id ? "compare-match" : ""}`}>
+                  <span className="view-picks-champion-team">
+                    {flag(myChampionPick.team_code)} {myChampionPick.team_name}
+                  </span>
+                </div>
+              ) : (
+                <p className="notice">No pick</p>
+              )}
+            </div>
           </div>
         ) : (
-          <p className="notice">No winner pick yet.</p>
+          championPick ? (
+            <div className="view-picks-champion">
+              <span className="view-picks-champion-team">
+                {flag(championPick.team_code)} {championPick.team_name}
+              </span>
+            </div>
+          ) : (
+            <p className="notice">No winner pick yet.</p>
+          )
         )}
       </section>
     </div>

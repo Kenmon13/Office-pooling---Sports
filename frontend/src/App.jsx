@@ -717,7 +717,7 @@ function App() {
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
-            <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
+            <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} currentUser={participant} />} />
           </Routes>
         </main>
 

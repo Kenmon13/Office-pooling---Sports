@@ -2545,6 +2545,115 @@ nav a.active {
   color: #a5d6a7;
 }
 
+/* ── Compare Picks ────────────────────────────────────────────────────────── */
+
+.btn-compare-active {
+  background: #2d5a2d;
+  color: #8fef8f;
+}
+
+.compare-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #8ab88a;
+  flex-wrap: wrap;
+}
+.compare-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.compare-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.compare-dot-theirs { background: #6fdc6f; }
+.compare-dot-mine { background: #64b5f6; }
+.compare-dot-match { background: #ffca28; }
+
+.compare-indicators {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.compare-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #1a2e1a;
+  border: 1px solid #2a4a2a;
+}
+.compare-ind-theirs { background: #6fdc6f; border-color: #6fdc6f; }
+.compare-ind-mine { background: #64b5f6; border-color: #64b5f6; }
+
+.view-picks-team.compare-match {
+  background: #3a3a00;
+  color: #ffca28;
+}
+.view-picks-team.compare-mine-only {
+  background: #0d2a3d;
+  color: #64b5f6;
+}
+
+.compare-ko-match {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.view-picks-ko-matchup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.compare-ko-my-pick {
+  padding-left: 4px;
+}
+.compare-ko-label {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.compare-ko-label.compare-match {
+  color: #ffca28;
+  background: #3a3a00;
+}
+.compare-ko-label.compare-differ {
+  color: #64b5f6;
+  background: #0d2a3d;
+}
+.compare-ko-label.compare-no-pick {
+  color: #5a7a5a;
+  font-style: italic;
+}
+
+.compare-champion {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.compare-champion-col {
+  flex: 1;
+  min-width: 140px;
+}
+.compare-champion-label {
+  font-size: 12px;
+  color: #5a8a5a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.view-picks-champion.compare-match {
+  border-color: #ffca28;
+  background: #3a3a00;
+}
+
 /* ── Pool Chat ────────────────────────────────────────────────────────────── */
 
 .chat-page {
