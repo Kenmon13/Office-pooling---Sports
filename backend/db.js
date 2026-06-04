@@ -136,6 +136,13 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+`);
+
 // Add team3_id (third-place qualifier) to group_predictions
 try { db.exec("ALTER TABLE group_predictions ADD COLUMN team3_id INTEGER REFERENCES teams(id)"); } catch (_) {}
 

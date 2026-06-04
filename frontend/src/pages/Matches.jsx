@@ -283,14 +283,18 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
   }, {});
 
   // Find the next upcoming group deadline (earliest unlocked group's first match)
-  const nextGroupDeadline = (() => {
-    if (isWC2022 || Object.keys(groupDeadlines).length === 0) return deadline;
+  const nextGroupInfo = (() => {
+    if (isWC2022 || Object.keys(groupDeadlines).length === 0) return { deadline, groupName: null };
     const now = new Date();
-    const upcoming = Object.values(groupDeadlines)
-      .filter((dl) => new Date(dl.replace(" ", "T") + "Z") > now)
-      .sort();
-    return upcoming.length > 0 ? upcoming[0] : null;
+    const upcoming = Object.entries(groupDeadlines)
+      .filter(([, dl]) => new Date(dl.replace(" ", "T") + "Z") > now)
+      .sort(([, a], [, b]) => a.localeCompare(b));
+    if (upcoming.length === 0) return { deadline: null, groupName: null };
+    const [groupId, dl] = upcoming[0];
+    const group = groups.find((g) => String(g.id) === String(groupId));
+    return { deadline: dl, groupName: group ? group.name : null };
   })();
+  const nextGroupDeadline = nextGroupInfo.deadline;
 
   const countdown = useCountdown(nextGroupDeadline || deadline);
 
@@ -317,7 +321,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         <p className="ko-rules-title">How predictions work</p>
         <ul>
           <li>Pick the 2 teams you think will qualify from each group. Both correct = 5 pts &middot; One correct = 2 pts.</li>
-          {!isWC2022 && <li>Optionally pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will still qualify for the knockouts. Each correct pick = 1 pt.</li>}
+          {!isWC2022 && <li>Pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will still qualify for the knockouts. Each correct pick = 1 pt.</li>}
           <li>Each group locks when its first match kicks off — you can update picks for other groups until their matches start.</li>
         </ul>
       </div>
@@ -377,7 +381,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
             </div>
           </div>
           <div className="deadline-info">
-            <span className="deadline-label">Next group locks on</span>
+            <span className="deadline-label">{nextGroupInfo.groupName ? `Group ${nextGroupInfo.groupName} locks on` : "Next group locks on"}</span>
             <span className="deadline-date">{formatDeadlineFull(nextGroupDeadline, displayTzOffset)}</span>
           </div>
         </div>

@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { PATCH_NOTES } from "./patchNotes";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
@@ -75,6 +75,9 @@ function App() {
   });
 
   // Invite link handling
+  const [announcement, setAnnouncement] = useState("");
+  const [editingAnnouncement, setEditingAnnouncement] = useState(false);
+  const [announcementDraft, setAnnouncementDraft] = useState("");
   const [invitePool, setInvitePool] = useState(null);
   const [inviteLoading, setInviteLoading] = useState(() => {
     return /^\/join\/\d+/.test(window.location.pathname);
@@ -100,6 +103,15 @@ function App() {
       });
     }
   }, [user, pool]);
+
+  // Fetch announcement (tournament-specific)
+  const currentTournamentId = pool?.tournament || selectedTournament?.id || null;
+  useEffect(() => {
+    if (!currentTournamentId) return;
+    fetchAnnouncement(currentTournamentId).then((data) => {
+      setAnnouncement(data.announcement || "");
+    });
+  }, [currentTournamentId]);
 
   // Refresh points whenever participant or pool changes
   useEffect(() => {
@@ -332,6 +344,43 @@ function App() {
     handleLeavePool();
   };
 
+  const announcementBar = currentTournamentId && (!!announcement || !!(user && user.is_admin)) ? (
+    <div className="announcement-bar">
+      {announcement && !editingAnnouncement && (
+        <div className="announcement-text"><span>{announcement}</span></div>
+      )}
+      {!!(user && user.is_admin) && !editingAnnouncement && (
+        <button className="btn-small announcement-edit-btn" onClick={() => { setAnnouncementDraft(announcement); setEditingAnnouncement(true); }}>
+          {announcement ? "Edit" : "Set Announcement"}
+        </button>
+      )}
+      {editingAnnouncement && (
+        <div className="announcement-editor">
+          <input
+            type="text"
+            value={announcementDraft}
+            onChange={(e) => setAnnouncementDraft(e.target.value)}
+            placeholder="Type an announcement for all users..."
+            className="announcement-input"
+          />
+          <button className="btn-small" onClick={async () => {
+            await updateAnnouncement(announcementDraft, currentTournamentId);
+            setAnnouncement(announcementDraft.trim());
+            setEditingAnnouncement(false);
+          }}>Save</button>
+          {announcement && (
+            <button className="btn-small btn-danger" onClick={async () => {
+              await updateAnnouncement("", currentTournamentId);
+              setAnnouncement("");
+              setEditingAnnouncement(false);
+            }}>Clear</button>
+          )}
+          <button className="btn-small" onClick={() => setEditingAnnouncement(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
   // Step 0: Sign in / Sign up / Reset password
   if (!user || initialAuthView === "reset") {
     return (
@@ -454,6 +503,7 @@ function App() {
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
+        {announcementBar}
         <SelectTournament
           sport={selectedSport}
           onSelect={(t) => setSelectedTournament(t)}
@@ -499,6 +549,7 @@ function App() {
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
+        {announcementBar}
         <JoinPool
           sport={selectedSport}
           tournament={selectedTournament}
@@ -604,6 +655,7 @@ function App() {
               </svg>
             </div>
           </div>
+          {announcementBar}
           <nav>
             <NavLink to="/">Groups</NavLink>
             <NavLink to="/knockouts">Knockouts</NavLink>

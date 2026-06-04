@@ -524,6 +524,29 @@ app.get("/api/matches", (req, res) => {
 
 // --- Group Predictions ---
 
+// --- Announcement ---
+
+app.get("/api/announcement", (req, res) => {
+  const tournament = req.query.tournament;
+  const key = tournament ? `announcement_${tournament}` : "announcement";
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  res.json({ announcement: row ? row.value : "" });
+});
+
+app.put("/api/announcement", requireAdminToken, (req, res) => {
+  const { announcement, tournament } = req.body;
+  const key = tournament ? `announcement_${tournament}` : "announcement";
+  const text = (announcement || "").trim();
+  if (text) {
+    db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, text);
+  } else {
+    db.prepare("DELETE FROM settings WHERE key = ?").run(key);
+  }
+  res.json({ success: true });
+});
+
+// --- Group Predictions ---
+
 app.get("/api/group-predictions/:participantId", (req, res) => {
   const predictions = db
     .prepare(`

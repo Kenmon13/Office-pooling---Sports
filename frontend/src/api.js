@@ -225,6 +225,23 @@ export async function fetchPublicPools(sport, tournament) {
   return res.json();
 }
 
+// --- Announcement ---
+
+export async function fetchAnnouncement(tournament) {
+  const params = tournament ? `?tournament=${encodeURIComponent(tournament)}` : "";
+  const res = await fetch(`${API}/announcement${params}`);
+  return res.json();
+}
+
+export async function updateAnnouncement(announcement, tournament) {
+  const res = await fetch(`${API}/announcement`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ announcement, tournament }),
+  });
+  return res.json();
+}
+
 export async function leavePool(poolId) {
   const res = await fetch(`${API}/pools/${poolId}/leave`, {
     method: "DELETE",
