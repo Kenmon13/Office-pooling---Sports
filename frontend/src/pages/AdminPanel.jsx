@@ -29,6 +29,9 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const [issueReplies, setIssueReplies] = useState([]);
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
+  const [poolSort, setPoolSort] = useState("recent");
+  const [userSort, setUserSort] = useState("recent");
+  const [issueFilter, setIssueFilter] = useState("all");
   const fileInputRef = useRef(null);
 
   const loadBackups = () => adminListBackups().then((d) => { if (!d.error) setBackups(d); });
@@ -192,6 +195,21 @@ function AdminPanel({ user, onSelectPool, onBack }) {
     setUsers((prev) => prev.filter((u) => u.id !== targetId));
   };
 
+  const sortPools = (list) => {
+    const sorted = [...list];
+    if (poolSort === "alpha") sorted.sort((a, b) => a.name.localeCompare(b.name));
+    else if (poolSort === "users") sorted.sort((a, b) => (b.user_count || 0) - (a.user_count || 0));
+    else sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return sorted;
+  };
+
+  const sortUsers = (list) => {
+    const sorted = [...list];
+    if (userSort === "alpha") sorted.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    else sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return sorted;
+  };
+
   // Group pools by sport, then by tournament
   const grouped = {};
   for (const p of pools) {
@@ -227,7 +245,14 @@ function AdminPanel({ user, onSelectPool, onBack }) {
 
       {tab === "pools" && (
         <>
-          <p className="select-subtitle">{pools.length} pool{pools.length !== 1 ? "s" : ""} &middot; {totalPoolUsers} total participant{totalPoolUsers !== 1 ? "s" : ""}</p>
+          <div className="admin-sort-row">
+            <p className="select-subtitle">{pools.length} pool{pools.length !== 1 ? "s" : ""} &middot; {totalPoolUsers} total participant{totalPoolUsers !== 1 ? "s" : ""}</p>
+            <select className="admin-sort-select" value={poolSort} onChange={(e) => setPoolSort(e.target.value)}>
+              <option value="recent">Recent</option>
+              <option value="alpha">A &ndash; Z</option>
+              <option value="users">Most Users</option>
+            </select>
+          </div>
 
           {Object.keys(grouped).length === 0 && <p className="notice">No pools created yet.</p>}
 
@@ -255,7 +280,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
                         <span className="admin-tournament-stats">{tournamentPools.length} pool{tournamentPools.length !== 1 ? "s" : ""} &middot; {tournamentUsers} user{tournamentUsers !== 1 ? "s" : ""}</span>
                       </div>
                       <div className="pool-list">
-                        {tournamentPools.map((p) => (
+                        {sortPools(tournamentPools).map((p) => (
                           <div key={p.id} className="pool-list-item">
                             <button
                               className="pool-list-btn"
@@ -284,9 +309,15 @@ function AdminPanel({ user, onSelectPool, onBack }) {
 
       {tab === "users" && (
         <>
-          <p className="select-subtitle">{users.length} registered user{users.length !== 1 ? "s" : ""}</p>
+          <div className="admin-sort-row">
+            <p className="select-subtitle">{users.length} registered user{users.length !== 1 ? "s" : ""}</p>
+            <select className="admin-sort-select" value={userSort} onChange={(e) => setUserSort(e.target.value)}>
+              <option value="recent">Recent</option>
+              <option value="alpha">A &ndash; Z</option>
+            </select>
+          </div>
           <div className="pool-list">
-            {users.map((u) => (
+            {sortUsers(users).map((u) => (
               <div key={u.id} className="pool-list-item">
                 <div className="pool-list-btn user-list-info">
                   <div>
@@ -432,13 +463,20 @@ function AdminPanel({ user, onSelectPool, onBack }) {
 
       {tab === "issues" && !selectedIssue && (
         <>
-          <p className="select-subtitle">
-            {issues.filter((i) => i.status === "open").length} open issue{issues.filter((i) => i.status === "open").length !== 1 ? "s" : ""}
-            {issues.filter((i) => i.status === "resolved").length > 0 && ` · ${issues.filter((i) => i.status === "resolved").length} resolved`}
-          </p>
+          <div className="admin-sort-row">
+            <p className="select-subtitle">
+              {issues.filter((i) => i.status === "open").length} open issue{issues.filter((i) => i.status === "open").length !== 1 ? "s" : ""}
+              {issues.filter((i) => i.status === "resolved").length > 0 && ` · ${issues.filter((i) => i.status === "resolved").length} resolved`}
+            </p>
+            <select className="admin-sort-select" value={issueFilter} onChange={(e) => setIssueFilter(e.target.value)}>
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
           {issues.length === 0 && <p className="notice">No issues reported.</p>}
           <div className="pool-list">
-            {issues.map((issue) => (
+            {issues.filter((i) => issueFilter === "all" || i.status === issueFilter).map((issue) => (
               <div key={issue.id} className={`pool-list-item issue-item ${issue.status}`}>
                 <button className="pool-list-btn issue-list-info" onClick={() => openAdminThread(issue)}>
                   <div className="issue-header">
@@ -514,12 +552,22 @@ function AdminPanel({ user, onSelectPool, onBack }) {
             ))}
           </div>
           <div className="issue-chat-input">
-            <input
-              type="text"
+            <textarea
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder="Type a reply..."
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdminReply(); } }}
+              placeholder="Type a reply... (Alt+Enter for new line)"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.altKey) {
+                  e.preventDefault();
+                  const { selectionStart, selectionEnd } = e.target;
+                  setReplyText((prev) => prev.slice(0, selectionStart) + "\n" + prev.slice(selectionEnd));
+                  setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = selectionStart + 1; }, 0);
+                } else if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAdminReply();
+                }
+              }}
+              rows={1}
               autoFocus
             />
             <button className="btn-submit" onClick={handleAdminReply} disabled={replySending || !replyText.trim()}>
