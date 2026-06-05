@@ -1257,12 +1257,17 @@ nav a.active {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .public-pool-name {
   font-weight: 600;
   font-size: 15px;
   color: #e0e0e0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .public-pool-members {
@@ -1417,6 +1422,29 @@ nav a.active {
 .admin-tab.active {
   background: #1a4a1a;
   color: #6fdc6f;
+  border-color: #6fdc6f;
+}
+
+.admin-sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.admin-sort-select {
+  background: #1a1a1a;
+  color: #c8f0c8;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-sort-select:focus {
+  outline: none;
   border-color: #6fdc6f;
 }
 
@@ -2794,6 +2822,8 @@ nav a.active {
 .emoji-toggle {
   position: absolute;
   left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   background: none;
   border: none;
   font-size: 20px;
@@ -3186,7 +3216,8 @@ nav a.active {
   display: flex;
   gap: 8px;
 }
-.issue-chat-input input {
+.issue-chat-input input,
+.issue-chat-input textarea {
   flex: 1;
   background: #2a2a2a;
   border: 1px solid #444;
@@ -3194,8 +3225,11 @@ nav a.active {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 0.9rem;
+  font-family: inherit;
+  resize: none;
 }
-.issue-chat-input input:focus {
+.issue-chat-input input:focus,
+.issue-chat-input textarea:focus {
   outline: none;
   border-color: #4fc3f7;
 }
