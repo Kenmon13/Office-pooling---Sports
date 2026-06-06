@@ -11,6 +11,7 @@ import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
+import Landing from "./pages/Landing";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchParticipants, fetchMessages } from "./api";
@@ -416,7 +417,10 @@ function App() {
   if (!user || initialAuthView === "reset") {
     return (
       <div className="app">
-        <Auth onAuth={handleAuth} initialView={initialAuthView} />
+        {initialAuthView === "reset"
+          ? <Auth onAuth={handleAuth} initialView={initialAuthView} />
+          : <Landing onAuth={handleAuth} initialView={initialAuthView} />
+        }
       </div>
     );
   }
