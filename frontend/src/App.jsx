@@ -13,7 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -247,6 +247,7 @@ function App() {
   const [poolMembers, setPoolMembers] = useState([]);
   const [isPoolAdmin, setIsPoolAdmin] = useState(false);
   const [chatClosed, setChatClosed] = useState(false);
+  const [championW2Locked, setChampionW2Locked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
 
   // Load pool admin status and chat_closed when pool changes
@@ -261,6 +262,11 @@ function App() {
       fetchMessages(pool.id).then((data) => {
         if (data && typeof data.chat_closed !== "undefined") {
           setChatClosed(!!data.chat_closed);
+        }
+      }).catch(() => {});
+      fetchChampionW2Lock(pool.id).then((data) => {
+        if (data && typeof data.champion_w2_locked !== "undefined") {
+          setChampionW2Locked(!!data.champion_w2_locked);
         }
       }).catch(() => {});
     }
@@ -774,6 +780,24 @@ function App() {
                       }}
                     >
                       {chatClosed ? "Chat Closed — Reopen" : "Open — Close Chat"}
+                    </button>
+                  </span>
+                </div>
+              )}
+
+              {isPoolAdmin && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Champion Pick (Window 2)</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${championW2Locked ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !championW2Locked;
+                        const res = await updateChampionW2Lock(pool.id, newVal);
+                        if (!res.error) setChampionW2Locked(newVal);
+                      }}
+                    >
+                      {championW2Locked ? "Locked — Unlock" : "Open — Lock"}
                     </button>
                   </span>
                 </div>

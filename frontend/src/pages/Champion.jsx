@@ -31,6 +31,7 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   const canInteract = (canPick || canChange) && !!currentUser;
   const hasPick = !!status?.pick;
   const isLocked = !!status?.locked;
+  const w2AdminLocked = !!status?.w2AdminLocked;
   const pickCorrect = !!status?.pickCorrect;
   const changeCost = status?.changeCost || 0;
 
@@ -124,7 +125,13 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
         </div>
       )}
 
-      {statusLoaded && !canInteract && !isLocked && !hasPick && (
+      {statusLoaded && w2AdminLocked && (
+        <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
+          <span className="deadline-locked-text">Winner pick window 2 has been locked by your pool admin</span>
+        </div>
+      )}
+
+      {statusLoaded && !canInteract && !isLocked && !w2AdminLocked && !hasPick && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
           <span className="deadline-locked-text">Winner pick window is closed</span>
         </div>
@@ -235,7 +242,7 @@ function WinnerRules() {
           <strong>Two change windows:</strong>
           <ul>
             <li><strong>Before the group stage kicks off</strong> — change as many times as you like, completely free.</li>
-            <li><strong>After the final group match, before the first knockout match</strong> — your first change costs <strong>−5 pts</strong>; all further changes in this window are free.</li>
+            <li><strong>After the final group match, before the first knockout match</strong> — your first change costs <strong>−5 pts</strong>; all further changes in this window are free (option set by pool admin).</li>
           </ul>
         </li>
         <li>Pick is <strong>locked</strong> during the group stage and permanently once the knockouts begin.</li>

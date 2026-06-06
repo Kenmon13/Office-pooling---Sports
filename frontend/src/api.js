@@ -483,6 +483,19 @@ export async function updateChatStatus(poolId, closed) {
   return res.json();
 }
 
+export async function fetchChampionW2Lock(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/champion-w2-lock`)).json();
+}
+
+export async function updateChampionW2Lock(poolId, locked) {
+  const res = await fetch(`${API}/pools/${poolId}/champion-w2-lock`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ locked }),
+  });
+  return res.json();
+}
+
 // ── Admin test pool ───────────────────────────────────────────────────────────
 
 export async function adminFetchTestPools() {

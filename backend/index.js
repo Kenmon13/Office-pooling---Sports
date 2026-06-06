@@ -540,6 +540,20 @@ app.put("/api/pools/:poolId/chat-status", requirePoolAdmin, (req, res) => {
   res.json({ success: true, chat_closed: closed ? 1 : 0 });
 });
 
+app.put("/api/pools/:poolId/champion-w2-lock", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { locked } = req.body;
+  db.prepare("UPDATE pools SET champion_w2_locked = ? WHERE id = ?").run(locked ? 1 : 0, poolId);
+  res.json({ success: true, champion_w2_locked: locked ? 1 : 0 });
+});
+
+app.get("/api/pools/:poolId/champion-w2-lock", (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT champion_w2_locked FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json({ champion_w2_locked: pool.champion_w2_locked });
+});
+
 // --- Participants ---
 
 app.get("/api/participants", (req, res) => {
@@ -1618,7 +1632,10 @@ app.get("/api/champion-pick/:participantId", (req, res) => {
   const koStarted = db.prepare("SELECT COUNT(*) as c FROM knockout_matches WHERE status != 'upcoming'").get().c > 0;
   const inPreGroupWindow  = !groupStarted;
   const inPostGroupWindow = groupStageComplete && !koStarted;
-  const windowOpen = inPreGroupWindow || inPostGroupWindow;
+  // Check if admin has locked champion pick window 2
+  const pool = pool_id ? db.prepare("SELECT champion_w2_locked FROM pools WHERE id = ?").get(pool_id) : null;
+  const w2AdminLocked = !!(pool && pool.champion_w2_locked && inPostGroupWindow);
+  const windowOpen = inPreGroupWindow || (inPostGroupWindow && !w2AdminLocked);
   const lockedDuringGroups = groupStarted && !groupStageComplete;
   const pick = db.prepare(`
     SELECT cp.*, t.name as team_name, t.code as team_code
@@ -1629,10 +1646,10 @@ app.get("/api/champion-pick/:participantId", (req, res) => {
   const canInitialPick = windowOpen && !pick;
   const canChange = windowOpen && !!pick;
   const feePaid = pick && pick.change_cost > 0;
-  const changeCost = (inPostGroupWindow && !feePaid) ? 5 : 0;
+  const changeCost = (inPostGroupWindow && !w2AdminLocked && !feePaid) ? 5 : 0;
   const finalMatch = db.prepare("SELECT winner_team_id FROM knockout_matches WHERE id = 'F'").get();
   const pickCorrect = !!(pick && finalMatch?.winner_team_id && String(pick.team_id) === String(finalMatch.winner_team_id));
-  res.json({ canInitialPick, canChange, locked: lockedDuringGroups, changeCost, pick: pick || null, pickCorrect });
+  res.json({ canInitialPick, canChange, locked: lockedDuringGroups, w2AdminLocked, changeCost, pick: pick || null, pickCorrect });
 });
 
 app.post("/api/champion-pick", (req, res) => {
@@ -1645,6 +1662,14 @@ app.post("/api/champion-pick", (req, res) => {
   const koStarted = db.prepare("SELECT COUNT(*) as c FROM knockout_matches WHERE status != 'upcoming'").get().c > 0;
   const inPreGroupWindow  = !groupStarted;
   const inPostGroupWindow = groupStageComplete && !koStarted;
+  // Check if admin has locked champion pick window 2
+  if (inPostGroupWindow) {
+    const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+    if (participant) {
+      const pool = db.prepare("SELECT champion_w2_locked FROM pools WHERE id = ?").get(participant.pool_id);
+      if (pool && pool.champion_w2_locked) return res.status(403).json({ error: "Champion pick window 2 has been locked by your pool admin" });
+    }
+  }
   if (!inPreGroupWindow && !inPostGroupWindow) return res.status(403).json({ error: "Champion pick window is closed" });
   const existing = db.prepare("SELECT * FROM champion_picks WHERE participant_id = ?").get(participant_id);
   // Charge 5pt fee on the first pick/change made in the post-group window, even if no prior pick

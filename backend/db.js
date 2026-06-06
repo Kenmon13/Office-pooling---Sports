@@ -449,6 +449,9 @@ try { db.exec("ALTER TABLE wc2022_champion_picks ADD COLUMN change_cost INTEGER 
 try { db.exec("ALTER TABLE champion_picks ADD COLUMN is_changed INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE wc2022_champion_picks ADD COLUMN is_changed INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 
+// Add champion_w2_locked to pools (admin can lock champion pick window 2)
+try { db.exec("ALTER TABLE pools ADD COLUMN champion_w2_locked INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
 // Seed WC2022 actual KO scores (AET where applicable; penalties not counted in score)
 const WC2022_KO_SCORES = [
   { id: "22-R16-1", hs: 3, as: 1 }, // Netherlands 3-1 USA
