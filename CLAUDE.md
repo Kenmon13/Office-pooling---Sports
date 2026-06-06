@@ -12,8 +12,8 @@ Pool funds and predict sports events. Full-stack JS app deployed on Railway.
 
 | Person | GitHub | Branch |
 |--------|--------|--------|
-| Zhennan (you) | FieryZephyr | `Zhennan` |
-| Partner | Kenmon13 | TBD |
+| Ken (you) | Kenmon13 | `ken` |
+| Zhennan | FieryZephyr | `Zhennan` |
 
 ---
 
@@ -58,18 +58,16 @@ npm run build   # from repo root
 
 ## Git Workflow
 
-- **Your branch:** `Zhennan` — all your work goes here; merge into `main` via PR.
-- **Never commit directly to `main`.**
-- Open PRs directly without waiting for reviewer approval — Kenmon13 reviews at his own pace.
-- When merging PRs, never delete the `Zhennan` branch — it is the permanent working branch.
+- **Your branch:** `ken` — all your work goes here; merge into `main` when ready.
+- When merging PRs, never delete `ken` or `Zhennan` — they are permanent working branches.
 - Before starting work each session:
   ```bash
   git fetch origin
   git log --oneline -8            # check partner's recent commits
-  git pull origin Zhennan         # sync your own branch
+  git pull origin ken             # sync your own branch
   ```
 - Commit messages must be self-describing (another person reads them cold).
-- Never `git push --force`, `git rebase`, or `git reset --hard` on `Zhennan` or `main`.
+- Never `git push --force`, `git rebase`, or `git reset --hard` on `ken`, `Zhennan`, or `main`.
 - To undo a shared commit: `git revert <sha>` — creates a safe new commit.
 
 ---
