@@ -158,6 +158,28 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           <p className="champion-instructions">
             {canChange ? "Select a new team to change your pick:" : "Select the team you think will win the tournament:"}
           </p>
+          {selectedTeam && !confirming && (
+            <div className="champion-confirm-row">
+              <span>Selected: <strong>{flag(selectedTeam.code)} {selectedTeam.name}</strong></span>
+              <button className="btn-submit" onClick={handleConfirmClick} disabled={saving}>
+                {saving ? "Saving…" : canChange
+                  ? changeCost > 0 ? `Change pick (costs ${changeCost} pts)` : "Change pick (free)"
+                  : "Save pick"}
+              </button>
+              <button className="btn-small" onClick={() => setSelectedTeam(null)}>Cancel</button>
+            </div>
+          )}
+
+          {selectedTeam && confirming && (
+            <div className="champion-confirm-row champion-cost-confirm">
+              <span>Changing to <strong>{flag(selectedTeam.code)} {selectedTeam.name}</strong> will deduct <strong>{changeCost} pts</strong>. Confirm?</span>
+              <button className="btn-submit" onClick={doSave} disabled={saving}>
+                {saving ? "Saving…" : "Yes, change pick"}
+              </button>
+              <button className="btn-small" onClick={() => setConfirming(false)}>Cancel</button>
+            </div>
+          )}
+
           <div className="champion-groups">
             {groups.map((g) => (
               <div key={g.id} className="champion-group">
@@ -181,28 +203,6 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
               </div>
             ))}
           </div>
-
-          {selectedTeam && !confirming && (
-            <div className="champion-confirm-row">
-              <span>Selected: <strong>{flag(selectedTeam.code)} {selectedTeam.name}</strong></span>
-              <button className="btn-submit" onClick={handleConfirmClick} disabled={saving}>
-                {saving ? "Saving…" : canChange
-                  ? changeCost > 0 ? `Change pick (costs ${changeCost} pts)` : "Change pick (free)"
-                  : "Save pick"}
-              </button>
-              <button className="btn-small" onClick={() => setSelectedTeam(null)}>Cancel</button>
-            </div>
-          )}
-
-          {selectedTeam && confirming && (
-            <div className="champion-confirm-row champion-cost-confirm">
-              <span>Changing to <strong>{flag(selectedTeam.code)} {selectedTeam.name}</strong> will deduct <strong>{changeCost} pts</strong>. Confirm?</span>
-              <button className="btn-submit" onClick={doSave} disabled={saving}>
-                {saving ? "Saving…" : "Yes, change pick"}
-              </button>
-              <button className="btn-small" onClick={() => setConfirming(false)}>Cancel</button>
-            </div>
-          )}
         </>
       )}
 
