@@ -14,6 +14,7 @@ import Auth from "./pages/Auth";
 import Landing from "./pages/Landing";
 import Chat from "./pages/Chat";
 import Players from "./pages/Players";
+import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
@@ -709,6 +710,7 @@ function App() {
             <NavLink to="/knockouts">Knockouts</NavLink>
             <NavLink to="/champion">Winner</NavLink>
             <NavLink to="/players">Awards</NavLink>
+            <NavLink to="/stats">Stats</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
             <NavLink to="/history">History</NavLink>
             <NavLink to="/chat">Chat</NavLink>
@@ -724,6 +726,7 @@ function App() {
             <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} />} />
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/stats" element={<Stats poolId={pool.id} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />

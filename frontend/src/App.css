@@ -4024,6 +4024,168 @@ nav a.active {
 
 .history-row.history-player_award td { background: #1a1a0d; }
 
+/* ── Stats page ──────────────────────────────────────────────────────────── */
+
+.stats-section {
+  margin-bottom: 32px;
+}
+
+.stats-section h3 {
+  font-size: 1.2rem;
+  color: #6fdc6f;
+  margin-bottom: 4px;
+}
+
+.stats-subtitle {
+  font-size: 0.85rem;
+  color: #5a8a5a;
+  margin-bottom: 16px;
+}
+
+.stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #1a2a1a;
+  border-radius: 8px;
+}
+
+.stats-row-compact {
+  padding: 5px 10px;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid #1e3a1e;
+}
+
+.stats-rank {
+  font-weight: 700;
+  color: #6fdc6f;
+  min-width: 30px;
+  font-size: 0.95rem;
+}
+
+.stats-rank-sm {
+  font-weight: 600;
+  color: #5a8a5a;
+  min-width: 24px;
+  font-size: 0.8rem;
+}
+
+.stats-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  font-weight: 500;
+}
+
+.stats-flag {
+  border-radius: 2px;
+}
+
+.stats-bar-wrapper {
+  flex: 1;
+  height: 18px;
+  background: #0f200f;
+  border-radius: 9px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.stats-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #2d7a2d, #4caf50);
+  border-radius: 9px;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+
+.stats-bar-group {
+  background: linear-gradient(90deg, #1a5a3a, #2d8a5a);
+}
+
+.stats-pct {
+  font-weight: 700;
+  color: #6fdc6f;
+  min-width: 40px;
+  text-align: right;
+  font-size: 0.9rem;
+}
+
+.stats-count {
+  color: #5a8a5a;
+  font-size: 0.8rem;
+  min-width: 30px;
+}
+
+.stats-groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.stats-group-card {
+  background: #1a2a1a;
+  border: 1px solid #2d4a2d;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.stats-group-card h4 {
+  color: #6fdc6f;
+  font-size: 1rem;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2d4a2d;
+}
+
+/* ── Global stats box (JoinPool page) ── */
+
+.global-stats-box {
+  margin-top: 32px;
+  padding: 20px;
+  background: #12241a;
+  border: 1px solid #2d4a2d;
+  border-radius: 12px;
+}
+
+
+.global-stats-section {
+  margin-bottom: 24px;
+}
+
+.global-stats-section:last-child {
+  margin-bottom: 0;
+}
+
+.global-stats-section > h4 {
+  font-size: 1rem;
+  color: #c8f0c8;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e3a1e;
+}
+
+@media (max-width: 600px) {
+  .stats-groups-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-team {
+    min-width: 100px;
+    font-size: 0.85rem;
+  }
+  .global-stats-box {
+    padding: 14px;
+  }
+}
+
 @media (max-width: 600px) {
   .player-award-card {
     padding: 12px;

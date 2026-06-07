@@ -626,3 +626,18 @@ export async function adminClearMockDate(poolId) {
   });
   return res.json();
 }
+
+export async function fetchGlobalStats(tournament) {
+  const res = await fetch(`${API}/stats/global?tournament=${tournament}`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function fetchGroupPickStats(poolId) {
+  const res = await fetch(`${API}/stats/group-picks?pool_id=${poolId}`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function fetchChampionPickStats(poolId) {
+  const res = await fetch(`${API}/stats/champion-picks?pool_id=${poolId}`, { headers: authHeaders() });
+  return res.json();
+}
