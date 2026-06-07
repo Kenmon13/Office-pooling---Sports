@@ -3826,3 +3826,199 @@ nav a.active {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Player Awards ──────────────────────────────────────────────────────────── */
+
+.player-awards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.player-award-card {
+  background: #1a2a1a;
+  border: 1px solid #2d4a2d;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.player-award-card.award-correct {
+  border-color: #4a8;
+  background: #1a2a1a;
+}
+
+.award-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.award-emoji {
+  font-size: 1.4rem;
+}
+
+.award-name {
+  font-weight: 600;
+  font-size: 1.05rem;
+  flex: 1;
+}
+
+.award-pts {
+  background: #2d4a2d;
+  color: #8f8;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.award-desc {
+  color: #8a8;
+  font-size: 0.85rem;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.award-current-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #0d1a0d;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.award-current-pick.correct {
+  background: #1a2a1a;
+  border: 1px solid #4a8;
+}
+
+.award-pick-label {
+  color: #8a8;
+  font-size: 0.85rem;
+}
+
+.award-pick-value {
+  font-weight: 600;
+}
+
+.award-correct-badge {
+  background: #2d6a2d;
+  color: #8f8;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.award-result-info {
+  color: #a88;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+  padding: 4px 0;
+}
+
+/* Searchable Picker */
+
+.player-picker {
+  position: relative;
+}
+
+.player-search {
+  width: 100%;
+  padding: 8px 12px;
+  background: #0d1a0d;
+  border: 1px solid #2d4a2d;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.player-search:focus {
+  outline: none;
+  border-color: #4a8;
+}
+
+.player-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #1a2a1a;
+  border: 1px solid #2d4a2d;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  z-index: 100;
+}
+
+.player-dropdown-empty {
+  padding: 12px;
+  color: #888;
+  text-align: center;
+}
+
+.player-dropdown-group {
+  border-bottom: 1px solid #2d4a2d;
+}
+
+.player-dropdown-group:last-child {
+  border-bottom: none;
+}
+
+.player-dropdown-team {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #8a8;
+  background: #0d1a0d;
+  position: sticky;
+  top: 0;
+}
+
+.player-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px 6px 20px;
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.player-dropdown-item:hover {
+  background: #2d4a2d;
+}
+
+.player-dropdown-item.current {
+  color: #8f8;
+  font-weight: 600;
+}
+
+.player-pos {
+  font-size: 0.75rem;
+  color: #888;
+  margin-left: auto;
+}
+
+.history-row.history-player_award td { background: #1a1a0d; }
+
+@media (max-width: 600px) {
+  .player-award-card {
+    padding: 12px;
+  }
+  .award-header {
+    flex-wrap: wrap;
+  }
+}

@@ -85,7 +85,7 @@ function Predictions({ currentUser }) {
       }
       const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
       const correct = picked.filter((t) => qualifyingTeams.includes(t)).length;
-      if (correct === 3) return { points: 7, label: "All 3 correct", cls: "correct" };
+      if (correct === 3) return { points: 10, label: "All 3 correct", cls: "correct" };
       if (correct === 2) return { points: 5, label: "2 correct", cls: "half" };
       if (correct === 1) return { points: 2, label: "1 correct", cls: "half" };
       return { points: 0, label: "0 correct", cls: "wrong" };

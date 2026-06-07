@@ -425,6 +425,34 @@ export async function submitChampionPick(participant_id, team_id) {
   return res.json();
 }
 
+// ── Player Award Picks ──────────────────────────────────────────────────────
+
+export async function fetchWcPlayers() {
+  return (await fetch(`${API}/wc-players`)).json();
+}
+export async function fetchPlayerAwardPicks(participantId, poolId) {
+  return (await fetch(`${API}/player-award-picks/${participantId}?pool_id=${poolId}`)).json();
+}
+export async function submitPlayerAwardPick(participant_id, award_category, player_id, team_id) {
+  const res = await fetch(`${API}/player-award-picks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participant_id, award_category, player_id, team_id }),
+  });
+  return res.json();
+}
+export async function fetchPlayerAwardsLock(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/player-awards-lock`)).json();
+}
+export async function updatePlayerAwardsLock(poolId, locked) {
+  const res = await fetch(`${API}/pools/${poolId}/player-awards-lock`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ locked }),
+  });
+  return res.json();
+}
+
 // ── History ───────────────────────────────────────────────────────────────────
 
 export async function fetchWC2022History(participantId, poolId) {

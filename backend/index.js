@@ -554,6 +554,22 @@ app.get("/api/pools/:poolId/champion-w2-lock", (req, res) => {
   res.json({ champion_w2_locked: pool.champion_w2_locked });
 });
 
+// --- Player Awards Lock ---
+
+app.put("/api/pools/:poolId/player-awards-lock", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { locked } = req.body;
+  db.prepare("UPDATE pools SET player_awards_locked = ? WHERE id = ?").run(locked ? 1 : 0, poolId);
+  res.json({ success: true, player_awards_locked: locked ? 1 : 0 });
+});
+
+app.get("/api/pools/:poolId/player-awards-lock", (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json({ player_awards_locked: pool.player_awards_locked });
+});
+
 // --- Participants ---
 
 app.get("/api/participants", (req, res) => {
@@ -998,6 +1014,8 @@ app.get("/api/leaderboard", (req, res) => {
   const koMatches = db.prepare("SELECT * FROM knockout_matches WHERE status = 'finished'").all();
   const allKoPredictions = db.prepare("SELECT * FROM knockout_predictions").all();
   const allChampionPicks = db.prepare("SELECT * FROM champion_picks").all();
+  const allPlayerAwardPicks = db.prepare("SELECT * FROM player_award_picks").all();
+  const awardResults = db.prepare("SELECT * FROM player_award_results").all();
 
   const koPointsMap = { R32: 3, R16: 5, QF: 7, SF: 10, F: 15 };
   const finalMatch = koMatches.find((m) => m.id === "F" && m.winner_team_id);
@@ -1030,12 +1048,12 @@ app.get("/api/leaderboard", (req, res) => {
       const q = qualified[pred.group_id];
       if (!q) continue;
 
-      // 3-pick group with all groups done: combined 7/5/2/0 scoring
+      // 3-pick group with all groups done: combined 10/5/2/0 scoring
       if (pred.team3_id && allGroupsDone) {
         const qualSet = qualifyingByGroup[pred.group_id] || [];
         const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
         const correctCount = picked.filter((t) => qualSet.includes(t)).length;
-        if (correctCount === 3) { points += 7; groups_correct++; }
+        if (correctCount === 3) { points += 10; groups_correct++; }
         else if (correctCount === 2) { points += 5; groups_half++; }
         else if (correctCount === 1) { points += 2; }
       } else {
@@ -1077,7 +1095,22 @@ app.get("/api/leaderboard", (req, res) => {
     const champion_change_cost = champPick?.change_cost || 0;
     points += champion_bonus - champion_change_cost;
 
-    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, ko_correct, ko_points, champion_bonus, champion_change_cost };
+    // Player award picks bonus
+    const awardPointsMap = { golden_ball: 5, golden_boot: 5, golden_glove: 5, young_player: 2, fair_play: 2 };
+    const myAwardPicks = allPlayerAwardPicks.filter((ap) => ap.participant_id === p.id);
+    let player_awards_points = 0;
+    for (const ap of myAwardPicks) {
+      const result = awardResults.find((r) => r.award_category === ap.award_category);
+      if (!result) continue;
+      if (ap.award_category === "fair_play") {
+        if (ap.team_id && String(ap.team_id) === String(result.team_id)) player_awards_points += awardPointsMap.fair_play;
+      } else {
+        if (ap.player_id && String(ap.player_id) === String(result.player_id)) player_awards_points += awardPointsMap[ap.award_category];
+      }
+    }
+    points += player_awards_points;
+
+    return { id: p.id, name: p.name, points, groups_predicted, groups_correct, groups_half, ko_correct, ko_points, champion_bonus, champion_change_cost, player_awards_points };
   });
 
   leaderboard.sort((a, b) => b.points - a.points || b.groups_correct - a.groups_correct || a.name.localeCompare(b.name));
@@ -1684,6 +1717,105 @@ app.post("/api/champion-pick", (req, res) => {
   res.json({ success: true });
 });
 
+// ── Player Award Picks ───────────────────────────────────────────────────────
+
+app.get("/api/wc-players", (req, res) => {
+  const players = db.prepare(`
+    SELECT wp.id, wp.name, wp.position, wp.team_id, wp.dob, t.name as team_name, t.code as team_code
+    FROM wc_players wp
+    JOIN teams t ON wp.team_id = t.id
+    ORDER BY t.name, wp.position, wp.name
+  `).all();
+  res.json(players);
+});
+
+app.get("/api/player-award-picks/:participantId", (req, res) => {
+  const { participantId } = req.params;
+  const { pool_id } = req.query;
+
+  const pool = pool_id ? db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(pool_id) : null;
+  const locked = !!(pool && pool.player_awards_locked);
+
+  const picks = db.prepare(`
+    SELECT pap.award_category, pap.player_id, pap.team_id,
+           wp.name as player_name, wp.position as player_position,
+           t.name as team_name, t.code as team_code
+    FROM player_award_picks pap
+    LEFT JOIN wc_players wp ON pap.player_id = wp.id
+    LEFT JOIN teams t ON pap.team_id = t.id
+    WHERE pap.participant_id = ?
+  `).all(participantId);
+
+  const results = db.prepare(`
+    SELECT par.award_category, par.player_id, par.team_id,
+           wp.name as player_name,
+           t.name as team_name, t.code as team_code
+    FROM player_award_results par
+    LEFT JOIN wc_players wp ON par.player_id = wp.id
+    LEFT JOIN teams t ON par.team_id = t.id
+  `).all();
+
+  res.json({ picks, results, locked });
+});
+
+app.post("/api/player-award-picks", (req, res) => {
+  const { participant_id, award_category, player_id, team_id } = req.body;
+  if (!participant_id || !award_category) return res.status(400).json({ error: "participant_id and award_category required" });
+
+  const validCategories = ["golden_ball", "golden_boot", "golden_glove", "young_player", "fair_play"];
+  if (!validCategories.includes(award_category)) return res.status(400).json({ error: "Invalid award category" });
+
+  // Check lock
+  const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+  if (participant) {
+    const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(participant.pool_id);
+    if (pool && pool.player_awards_locked) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
+  }
+
+  if (award_category === "fair_play") {
+    if (!team_id) return res.status(400).json({ error: "team_id required for Fair Play Trophy" });
+    db.prepare(`
+      INSERT INTO player_award_picks (participant_id, award_category, team_id, player_id)
+      VALUES (?, ?, ?, NULL)
+      ON CONFLICT(participant_id, award_category) DO UPDATE SET team_id=excluded.team_id, player_id=NULL, updated_at=datetime('now')
+    `).run(participant_id, award_category, team_id);
+  } else {
+    if (!player_id) return res.status(400).json({ error: "player_id required" });
+    const player = db.prepare("SELECT team_id FROM wc_players WHERE id = ?").get(player_id);
+    db.prepare(`
+      INSERT INTO player_award_picks (participant_id, award_category, player_id, team_id)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(participant_id, award_category) DO UPDATE SET player_id=excluded.player_id, team_id=excluded.team_id, updated_at=datetime('now')
+    `).run(participant_id, award_category, player_id, player?.team_id || null);
+  }
+
+  res.json({ success: true });
+});
+
+// Admin: set actual award results
+app.put("/api/admin/player-award-results", requireAdminToken, (req, res) => {
+  const { award_category, player_id, team_id } = req.body;
+  const validCategories = ["golden_ball", "golden_boot", "golden_glove", "young_player", "fair_play"];
+  if (!award_category || !validCategories.includes(award_category)) return res.status(400).json({ error: "Invalid award category" });
+
+  db.prepare(`
+    INSERT INTO player_award_results (award_category, player_id, team_id)
+    VALUES (?, ?, ?)
+    ON CONFLICT(award_category) DO UPDATE SET player_id=excluded.player_id, team_id=excluded.team_id, set_at=datetime('now')
+  `).run(award_category, player_id || null, team_id || null);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/player-award-results", requireAdminToken, (req, res) => {
+  const results = db.prepare(`
+    SELECT par.*, wp.name as player_name, t.name as team_name
+    FROM player_award_results par
+    LEFT JOIN wc_players wp ON par.player_id = wp.id
+    LEFT JOIN teams t ON par.team_id = t.id
+  `).all();
+  res.json(results);
+});
+
 // ── Point History ─────────────────────────────────────────────────────────────
 
 app.get("/api/wc2022/history/:participantId", (req, res) => {
@@ -1841,7 +1973,7 @@ app.get("/api/history/:participantId", (req, res) => {
       if (gt.length >= 3 && thirdQualifiersH.has(gt[2].team_id)) qualSet.push(gt[2].team_id);
       const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
       const correct = picked.filter((t) => qualSet.includes(t)).length;
-      const pts = correct === 3 ? 7 : correct === 2 ? 5 : correct === 1 ? 2 : 0;
+      const pts = correct === 3 ? 10 : correct === 2 ? 5 : correct === 1 ? 2 : 0;
       const names = picked.map((t) => teamById[t]?.name || "?").join(", ");
       const label = correct === 3 ? "All 3 correct" : `${correct} correct`;
       events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${names} — ${label}`, pts_change: pts });
@@ -1902,6 +2034,39 @@ app.get("/api/history/:participantId", (req, res) => {
     const finalMatch = koMatches.find((m) => m.id === "F");
     if (finalMatch?.winner_team_id && String(champPick.team_id) === String(finalMatch.winner_team_id)) {
       events.push({ event_date: finalMatch.match_date, type: "champion_bonus", description: `Winner pick correct: ${champPick.team_name} won the tournament!`, pts_change: 20 });
+    }
+  }
+
+  // Player award picks
+  const awardPointsMap = { golden_ball: 5, golden_boot: 5, golden_glove: 5, young_player: 2, fair_play: 2 };
+  const awardLabels = { golden_ball: "Golden Ball", golden_boot: "Golden Boot", golden_glove: "Golden Glove", young_player: "Young Player", fair_play: "Fair Play" };
+  const myAwardPicks = db.prepare(`
+    SELECT pap.*, wp.name as player_name, t.name as team_name
+    FROM player_award_picks pap
+    LEFT JOIN wc_players wp ON pap.player_id = wp.id
+    LEFT JOIN teams t ON pap.team_id = t.id
+    WHERE pap.participant_id = ?
+  `).all(participantId);
+  const awardResults = db.prepare(`
+    SELECT par.*, wp.name as player_name, t.name as team_name
+    FROM player_award_results par
+    LEFT JOIN wc_players wp ON par.player_id = wp.id
+    LEFT JOIN teams t ON par.team_id = t.id
+  `).all();
+  for (const ap of myAwardPicks) {
+    const result = awardResults.find((r) => r.award_category === ap.award_category);
+    const label = awardLabels[ap.award_category] || ap.award_category;
+    const pickName = ap.award_category === "fair_play" ? ap.team_name : ap.player_name;
+    if (result) {
+      const isCorrect = ap.award_category === "fair_play"
+        ? ap.team_id && String(ap.team_id) === String(result.team_id)
+        : ap.player_id && String(ap.player_id) === String(result.player_id);
+      const pts = isCorrect ? awardPointsMap[ap.award_category] : 0;
+      const winnerName = ap.award_category === "fair_play" ? result.team_name : result.player_name;
+      const desc = isCorrect
+        ? `${label}: ${pickName} ✓`
+        : `${label}: picked ${pickName}, winner was ${winnerName} ✗`;
+      events.push({ event_date: result.set_at, type: "player_award", description: desc, pts_change: pts });
     }
   }
 

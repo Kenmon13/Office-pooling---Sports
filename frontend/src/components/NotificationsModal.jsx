@@ -9,6 +9,7 @@ import {
 const POINT_ICON = {
   group: "⚽", ko: "🥊", champion_pick: "🏆",
   champion_change: "🔄", champion_bonus: "🥇",
+  player_award: "🏅",
 };
 
 

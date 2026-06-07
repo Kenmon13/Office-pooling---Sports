@@ -14,9 +14,10 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
         const currentRank = i + 1;
         const prevRank = prevRankRef.current[p.id] !== undefined ? prevRankRef.current[p.id] : currentRank;
         const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
+        const playerAwards = p.player_awards_points || 0;
         return {
           ...p,
-          group_pts: (p.points || 0) - (p.ko_points || 0) - champNet,
+          group_pts: (p.points || 0) - (p.ko_points || 0) - champNet - playerAwards,
           currentRank,
           prevRank,
         };
@@ -41,6 +42,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
               <th>Group</th>
               <th>KO</th>
               <th>Champ</th>
+              <th>Awards</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -59,6 +61,9 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                   <td className="pts-sub">{p.ko_points || 0}</td>
                   <td className={`pts-sub ${champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}`}>
                     {champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}
+                  </td>
+                  <td className={`pts-sub ${(p.player_awards_points || 0) > 0 ? "pts-champ-win" : ""}`}>
+                    {(p.player_awards_points || 0) > 0 ? `+${p.player_awards_points}` : "—"}
                   </td>
                   <td className="points">{p.points || 0}</td>
                 </tr>
