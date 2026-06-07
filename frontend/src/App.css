@@ -1537,6 +1537,28 @@ nav a.active {
   font-size: 12px;
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: #5a8a5a;
+  font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #2a4a2a;
+}
+
+.google-login-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
 .success-msg {
   color: #81c784;
   font-size: 13px;

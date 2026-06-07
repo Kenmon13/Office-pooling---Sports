@@ -6,8 +6,11 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
 
+const { OAuth2Client } = require("google-auth-library");
 const { Resend } = require("resend");
 const JWT_SECRET = process.env.JWT_SECRET || "office-pooling-secret-change-me";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "719484309775-ooani0nttr0qeijov4ar50nk845364rt.apps.googleusercontent.com";
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || "https://sportspooling.com";
 
@@ -53,6 +56,48 @@ app.post("/api/auth/signin", (req, res) => {
   const user = { id: row.id, username: row.username, display_name: row.display_name, email: row.email, is_admin: row.is_admin };
   const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
   res.json({ ...user, token });
+});
+
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    const { token: idToken } = req.body;
+    if (!idToken) return res.status(400).json({ error: "Token is required" });
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name } = payload;
+
+    // Check if user already exists with this google_id
+    let row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE google_id = ?").get(googleId);
+
+    if (!row && email) {
+      // Check if a user with this email already exists (link accounts)
+      row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE email = ?").get(email);
+      if (row) {
+        // Link Google to existing account
+        db.prepare("UPDATE users SET google_id = ? WHERE id = ?").run(googleId, row.id);
+      }
+    }
+
+    if (!row) {
+      // Create new user
+      const username = `g_${googleId.slice(0, 12)}`;
+      const displayName = name || email || "Google User";
+      const result = db.prepare(
+        "INSERT INTO users (username, password, display_name, email, google_id) VALUES (?, ?, ?, ?, ?)"
+      ).run(username, "", displayName, email || null, googleId);
+      row = { id: result.lastInsertRowid, username, display_name: displayName, email: email || null, is_admin: 0 };
+    }
+
+    const user = { id: row.id, username: row.username, display_name: row.display_name, email: row.email, is_admin: row.is_admin };
+    const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ ...user, token });
+  } catch (err) {
+    res.status(401).json({ error: "Google authentication failed" });
+  }
 });
 
 // --- Profile ---

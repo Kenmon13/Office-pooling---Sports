@@ -27,6 +27,17 @@ export async function signUp(username, password, display_name) {
   return data;
 }
 
+export async function googleSignIn(token) {
+  const res = await fetch(`${API}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  const data = await res.json();
+  if (data.token) localStorage.setItem("auth_token", data.token);
+  return data;
+}
+
 export async function signIn(username, password) {
   const res = await fetch(`${API}/auth/signin`, {
     method: "POST",

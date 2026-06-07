@@ -11,9 +11,10 @@ db.pragma("foreign_keys = ON");
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL,
+    username TEXT UNIQUE,
+    password TEXT,
     display_name TEXT NOT NULL,
+    google_id TEXT UNIQUE,
     is_admin INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   );
@@ -181,6 +182,7 @@ try { db.exec("ALTER TABLE pools ADD COLUMN mock_date TEXT"); } catch (_) {}
 
 // Add email column to users
 try { db.exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE users ADD COLUMN google_id TEXT UNIQUE"); } catch (_) {}
 
 // Add public pool column
 try { db.exec("ALTER TABLE pools ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0"); } catch (_) {}

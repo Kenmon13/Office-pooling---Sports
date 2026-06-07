@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { signUp, signIn, forgotPassword, resetPassword } from "../api";
+import { signUp, signIn, forgotPassword, resetPassword, googleSignIn } from "../api";
+import { GoogleLogin } from "@react-oauth/google";
 
 function Auth({ onAuth, initialView }) {
   const [mode, setMode] = useState(initialView || "signin"); // "signin", "signup", "forgot", "reset"
@@ -16,6 +17,16 @@ function Auth({ onAuth, initialView }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError("");
+    const result = await googleSignIn(credentialResponse.credential);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    onAuth(result);
+  };
 
   // Auto-detect reset-password mode from URL
   useState(() => {
@@ -193,6 +204,19 @@ function Auth({ onAuth, initialView }) {
         </button>
         {error && <p className="error">{error}</p>}
       </form>
+      <div className="auth-divider">
+        <span>or</span>
+      </div>
+      <div className="google-login-wrapper">
+        <GoogleLogin
+          onSuccess={handleGoogleSuccess}
+          onError={() => setError("Google sign-in failed")}
+          theme="filled_black"
+          size="large"
+          width="280"
+          text={mode === "signin" ? "signin_with" : "signup_with"}
+        />
+      </div>
       {mode === "signin" && (
         <button
           className="auth-toggle forgot-link"
