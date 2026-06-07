@@ -88,7 +88,7 @@ app.post("/api/auth/google", async (req, res) => {
       const displayName = name || email || "Google User";
       const result = db.prepare(
         "INSERT INTO users (username, password, display_name, email, google_id) VALUES (?, ?, ?, ?, ?)"
-      ).run(username, "", displayName, email || null, googleId);
+      ).run(username, "google-oauth-no-password", displayName, email || null, googleId);
       row = { id: result.lastInsertRowid, username, display_name: displayName, email: email || null, is_admin: 0 };
     }
 
@@ -96,7 +96,8 @@ app.post("/api/auth/google", async (req, res) => {
     const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
     res.json({ ...user, token });
   } catch (err) {
-    res.status(401).json({ error: "Google authentication failed" });
+    console.error("Google auth error:", err.message || err);
+    res.status(401).json({ error: "Google authentication failed: " + (err.message || "unknown error") });
   }
 });
 
