@@ -12,6 +12,7 @@ import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Landing from "./pages/Landing";
+import Legal from "./pages/Legal";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchParticipants, fetchMessages } from "./api";
@@ -412,6 +413,15 @@ function App() {
       )}
     </div>
   ) : null;
+
+  // Legal pages — accessible without login
+  if (window.location.pathname === "/terms") {
+    return (
+      <div className="app">
+        <Legal onBack={() => { window.location.href = "/"; }} />
+      </div>
+    );
+  }
 
   // Step 0: Sign in / Sign up / Reset password
   if (!user || initialAuthView === "reset") {

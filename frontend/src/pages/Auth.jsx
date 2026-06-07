@@ -182,6 +182,12 @@ function Auth({ onAuth, initialView }) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
         />
+        {mode === "signup" && (
+          <p className="auth-legal-notice">
+            By signing up you agree to our{" "}
+            <a href="/terms" className="auth-legal-link">Terms & Privacy</a>.
+          </p>
+        )}
         <button type="submit">
           {mode === "signin" ? "Sign In" : "Sign Up"}
         </button>
