@@ -16,7 +16,6 @@ function Landing({ onAuth, initialView }) {
     <div className="landing">
       <div className="landing-hero">
         <h1 className="landing-title">Sports Pooling</h1>
-        <p className="landing-tagline">No spreadsheet. No group chat.</p>
         <p className="landing-tagline-sub">Free sports pools. Set up in seconds.</p>
       </div>
 
