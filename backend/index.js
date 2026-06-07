@@ -2239,6 +2239,132 @@ app.post("/api/admin/restore/:name", requireAdminToken, async (req, res) => {
   }
 });
 
+// ── Global stats (across all pools for a tournament) ─────────────────────────
+
+app.get("/api/stats/global", (req, res) => {
+  const tournament = req.query.tournament || "wc2026";
+
+  // Champion picks across all pools for this tournament
+  const championRows = db.prepare(`
+    SELECT t.id as team_id, t.name as team_name, t.code as team_code,
+           COUNT(*) as pick_count
+    FROM champion_picks cp
+    JOIN participants p ON p.id = cp.participant_id
+    JOIN pools po ON po.id = p.pool_id
+    JOIN teams t ON t.id = cp.team_id
+    WHERE po.tournament = ?
+    GROUP BY t.id
+    ORDER BY pick_count DESC
+  `).all(tournament);
+
+  const champTotal = championRows.reduce((s, r) => s + r.pick_count, 0);
+  const champions = championRows.map(r => ({
+    ...r,
+    percentage: champTotal > 0 ? Math.round((r.pick_count / champTotal) * 100) : 0,
+  }));
+
+  // Group picks across all pools
+  const groupRows = db.prepare(`
+    SELECT g.id as group_id, g.name as group_name,
+           t.id as team_id, t.name as team_name, t.code as team_code,
+           COUNT(*) as pick_count
+    FROM group_predictions gp
+    JOIN participants p ON p.id = gp.participant_id
+    JOIN pools po ON po.id = p.pool_id
+    JOIN teams t ON t.id IN (gp.team1_id, gp.team2_id)
+    JOIN groups g ON g.id = gp.group_id
+    WHERE po.tournament = ?
+    GROUP BY g.id, t.id
+    ORDER BY g.name, pick_count DESC
+  `).all(tournament);
+
+  const totalByGroup = {};
+  for (const r of groupRows) {
+    totalByGroup[r.group_id] = (totalByGroup[r.group_id] || 0) + r.pick_count;
+  }
+  const groups = {};
+  for (const r of groupRows) {
+    if (!groups[r.group_id]) {
+      groups[r.group_id] = { group_id: r.group_id, group_name: r.group_name, teams: [] };
+    }
+    groups[r.group_id].teams.push({
+      ...r,
+      percentage: Math.round((r.pick_count / totalByGroup[r.group_id]) * 100),
+    });
+  }
+
+  const totalPlayers = champTotal;
+
+  res.json({ champions, groups: Object.values(groups), totalPlayers });
+});
+
+// ── Stats endpoints ──────────────────────────────────────────────────────────
+
+app.get("/api/stats/group-picks", (req, res) => {
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.json({ error: "pool_id required" });
+
+  const rows = db.prepare(`
+    SELECT g.id as group_id, g.name as group_name,
+           t.id as team_id, t.name as team_name, t.code as team_code,
+           COUNT(*) as pick_count
+    FROM group_predictions gp
+    JOIN participants p ON p.id = gp.participant_id
+    JOIN teams t ON t.id IN (gp.team1_id, gp.team2_id)
+    JOIN groups g ON g.id = gp.group_id
+    WHERE p.pool_id = ?
+    GROUP BY g.id, t.id
+    ORDER BY g.name, pick_count DESC
+  `).all(poolId);
+
+  const totalByGroup = {};
+  for (const r of rows) {
+    totalByGroup[r.group_id] = (totalByGroup[r.group_id] || 0) + r.pick_count;
+  }
+
+  const groups = {};
+  for (const r of rows) {
+    if (!groups[r.group_id]) {
+      groups[r.group_id] = { group_id: r.group_id, group_name: r.group_name, teams: [] };
+    }
+    groups[r.group_id].teams.push({
+      team_id: r.team_id,
+      team_name: r.team_name,
+      team_code: r.team_code,
+      pick_count: r.pick_count,
+      percentage: Math.round((r.pick_count / totalByGroup[r.group_id]) * 100),
+    });
+  }
+
+  res.json(Object.values(groups));
+});
+
+app.get("/api/stats/champion-picks", (req, res) => {
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.json({ error: "pool_id required" });
+
+  const rows = db.prepare(`
+    SELECT t.id as team_id, t.name as team_name, t.code as team_code,
+           COUNT(*) as pick_count
+    FROM champion_picks cp
+    JOIN participants p ON p.id = cp.participant_id
+    JOIN teams t ON t.id = cp.team_id
+    WHERE p.pool_id = ?
+    GROUP BY t.id
+    ORDER BY pick_count DESC
+  `).all(poolId);
+
+  const total = rows.reduce((sum, r) => sum + r.pick_count, 0);
+
+  res.json(rows.map(r => ({
+    team_id: r.team_id,
+    team_name: r.team_name,
+    team_code: r.team_code,
+    pick_count: r.pick_count,
+    percentage: total > 0 ? Math.round((r.pick_count / total) * 100) : 0,
+  })));
+});
+
 // Client-side routing fallback
 app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { createPool, joinPool, fetchPublicPools, fetchUserPools } from "../api";
+import { createPool, joinPool, fetchPublicPools, fetchUserPools, fetchGlobalStats } from "../api";
+import { flag } from "../flags";
 
 function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [mode, setMode] = useState(null); // null, "create", "join", "public"
@@ -11,10 +12,14 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [loadingPublic, setLoadingPublic] = useState(false);
   const [joiningPoolId, setJoiningPoolId] = useState(null);
   const [myPools, setMyPools] = useState([]);
+  const [globalStats, setGlobalStats] = useState(null);
 
   useEffect(() => {
     fetchUserPools().then((data) => {
       if (Array.isArray(data)) setMyPools(data.filter((p) => p.tournament === tournament.id));
+    }).catch(() => {});
+    fetchGlobalStats(tournament.id).then((data) => {
+      if (!data.error) setGlobalStats(data);
     }).catch(() => {});
   }, [tournament.id]);
 
@@ -100,6 +105,12 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
             <span className="sport-emoji">{"\uD83C\uDF0D"}</span>
             <span className="sport-name">Public Pool</span>
           </button>
+          {globalStats && globalStats.champions.length > 0 && (
+            <button className="sport-card" onClick={() => setMode("stats")}>
+              <span className="sport-emoji">{"\uD83D\uDCCA"}</span>
+              <span className="sport-name">Stats</span>
+            </button>
+          )}
         </div>
 
         {myPools.length > 0 && (
@@ -111,6 +122,67 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
                   <button className="pool-list-btn" onClick={() => onJoin(p)}>
                     <span className="pool-list-name">{p.name}</span>
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  }
+
+  if (mode === "stats") {
+    return (
+      <div className="select-page">
+        <button className="back-btn" onClick={resetMode}>&larr; Back</button>
+        <h2>Community Predictions</h2>
+        <p className="select-subtitle">
+          Based on {globalStats?.totalPlayers || 0} player{globalStats?.totalPlayers !== 1 ? "s" : ""} across all pools
+        </p>
+
+        {globalStats && globalStats.champions.length > 0 && (
+          <div className="global-stats-section">
+            <h4>Predicted Winner</h4>
+            <div className="stats-list">
+              {globalStats.champions.slice(0, 10).map((t, i) => (
+                <div key={t.team_id} className="stats-row">
+                  <span className="stats-rank">#{i + 1}</span>
+                  <span className="stats-team">
+                    {flag(t.team_code)}
+                    {t.team_name}
+                  </span>
+                  <div className="stats-bar-wrapper">
+                    <div className="stats-bar" style={{ width: `${t.percentage}%` }} />
+                  </div>
+                  <span className="stats-pct">{t.percentage}%</span>
+                  <span className="stats-count">({t.pick_count})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {globalStats && globalStats.groups.length > 0 && (
+          <div className="global-stats-section">
+            <h4>Group Stage Favourites</h4>
+            <div className="stats-groups-grid">
+              {globalStats.groups.map((g) => (
+                <div key={g.group_id} className="stats-group-card">
+                  <h4>{g.group_name}</h4>
+                  {g.teams.slice(0, 4).map((t, i) => (
+                    <div key={t.team_id} className="stats-row stats-row-compact">
+                      <span className="stats-rank-sm">#{i + 1}</span>
+                      <span className="stats-team">
+                        {flag(t.team_code)}
+                        {t.team_name}
+                      </span>
+                      <div className="stats-bar-wrapper">
+                        <div className="stats-bar stats-bar-group" style={{ width: `${t.percentage}%` }} />
+                      </div>
+                      <span className="stats-pct">{t.percentage}%</span>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
