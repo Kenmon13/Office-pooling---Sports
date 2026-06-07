@@ -1347,6 +1347,8 @@ nav a.active {
   border-radius: 8px;
   transition: all 0.2s;
   color: #d4e8d4;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .pool-list-item:hover {
@@ -1364,6 +1366,8 @@ nav a.active {
   border: none;
   color: #d4e8d4;
   cursor: pointer;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .pool-delete-btn {
@@ -1384,6 +1388,10 @@ nav a.active {
 .pool-list-name {
   font-weight: 600;
   font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .pool-list-meta {
