@@ -44,6 +44,14 @@ function Landing({ onAuth, initialView }) {
           <span className="coming-soon-emoji">⚽</span>
         </div>
       </div>
+
+      <footer className="landing-footer">
+        <div className="landing-footer-links">
+          <a href="/terms">Terms of Service</a>
+          <a href="/terms#privacy">Privacy Policy</a>
+        </div>
+        <p className="landing-footer-copy">© {new Date().getFullYear()} Sports Pooling</p>
+      </footer>
     </div>
   );
 }

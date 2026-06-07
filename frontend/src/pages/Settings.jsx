@@ -278,6 +278,11 @@ function Settings({ user, onBack, onUpdateUser, onSelectPool }) {
           </div>
         </>
       )}
+      <div className="settings-footer-links">
+        <a href="/terms" className="settings-legal-link">Terms of Service</a>
+        <span className="settings-legal-sep">·</span>
+        <a href="/terms#privacy" className="settings-legal-link">Privacy Policy</a>
+      </div>
     </div>
   );
 }

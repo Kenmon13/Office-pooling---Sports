@@ -1585,6 +1585,31 @@ nav a.active {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.settings-footer-links {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #1e3a1e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-legal-link {
+  color: #5a7a5a;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.settings-legal-link:hover {
+  color: #7da67d;
+  text-decoration: underline;
+}
+
+.settings-legal-sep {
+  color: #3a5a3a;
+  font-size: 13px;
+}
 .btn-settings {
   font-size: 16px !important;
   padding: 2px 6px !important;
@@ -3835,6 +3860,151 @@ nav a.active {
   .landing-features {
     grid-template-columns: 1fr;
   }
+}
+
+/* Auth legal notice */
+.auth-legal-notice {
+  font-size: 12px;
+  color: #5a7a5a;
+  text-align: center;
+}
+
+.auth-legal-link {
+  color: #6fdc6f;
+  text-decoration: none;
+}
+
+.auth-legal-link:hover {
+  text-decoration: underline;
+}
+
+/* Legal page */
+.legal-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.legal-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.legal-title {
+  font-size: 24px;
+  color: #fff;
+}
+
+.legal-nav {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid #1e3a1e;
+  padding-bottom: 12px;
+}
+
+.legal-nav a {
+  color: #6fdc6f;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.legal-nav a:hover {
+  text-decoration: underline;
+}
+
+.legal-section {
+  margin-bottom: 48px;
+}
+
+.legal-section h2 {
+  font-size: 20px;
+  color: #fff;
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1e3a1e;
+}
+
+.legal-updated {
+  font-size: 12px;
+  color: #5a7a5a;
+  margin-bottom: 20px;
+}
+
+.legal-section h3 {
+  font-size: 15px;
+  color: #c8f0c8;
+  margin-top: 20px;
+  margin-bottom: 6px;
+}
+
+.legal-section p,
+.legal-section li {
+  font-size: 14px;
+  color: #9ab89a;
+  line-height: 1.6;
+}
+
+.legal-section ul {
+  padding-left: 20px;
+  margin-top: 6px;
+}
+
+.legal-section li {
+  margin-bottom: 4px;
+}
+
+.legal-link {
+  color: #6fdc6f;
+  text-decoration: none;
+}
+
+.legal-link:hover {
+  text-decoration: underline;
+}
+
+.legal-footer {
+  text-align: center;
+  padding-top: 24px;
+  border-top: 1px solid #1e3a1e;
+  color: #5a7a5a;
+  font-size: 13px;
+}
+
+/* Landing footer */
+.landing-footer {
+  text-align: center;
+  padding: 24px 0 16px;
+  border-top: 1px solid #1e3a1e;
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.landing-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.landing-footer-links a {
+  color: #5a7a5a;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.landing-footer-links a:hover {
+  color: #7da67d;
+  text-decoration: underline;
+}
+
+.landing-footer-copy {
+  color: #3a5a3a;
+  font-size: 12px;
 }
 
 /* ── Player Awards ──────────────────────────────────────────────────────────── */

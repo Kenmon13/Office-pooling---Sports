@@ -12,6 +12,7 @@ import JoinPool from "./pages/JoinPool";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import Landing from "./pages/Landing";
+import Legal from "./pages/Legal";
 import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Settings from "./pages/Settings";
@@ -419,6 +420,15 @@ function App() {
       )}
     </div>
   ) : null;
+
+  // Legal pages — accessible without login
+  if (window.location.pathname === "/terms") {
+    return (
+      <div className="app">
+        <Legal onBack={() => { window.location.href = "/"; }} />
+      </div>
+    );
+  }
 
   // Step 0: Sign in / Sign up / Reset password
   if (!user || initialAuthView === "reset") {
