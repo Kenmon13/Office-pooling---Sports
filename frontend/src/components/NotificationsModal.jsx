@@ -172,7 +172,8 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
   if (isGlobal && poolSections) {
     const hasAlert = (c) => ["red", "orange"].includes(c.status);
     const alertPools = poolSections.filter((ps) =>
-      ps.group.some(hasAlert) || ps.winner.some(hasAlert) || (ps.koSummary && hasAlert(ps.koSummary))
+      ps.group.some(hasAlert) || ps.winner.some(hasAlert) || (ps.koSummary && hasAlert(ps.koSummary)) ||
+      (ps.awards || []).some(hasAlert)
     );
     if (alertPools.length === 0) {
       return (
@@ -189,6 +190,7 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
             {ps.group.filter(hasAlert).map(renderCard)}
             {ps.winner.filter(hasAlert).map(renderCard)}
             {ps.koSummary && hasAlert(ps.koSummary) && renderCard(ps.koSummary)}
+            {(ps.awards || []).filter(hasAlert).map(renderCard)}
           </div>
         ))}
       </div>
@@ -196,8 +198,8 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
   }
 
   // Single-pool mode: unchanged
-  const { group = [], winner = [], ko = [], showKO = false } = sections || {};
-  const allCards = [...group, ...winner, ...(showKO ? ko : [])];
+  const { group = [], winner = [], ko = [], awards = [], showKO = false } = sections || {};
+  const allCards = [...group, ...winner, ...(showKO ? ko : []), ...awards];
   if (allCards.length === 0) {
     return <p className="notif-empty">No pick windows active yet.</p>;
   }
@@ -263,13 +265,13 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
     // Windows
     const p = { id: poolId, tournament, participant_id: participant.id };
     fetchWindowsForPool(p)
-      .then(({ predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus }) => {
+      .then(({ predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardPicks, awardsLocked }) => {
         const raw = generateSections(new Date(), {
           predDeadline,
           koMatches,
           groups,
           koDeadline,
-          poolPicksData: [{ pool: { id: poolId, name: "" }, groupPreds, koPreds, champStatus }],
+          poolPicksData: [{ pool: { id: poolId, name: "" }, groupPreds, koPreds, champStatus, awardPicks, awardsLocked }],
         });
         const sections = applyDismissals(raw, poolId);
         const wCount = countUnread(sections);
@@ -344,16 +346,20 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
                   groupPreds: shared.groupPreds,
                   koPreds: shared.koPreds,
                   champStatus: shared.champStatus,
+                  awardPicks: shared.awardPicks,
+                  awardsLocked: shared.awardsLocked,
                 };
               }
               const data = await fetchWindowsForPool(p).catch(() => ({
-                groupPreds: [], koPreds: [], champStatus: null,
+                groupPreds: [], koPreds: [], champStatus: null, awardPicks: undefined, awardsLocked: false,
               }));
               return {
                 pool: p,
                 groupPreds: data.groupPreds,
                 koPreds: data.koPreds,
                 champStatus: data.champStatus,
+                awardPicks: data.awardPicks,
+                awardsLocked: data.awardsLocked,
               };
             })
           );
@@ -388,6 +394,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
               group: dismissed.group,
               winner: dismissed.winner,
               koSummary: makeKoSummaryCard(dismissed.ko),
+              awards: dismissed.awards || [],
             });
           }
         }
@@ -398,6 +405,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
           wCount += ps.group.filter(hasAlert).length;
           wCount += ps.winner.filter(hasAlert).length;
           if (ps.koSummary && hasAlert(ps.koSummary)) wCount += 1;
+          wCount += (ps.awards || []).filter(hasAlert).length;
         }
         setWindowSections(combined);
         setPoolSections(allPoolSections);
@@ -437,16 +445,20 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
           ...(windowSections.group || []),
           ...(windowSections.winner || []),
           ...(windowSections.ko || []),
+          ...(windowSections.awards || []),
         ];
-        const orangeIds = allWinCards.filter((c) => c.status === "orange").map((c) => c.id);
-        if (orangeIds.length > 0) {
-          dismissWindowCards(orangeIds, poolId || null);
-          const downgrade = (c) => orangeIds.includes(c.id) ? { ...c, status: "done" } : c;
+        const toDismissIds = allWinCards
+          .filter((c) => c.status === "orange" || (c.id === "player-awards" && c.status === "locked"))
+          .map((c) => c.id);
+        if (toDismissIds.length > 0) {
+          dismissWindowCards(toDismissIds, poolId || null);
+          const downgrade = (c) => toDismissIds.includes(c.id) ? { ...c, status: "done" } : c;
           const updated = {
             ...windowSections,
             group: windowSections.group.map(downgrade),
             winner: windowSections.winner.map(downgrade),
             ko: windowSections.ko.map(downgrade),
+            awards: (windowSections.awards || []).map(downgrade),
           };
           setWindowSections(updated);
           const newCount = countUnread(updated);
