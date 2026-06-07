@@ -182,7 +182,8 @@ try { db.exec("ALTER TABLE pools ADD COLUMN mock_date TEXT"); } catch (_) {}
 
 // Add email column to users
 try { db.exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch (_) {}
-try { db.exec("ALTER TABLE users ADD COLUMN google_id TEXT UNIQUE"); } catch (_) {}
+try { db.exec("ALTER TABLE users ADD COLUMN google_id TEXT"); } catch (_) {}
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)"); } catch (_) {}
 
 // Add public pool column
 try { db.exec("ALTER TABLE pools ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
