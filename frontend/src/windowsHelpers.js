@@ -7,7 +7,10 @@ import {
   fetchKnockoutDeadline, fetchWC2022KnockoutDeadline,
   fetchKnockoutPredictions, fetchWC2022KnockoutPredictions,
   fetchChampionPick, fetchWC2022ChampionPick,
+  fetchPlayerAwardPicks,
 } from "./api";
+
+const AWARD_KEYS = ["golden_ball", "golden_boot", "golden_glove", "young_player", "fair_play"];
 
 export const ROUND_ORDER = {
   "Round of 32": 1, "Round of 16": 2,
@@ -44,12 +47,13 @@ export function applyDismissals(sections, poolId) {
     const dismissed = new Set(saved ? JSON.parse(saved) : []);
     if (dismissed.size === 0) return sections;
     const downgrade = (c) =>
-      dismissed.has(c.id) && c.status === "orange" ? { ...c, status: "done" } : c;
+      dismissed.has(c.id) && (c.status === "orange" || c.status === "locked") ? { ...c, status: "done" } : c;
     return {
       ...sections,
       group: sections.group.map(downgrade),
       winner: sections.winner.map(downgrade),
       ko: sections.ko.map(downgrade),
+      awards: (sections.awards || []).map(downgrade),
     };
   } catch { return sections; }
 }
@@ -337,7 +341,59 @@ export function generateSections(now, { predDeadline, koMatches, groups, koDeadl
     });
   }
 
-  return { group: groupCards, winner: winnerCards, ko: koCards, showKO: showKO || koCards.length > 0 };
+  // ── Player Awards ─────────────────────────────────────────────────────────────
+
+  const awardCards = [];
+  const firstWithAwards = poolPicksData.find((pp) => pp.awardPicks !== undefined);
+  if (firstWithAwards) {
+    const poolsData = poolPicksData
+      .filter((pp) => pp.awardPicks !== undefined)
+      .map((pp) => {
+        const picked = new Set((pp.awardPicks || []).map((a) => a.award_category));
+        const missing = AWARD_KEYS.filter((k) => !picked.has(k));
+        return { pool: pp.pool, missing, awardsLocked: !!pp.awardsLocked };
+      });
+
+    const allLocked = poolsData.every((pd) => pd.awardsLocked);
+    const poolsWithMissing = poolsData.filter((pd) => pd.missing.length > 0);
+    const allDone = poolsWithMissing.length === 0;
+    const completePools = poolsData.length - poolsWithMissing.length;
+
+    let status, body, missingMsg;
+    if (allLocked) {
+      status = "locked";
+      body = "Award picks locked by pool admin";
+      missingMsg = null;
+    } else if (allDone) {
+      status = "done";
+      body = "All 5 awards picked";
+      missingMsg = null;
+    } else {
+      status = "red";
+      if (isSingle) {
+        const mCount = poolsData[0].missing.length;
+        body = `${5 - mCount}/5 awards picked`;
+        missingMsg = mCount === 5 ? "No award picks made" : `${mCount} award${mCount === 1 ? "" : "s"} remaining`;
+      } else {
+        body = `${completePools}/${poolsData.length} pools complete`;
+        missingMsg = `Missing in: ${poolsWithMissing.map((pd) => pd.pool.name).join(", ")}`;
+      }
+    }
+
+    awardCards.push({
+      id: "player-awards",
+      icon: "🏅",
+      status,
+      title: "Player Awards",
+      body,
+      missingMsg,
+      statusNote: (!allLocked && !allDone && !isSingle && completePools > 0)
+        ? `${completePools}/${poolsData.length} pools complete`
+        : null,
+    });
+  }
+
+  return { group: groupCards, winner: winnerCards, ko: koCards, awards: awardCards, showKO: showKO || koCards.length > 0 };
 }
 
 export function countUnread(sections) {
@@ -345,6 +401,7 @@ export function countUnread(sections) {
     ...(sections?.group || []),
     ...(sections?.winner || []),
     ...(sections?.ko || []),
+    ...(sections?.awards || []),
   ];
   return all.filter((c) => c.status === "red" || c.status === "orange").length;
 }
@@ -364,7 +421,11 @@ export async function fetchWindowsForPool(p) {
   const fetchChamp = isWC22
     ? () => fetchWC2022ChampionPick(p.participant_id, p.id)
     : () => fetchChampionPick(p.participant_id, p.id);
-  const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus] =
+  const awardFetch = isWC22
+    ? Promise.resolve(undefined)
+    : fetchPlayerAwardPicks(p.participant_id, p.id).catch(() => ({ picks: [], locked: false }));
+
+  const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardData] =
     await Promise.all([
       fetchDeadline(),
       fetchKoMatchesFn(),
@@ -373,6 +434,7 @@ export async function fetchWindowsForPool(p) {
       fetchGroupPreds(),
       fetchKoPreds(),
       fetchChamp(),
+      awardFetch,
     ]);
 
   return {
@@ -383,6 +445,8 @@ export async function fetchWindowsForPool(p) {
     groupPreds: Array.isArray(groupPreds) ? groupPreds : [],
     koPreds: Array.isArray(koPreds) ? koPreds : [],
     champStatus,
+    awardPicks: awardData?.picks,
+    awardsLocked: awardData?.locked,
   };
 }
 
@@ -409,10 +473,10 @@ export async function computeWindowsUnreadCount() {
     const perPoolPicks = await Promise.all(
       tourPools.map(async (p) => {
         if (p.id === firstPool.id) {
-          return { pool: p, groupPreds: shared.groupPreds, koPreds: shared.koPreds, champStatus: shared.champStatus,  };
+          return { pool: p, groupPreds: shared.groupPreds, koPreds: shared.koPreds, champStatus: shared.champStatus, awardPicks: shared.awardPicks, awardsLocked: shared.awardsLocked };
         }
-        const data = await fetchWindowsForPool(p).catch(() => ({ groupPreds: [], koPreds: [], champStatus: null }));
-        return { pool: p, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus,  };
+        const data = await fetchWindowsForPool(p).catch(() => ({ groupPreds: [], koPreds: [], champStatus: null, awardPicks: undefined, awardsLocked: false }));
+        return { pool: p, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus, awardPicks: data.awardPicks, awardsLocked: data.awardsLocked };
       })
     );
 
@@ -428,6 +492,7 @@ export async function computeWindowsUnreadCount() {
       total += dismissed.group.filter(hasAlert).length;
       total += dismissed.winner.filter(hasAlert).length;
       if (dismissed.ko.some(hasAlert)) total += 1;
+      total += (dismissed.awards || []).filter(hasAlert).length;
     }
   }
 

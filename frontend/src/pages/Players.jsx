@@ -70,10 +70,29 @@ function Players({ currentUser, poolId, mockDate }) {
     );
   }
 
+  const pickedCount = AWARDS.filter((a) => picks[a.key]).length;
+  const missingCount = AWARDS.length - pickedCount;
+
   return (
     <div className="page">
       <h2>Player Awards</h2>
       <AwardRules />
+
+      {loaded && !locked && missingCount > 0 && (
+        <div className="notif-window-card win-urgent" style={{ marginBottom: 16 }}>
+          <div className="win-card-top">
+            <span className="win-icon">🏅</span>
+            <span className="win-title">Player Awards</span>
+            <span className="win-badge win-badge-open">Open</span>
+          </div>
+          <div className="win-card-body">
+            {pickedCount}/5 awards picked
+          </div>
+          <div className="win-missed">
+            ⚠️ {pickedCount === 0 ? "No award picks made" : `${missingCount} award${missingCount === 1 ? "" : "s"} remaining`}
+          </div>
+        </div>
+      )}
 
       {loaded && locked && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
