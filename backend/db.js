@@ -654,4 +654,91 @@ for (const m of WC2026_MATCH_DATES) {
   updateMatchDate.run(m.date, m.home, m.away);
 }
 
+// --- Player Award Predictions ---
+
+// Individual players table (WC 2026 squads)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS wc_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    team_id INTEGER NOT NULL REFERENCES teams(id),
+    position TEXT NOT NULL CHECK(position IN ('GK','DF','MF','FW')),
+    UNIQUE(name, team_id)
+  );
+`);
+
+// Player award picks (one per participant per award category)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS player_award_picks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    award_category TEXT NOT NULL CHECK(award_category IN ('golden_ball','golden_boot','golden_glove','young_player','fair_play')),
+    player_id INTEGER REFERENCES wc_players(id),
+    team_id INTEGER REFERENCES teams(id),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, award_category)
+  );
+`);
+
+// Actual award results (admin sets these after tournament)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS player_award_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    award_category TEXT NOT NULL UNIQUE CHECK(award_category IN ('golden_ball','golden_boot','golden_glove','young_player','fair_play')),
+    player_id INTEGER REFERENCES wc_players(id),
+    team_id INTEGER REFERENCES teams(id),
+    set_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// Admin lock for player awards section
+try { db.exec("ALTER TABLE pools ADD COLUMN player_awards_locked INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
+// Add dob column to wc_players
+try { db.exec("ALTER TABLE wc_players ADD COLUMN dob TEXT"); } catch (_) {}
+
+// Seed WC 2026 squad players
+const wcPlayersSeeded = db.prepare("SELECT COUNT(*) as c FROM wc_players").get().c > 0;
+if (!wcPlayersSeeded) {
+  try {
+    const WC2026_SQUADS = require("./squad-data");
+    const teamsByCode = {};
+    for (const row of db.prepare("SELECT id, code FROM teams").all()) teamsByCode[row.code] = row.id;
+    const insertPlayer = db.prepare("INSERT OR IGNORE INTO wc_players (name, team_id, position, dob) VALUES (?, ?, ?, ?)");
+    const seedPlayers = db.transaction(() => {
+      for (const [code, players] of Object.entries(WC2026_SQUADS)) {
+        const teamId = teamsByCode[code];
+        if (!teamId) { console.log(`Skipping unknown team code: ${code}`); continue; }
+        for (const p of players) insertPlayer.run(p.name, teamId, p.pos, p.dob || null);
+      }
+    });
+    seedPlayers();
+    console.log("Seeded WC 2026 squad players.");
+  } catch (err) {
+    console.log("Could not seed WC players (squad-data.js may not exist yet):", err.message);
+  }
+}
+
+// Migration: backfill dob for existing wc_players rows
+try {
+  const missingDob = db.prepare("SELECT COUNT(*) as c FROM wc_players WHERE dob IS NULL").get().c;
+  if (missingDob > 0) {
+    const WC2026_SQUADS = require("./squad-data");
+    const teamsByCode = {};
+    for (const row of db.prepare("SELECT id, code FROM teams").all()) teamsByCode[row.code] = row.id;
+    const updateDob = db.prepare("UPDATE wc_players SET dob = ? WHERE name = ? AND team_id = ? AND dob IS NULL");
+    const backfill = db.transaction(() => {
+      for (const [code, players] of Object.entries(WC2026_SQUADS)) {
+        const teamId = teamsByCode[code];
+        if (!teamId) continue;
+        for (const p of players) {
+          if (p.dob) updateDob.run(p.dob, p.name, teamId);
+        }
+      }
+    });
+    backfill();
+    console.log("Backfilled dob for WC 2026 players.");
+  }
+} catch (_) {}
+
 module.exports = db;

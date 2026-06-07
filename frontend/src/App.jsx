@@ -14,8 +14,9 @@ import Auth from "./pages/Auth";
 import Landing from "./pages/Landing";
 import Legal from "./pages/Legal";
 import Chat from "./pages/Chat";
+import Players from "./pages/Players";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -250,6 +251,7 @@ function App() {
   const [isPoolAdmin, setIsPoolAdmin] = useState(false);
   const [chatClosed, setChatClosed] = useState(false);
   const [championW2Locked, setChampionW2Locked] = useState(false);
+  const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
 
   // Load pool admin status and chat_closed when pool changes
@@ -269,6 +271,11 @@ function App() {
       fetchChampionW2Lock(pool.id).then((data) => {
         if (data && typeof data.champion_w2_locked !== "undefined") {
           setChampionW2Locked(!!data.champion_w2_locked);
+        }
+      }).catch(() => {});
+      fetchPlayerAwardsLock(pool.id).then((data) => {
+        if (data && typeof data.player_awards_locked !== "undefined") {
+          setPlayerAwardsLocked(!!data.player_awards_locked);
         }
       }).catch(() => {});
     }
@@ -711,6 +718,7 @@ function App() {
             <NavLink to="/">Groups</NavLink>
             <NavLink to="/knockouts">Knockouts</NavLink>
             <NavLink to="/champion">Winner</NavLink>
+            <NavLink to="/players">Awards</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
             <NavLink to="/history">History</NavLink>
             <NavLink to="/chat">Chat</NavLink>
@@ -725,6 +733,7 @@ function App() {
             <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} />} />
             <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} />} />
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
@@ -812,6 +821,24 @@ function App() {
                       }}
                     >
                       {championW2Locked ? "Locked — Unlock" : "Open — Lock"}
+                    </button>
+                  </span>
+                </div>
+              )}
+
+              {isPoolAdmin && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Player Award Picks</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${playerAwardsLocked ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !playerAwardsLocked;
+                        const res = await updatePlayerAwardsLock(pool.id, newVal);
+                        if (!res.error) setPlayerAwardsLocked(newVal);
+                      }}
+                    >
+                      {playerAwardsLocked ? "Locked — Unlock" : "Open — Lock"}
                     </button>
                   </span>
                 </div>

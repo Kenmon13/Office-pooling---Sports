@@ -7,6 +7,7 @@ const TYPE_ICON = {
   champion_pick: "🏆",
   champion_change: "🔄",
   champion_bonus: "🥇",
+  player_award: "🏅",
 };
 
 function formatDate(dateStr) {

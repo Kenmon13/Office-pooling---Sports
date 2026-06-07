@@ -320,7 +320,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
       <div className="ko-rules">
         <p className="ko-rules-title">How predictions work</p>
         <ul>
-          <li>Pick the 2 teams you think will qualify from each group (order does not matter).{!isWC2022 && <> You can also pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will qualify for the knockouts. All 3 correct = 7 pts &middot; 2 correct = 5 pts &middot; 1 correct = 2 pts.</>}</li>
+          <li>Pick the 2 teams you think will qualify from each group (order does not matter).{!isWC2022 && <> You can also pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will qualify for the knockouts. All 3 correct = 10 pts &middot; 2 correct = 5 pts &middot; 1 correct = 2 pts.</>}</li>
           <li>Each group locks when its first match kicks off — you can update picks for other groups until their matches start.</li>
         </ul>
       </div>
