@@ -220,8 +220,10 @@ app.post("/api/issues/:id/replies", authenticateToken, (req, res) => {
   const result = db.prepare("INSERT INTO issue_replies (issue_id, user_id, display_name, body, is_admin) VALUES (?, ?, ?, ?, ?)").run(
     req.params.id, req.user.id, user.display_name, body.trim(), user.is_admin ? 1 : 0
   );
-  // Reopen issue if user replies to a resolved issue
-  if (!user.is_admin && issue.status === "resolved") {
+  // Auto-resolve issue when admin replies, reopen when user replies
+  if (user.is_admin && issue.status === "open") {
+    db.prepare("UPDATE issues SET status = 'resolved' WHERE id = ?").run(req.params.id);
+  } else if (!user.is_admin && issue.status === "resolved") {
     db.prepare("UPDATE issues SET status = 'open' WHERE id = ?").run(req.params.id);
   }
   res.json({ id: result.lastInsertRowid, success: true });
