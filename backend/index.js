@@ -357,6 +357,18 @@ app.get("/api/admin/users", requireAdminToken, (req, res) => {
   res.json(users);
 });
 
+app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
+  const pools = db.prepare(`
+    SELECT p.id, p.name, p.sport, p.tournament, p.is_public,
+           EXISTS(SELECT 1 FROM pool_admins pa WHERE pa.pool_id = p.id AND pa.user_id = ?) as is_admin
+    FROM participants part
+    JOIN pools p ON p.id = part.pool_id
+    WHERE part.user_id = ?
+    ORDER BY p.name
+  `).all(req.params.id, req.params.id);
+  res.json(pools);
+});
+
 app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
   const targetId = req.params.id;
   // Don't allow deleting yourself

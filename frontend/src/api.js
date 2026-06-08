@@ -171,6 +171,11 @@ export async function adminFetchUsers() {
   return res.json();
 }
 
+export async function adminFetchUserPools(userId) {
+  const res = await fetch(`${API}/admin/users/${userId}/pools`, { headers: authHeaders() });
+  return res.json();
+}
+
 export async function adminDeleteUser(targetId) {
   const res = await fetch(`${API}/admin/users/${targetId}`, {
     method: "DELETE",
