@@ -4277,6 +4277,30 @@ nav a.active {
   gap: 8px;
   min-width: 140px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-row-compact .stats-team {
+  min-width: 0;
+  max-width: 160px;
+}
+
+.btn-show-more {
+  display: block;
+  margin: 12px auto 0;
+  background: transparent;
+  border: 1px solid #2d4a2d;
+  color: #6fdc6f;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-show-more:hover {
+  background: #1a2a1a;
 }
 
 .stats-flag {
@@ -4371,8 +4395,11 @@ nav a.active {
     grid-template-columns: 1fr;
   }
   .stats-team {
-    min-width: 100px;
+    min-width: 80px;
     font-size: 0.85rem;
+  }
+  .stats-row-compact .stats-team {
+    max-width: 120px;
   }
   .global-stats-box {
     padding: 14px;

@@ -13,6 +13,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [joiningPoolId, setJoiningPoolId] = useState(null);
   const [myPools, setMyPools] = useState([]);
   const [globalStats, setGlobalStats] = useState(null);
+  const [showAllChampions, setShowAllChampions] = useState(false);
 
   useEffect(() => {
     fetchUserPools().then((data) => {
@@ -105,12 +106,10 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
             <span className="sport-emoji">{"\uD83C\uDF0D"}</span>
             <span className="sport-name">Public Pool</span>
           </button>
-          {globalStats && globalStats.champions.length > 0 && (
-            <button className="sport-card" onClick={() => setMode("stats")}>
-              <span className="sport-emoji">{"\uD83D\uDCCA"}</span>
-              <span className="sport-name">Stats</span>
-            </button>
-          )}
+          <button className="sport-card" onClick={() => setMode("stats")}>
+            <span className="sport-emoji">{"\uD83D\uDCCA"}</span>
+            <span className="sport-name">Stats</span>
+          </button>
         </div>
 
         {myPools.length > 0 && (
@@ -141,11 +140,15 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
           Based on {globalStats?.totalPlayers || 0} player{globalStats?.totalPlayers !== 1 ? "s" : ""} across all pools
         </p>
 
+        {(!globalStats || (globalStats.champions.length === 0 && globalStats.groups.length === 0)) && (
+          <p className="notice">No predictions yet — stats will appear once players start picking.</p>
+        )}
+
         {globalStats && globalStats.champions.length > 0 && (
           <div className="global-stats-section">
             <h4>Predicted Winner</h4>
             <div className="stats-list">
-              {globalStats.champions.slice(0, 10).map((t, i) => (
+              {(showAllChampions ? globalStats.champions : globalStats.champions.slice(0, 10)).map((t, i) => (
                 <div key={t.team_id} className="stats-row">
                   <span className="stats-rank">#{i + 1}</span>
                   <span className="stats-team">
@@ -160,6 +163,11 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
                 </div>
               ))}
             </div>
+            {globalStats.champions.length > 10 && (
+              <button className="btn-show-more" onClick={() => setShowAllChampions(!showAllChampions)}>
+                {showAllChampions ? "Show Less" : `Show All (${globalStats.champions.length})`}
+              </button>
+            )}
           </div>
         )}
 
