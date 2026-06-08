@@ -17,7 +17,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -123,6 +123,9 @@ function App() {
     }
   }, [participant, pool]);
 
+  const [exactScoresDisabled, setExactScoresDisabled] = useState(false);
+  const [hasFinishedKoMatches, setHasFinishedKoMatches] = useState(false);
+
   // Ref tracking current pool so periodic refresh can check without stale closure
   const poolRef = useRef(pool);
   useEffect(() => { poolRef.current = pool; });
@@ -140,6 +143,7 @@ function App() {
             groups: data.groups,
             koDeadline: data.koDeadline,
             poolPicksData: [{ pool, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus, awardPicks: data.awardPicks, awardsLocked: data.awardsLocked }],
+            exactScoresDisabled,
           });
           handleUnreadWindows(countUnread(applyDismissals(sections, pool.id)));
         } catch { /* ignore */ }
@@ -150,7 +154,7 @@ function App() {
     refresh();
     window.addEventListener("picks-saved", refresh);
     return () => window.removeEventListener("picks-saved", refresh);
-  }, [pool, participant, handleUnreadWindows]);
+  }, [pool, participant, handleUnreadWindows, exactScoresDisabled]);
 
   // Badge: periodic refresh for server-side changes (global mode only — pool mode handled above)
   useEffect(() => {
@@ -283,6 +287,15 @@ function App() {
         if (data && typeof data.player_awards_locked !== "undefined") {
           setPlayerAwardsLocked(!!data.player_awards_locked);
         }
+      }).catch(() => {});
+      fetchExactScoresSetting(pool.id).then((data) => {
+        if (data && typeof data.exact_scores_disabled !== "undefined") {
+          setExactScoresDisabled(!!data.exact_scores_disabled);
+        }
+      }).catch(() => {});
+      const koFetch = pool.tournament === "wc2022" ? () => fetchWC2022KnockoutMatches(pool.id) : fetchKnockoutMatches;
+      koFetch().then((matches) => {
+        setHasFinishedKoMatches(Array.isArray(matches) && matches.some((m) => m.status === "finished"));
       }).catch(() => {});
     }
   }, [user, pool]);
@@ -743,7 +756,7 @@ function App() {
           )}
           <Routes>
             <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} />} />
-            <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} />} />
+            <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} exactScoresDisabled={exactScoresDisabled} />} />
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/stats" element={<Stats poolId={pool.id} />} />
@@ -899,6 +912,29 @@ function App() {
                 </div>
               )}
 
+              {isPoolAdmin && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Exact Score Bonus</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${exactScoresDisabled ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !exactScoresDisabled;
+                        const res = await updateExactScoresSetting(pool.id, newVal);
+                        if (!res.error) setExactScoresDisabled(newVal);
+                      }}
+                    >
+                      {exactScoresDisabled ? "Disabled — Enable" : "Enabled — Disable"}
+                    </button>
+                    {hasFinishedKoMatches && (
+                      <span style={{ fontSize: "0.72rem", color: "#f0a500", marginTop: 4, display: "block", textAlign: "right" }}>
+                        ⚠ Affects points for already-finished matches
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+
               <h4 style={{ marginTop: 16, marginBottom: 8 }}>Members ({poolMembers.length})</h4>
               <div className="pool-members-list">
                 {poolMembers.map((m) => {
@@ -996,6 +1032,7 @@ function App() {
             tournament={selectedTournament?.id}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
+            exactScoresDisabled={exactScoresDisabled}
           />
         )}
       </div>

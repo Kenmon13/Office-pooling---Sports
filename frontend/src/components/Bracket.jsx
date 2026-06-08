@@ -29,7 +29,7 @@ function evalPickError(pred, h, a) {
   return "";
 }
 
-function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, ko, matchOpen, meta, scoreData, onPick, onScore, displayTzOffset }) {
+function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, ko, matchOpen, meta, scoreData, onPick, onScore, displayTzOffset, exactScoresDisabled }) {
   const [h, setH] = useState(scoreData?.home != null ? String(scoreData.home) : "");
   const [a, setA] = useState(scoreData?.away != null ? String(scoreData.away) : "");
   const [scoreError, setScoreError] = useState(() => {
@@ -40,14 +40,14 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
 
   // Event 1: pick changed — re-evaluate current scores for the new pick immediately
   if (scoreError.forPred !== pred) {
-    setScoreError({ forPred: pred, msg: evalPickError(pred, h, a) });
+    setScoreError({ forPred: pred, msg: exactScoresDisabled ? "" : evalPickError(pred, h, a) });
   }
-  const visibleError = scoreError.msg;
+  const visibleError = exactScoresDisabled ? "" : scoreError.msg;
 
   const matchLocked = !matchOpen || (ko && ko.status !== "upcoming");
   const canPick = onPick && !matchLocked;
   const scoreDisabled = !onScore || matchLocked;
-  const pickedNoScore = !!pred && !!ko?.home_team_name && !matchLocked && (h === "" || a === "");
+  const pickedNoScore = !exactScoresDisabled && !!pred && !!ko?.home_team_name && !matchLocked && (h === "" || a === "");
 
   // Event 2: score blur — validate and save
   const handleBlur = () => {
@@ -64,13 +64,13 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   const actualHome = ko?.home_score ?? null;
   const actualAway = ko?.away_score ?? null;
   const hasPred = !!pred && !!ko?.home_team_name;
-  const showInputs = hasPred && !matchFinished;
+  const showInputs = !exactScoresDisabled && hasPred && !matchFinished;
   const showActual = matchFinished && actualHome !== null;
 
   const pHi = h === "" ? null : parseInt(h, 10);
   const pAi = a === "" ? null : parseInt(a, 10);
-  const scoreCorrect = showActual && hasPred && pHi !== null && pAi !== null && pHi === actualHome && pAi === actualAway;
-  const scoreWrong = showActual && hasPred && pHi !== null && pAi !== null && !scoreCorrect;
+  const scoreCorrect = !exactScoresDisabled && showActual && hasPred && pHi !== null && pAi !== null && pHi === actualHome && pAi === actualAway;
+  const scoreWrong = !exactScoresDisabled && showActual && hasPred && pHi !== null && pAi !== null && !scoreCorrect;
 
   const homeLabel = ko?.home_team_name ? <>{flag(ko.home_team_code)} {ko.home_team_name}</> : <SlotLabel />;
   const awayLabel = ko?.away_team_name ? <>{flag(ko.away_team_code)} {ko.away_team_name}</> : <SlotLabel />;
@@ -110,7 +110,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
           {showActual && <span className="score-actual">{actualAway}</span>}
         </div>
       </div>
-      {visibleError && <div className="score-error">{visibleError}</div>}
+      {!exactScoresDisabled && visibleError && <div className="score-error">{visibleError}</div>}
       {(scoreCorrect || scoreWrong) && (
         <div className={`score-result ${scoreCorrect ? "correct" : "wrong"}`}>
           {scoreCorrect ? "✓ exact score" : `✗ was ${actualHome}–${actualAway}`}
@@ -125,7 +125,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   );
 }
 
-function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {}, displayTzOffset }) {
+function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMatches = [], pointsMap = {}, openMatchIds = new Set(), matchMeta = {}, displayTzOffset, exactScoresDisabled = false }) {
   const rounds = [
     {
       name: "Round of 32",
@@ -246,6 +246,7 @@ function Bracket({ predictions = {}, scores = {}, onPick, onScore, saving, koMat
                   onPick={onPick}
                   onScore={onScore}
                   displayTzOffset={displayTzOffset}
+                  exactScoresDisabled={exactScoresDisabled}
                 />
               );
             })}

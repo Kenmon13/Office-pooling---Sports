@@ -478,6 +478,18 @@ export async function updatePlayerAwardsLock(poolId, locked) {
   return res.json();
 }
 
+export async function fetchExactScoresSetting(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/exact-scores`)).json();
+}
+export async function updateExactScoresSetting(poolId, disabled) {
+  const res = await fetch(`${API}/pools/${poolId}/exact-scores`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ disabled }),
+  });
+  return res.json();
+}
+
 // ── History ───────────────────────────────────────────────────────────────────
 
 export async function fetchWC2022History(participantId, poolId) {

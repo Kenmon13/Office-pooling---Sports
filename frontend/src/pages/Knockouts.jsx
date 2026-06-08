@@ -7,7 +7,7 @@ import Bracket from "../components/Bracket";
 import Bracket2022 from "../components/Bracket2022";
 import { ROUND_ORDER } from "../windowsHelpers";
 
-function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset }) {
+function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset, exactScoresDisabled = false }) {
   const isWC2022 = tournament === "wc2022";
   const [koMatches, setKoMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
@@ -86,7 +86,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
   const missingPickMatches = openKoMatches
     .filter((m) => !predictions[m.id])
     .sort((a, b) => (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99));
-  const missingScoreMatches = openKoMatches
+  const missingScoreMatches = exactScoresDisabled ? [] : openKoMatches
     .filter((m) => predictions[m.id] && !scores[m.id])
     .sort((a, b) => (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99));
   const koAlerts = currentUser && groupStageComplete && !koStageComplete && (missingPickMatches.length > 0 || missingScoreMatches.length > 0) ? (
@@ -100,8 +100,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
         {missingPickMatches.length > 0 && (
           <div className="win-missed">
             ⚠️ {missingPickMatches.length === 1
-              ? `${missingPickMatches[0].round}: ${missingPickMatches[0].home_team_name} vs ${missingPickMatches[0].away_team_name} — missing pick and score`
-              : `${missingPickMatches.length} matches missing pick and score`}
+              ? `${missingPickMatches[0].round}: ${missingPickMatches[0].home_team_name} vs ${missingPickMatches[0].away_team_name} — missing pick${exactScoresDisabled ? "" : " and score"}`
+              : `${missingPickMatches.length} matches missing pick${exactScoresDisabled ? "" : " and score"}`}
           </div>
         )}
         {missingScoreMatches.length > 0 && (
@@ -126,13 +126,13 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
             <li>Round of 16 opens once all group stage matches are complete.</li>
             <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
             <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
-            <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>
+            {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>}
             <li>Points for each correct winner prediction:
               <div className="ko-points-grid">
-                <span>Round of 16</span><span>5 pts (10 if correct score predicted)</span>
-                <span>Quarter-Finals</span><span>7 pts (14 if correct score predicted)</span>
-                <span>Semi-Finals</span><span>10 pts (20 if correct score predicted)</span>
-                <span>Final</span><span>15 pts (30 if correct score predicted)</span>
+                <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score predicted)"}</span>
+                <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score predicted)"}</span>
+                <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score predicted)"}</span>
+                <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score predicted)"}</span>
               </div>
             </li>
           </ul>
@@ -163,6 +163,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
           openMatchIds={openMatchIds}
           matchMeta={matchMeta}
           displayTzOffset={displayTzOffset}
+          exactScoresDisabled={exactScoresDisabled}
         />
       </div>
     );
@@ -178,14 +179,14 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
           <li>Round of 32 opens once all group stage matches are complete.</li>
           <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
           <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
-          <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>
+          {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>}
           <li>Points for each correct winner prediction:
             <div className="ko-points-grid">
-              <span>Round of 32</span><span>3 pts (6 if correct score predicted)</span>
-              <span>Round of 16</span><span>5 pts (10 if correct score predicted)</span>
-              <span>Quarter-Finals</span><span>7 pts (14 if correct score predicted)</span>
-              <span>Semi-Finals</span><span>10 pts (20 if correct score predicted)</span>
-              <span>Final</span><span>15 pts (30 if correct score predicted)</span>
+              <span>Round of 32</span><span>{exactScoresDisabled ? "3 pts" : "3 pts (6 if correct score predicted)"}</span>
+              <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score predicted)"}</span>
+              <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score predicted)"}</span>
+              <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score predicted)"}</span>
+              <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score predicted)"}</span>
             </div>
           </li>
         </ul>
@@ -218,6 +219,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
         openMatchIds={openMatchIds}
         matchMeta={matchMeta}
         displayTzOffset={displayTzOffset}
+        exactScoresDisabled={exactScoresDisabled}
       />
     </div>
   );
