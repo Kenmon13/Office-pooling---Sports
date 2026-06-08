@@ -17,7 +17,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -254,6 +254,9 @@ function App() {
   const [championW2Locked, setChampionW2Locked] = useState(false);
   const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPoolPassword, setNewPoolPassword] = useState("");
+  const [changePasswordError, setChangePasswordError] = useState("");
 
   // Load pool admin status and chat_closed when pool changes
   useEffect(() => {
@@ -363,6 +366,9 @@ function App() {
     setPoolPassword(null);
     setShowPoolSettings(false);
     setRevealPassword(false);
+    setShowChangePassword(false);
+    setNewPoolPassword("");
+    setChangePasswordError("");
     localStorage.removeItem("pool_session");
   };
 
@@ -745,7 +751,7 @@ function App() {
         </main>
 
         {showPoolSettings && (
-          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); }}>
+          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); }}>
             <div className="modal-box pool-settings-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Pool Settings</h3>
               <div className="pool-settings-row">
@@ -757,18 +763,55 @@ function App() {
                 <span className="pool-settings-value">{pool.is_public ? "Public" : "Private"}</span>
               </div>
               {!pool.is_public && (
-                <div className="pool-settings-row">
-                  <span className="pool-settings-label">Password</span>
-                  <span className="pool-settings-value">
-                    {revealPassword ? (
-                      <span className="pool-password-display">{poolPassword}</span>
-                    ) : (
-                      <span className="pool-password-hidden">••••••••</span>
-                    )}
-                    <button className="btn-small" style={{ marginLeft: 8 }} onClick={() => setRevealPassword((v) => !v)}>
-                      {revealPassword ? "Hide" : "Reveal"}
-                    </button>
-                  </span>
+                <div className="pool-settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", width: "100%", justifyContent: "space-between" }}>
+                    <span className="pool-settings-label">Password</span>
+                    <span className="pool-settings-value">
+                      {revealPassword ? (
+                        <span className="pool-password-display">{poolPassword}</span>
+                      ) : (
+                        <span className="pool-password-hidden">••••••••</span>
+                      )}
+                      <button className="btn-small" style={{ marginLeft: 8 }} onClick={() => setRevealPassword((v) => !v)}>
+                        {revealPassword ? "Hide" : "Reveal"}
+                      </button>
+                      {isPoolAdmin && (
+                        <button
+                          className="btn-small"
+                          style={{ marginLeft: 8 }}
+                          onClick={() => { setShowChangePassword((v) => !v); setNewPoolPassword(""); setChangePasswordError(""); }}
+                        >
+                          {showChangePassword ? "Cancel" : "Change"}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                  {showChangePassword && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+                      <input
+                        className="auth-input"
+                        type="text"
+                        placeholder="New password"
+                        value={newPoolPassword}
+                        onChange={(e) => { setNewPoolPassword(e.target.value); setChangePasswordError(""); }}
+                      />
+                      {changePasswordError && <span style={{ color: "#c0392b", fontSize: 13 }}>{changePasswordError}</span>}
+                      <button
+                        className="btn-submit"
+                        style={{ alignSelf: "flex-start" }}
+                        onClick={async () => {
+                          if (!newPoolPassword.trim()) { setChangePasswordError("Password cannot be empty"); return; }
+                          const res = await changePoolPassword(pool.id, newPoolPassword.trim());
+                          if (res.error) { setChangePasswordError(res.error); return; }
+                          setPoolPassword(newPoolPassword.trim());
+                          setShowChangePassword(false);
+                          setNewPoolPassword("");
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -905,7 +948,7 @@ function App() {
               </div>
 
               <div className="modal-actions">
-                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); }}>Close</button>
+                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); }}>Close</button>
               </div>
             </div>
           </div>

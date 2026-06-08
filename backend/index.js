@@ -609,6 +609,17 @@ app.put("/api/pools/:poolId/player-awards-lock", requirePoolAdmin, (req, res) =>
   res.json({ success: true, player_awards_locked: locked ? 1 : 0 });
 });
 
+app.put("/api/pools/:poolId/password", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { password } = req.body;
+  if (!password || !password.trim()) return res.status(400).json({ error: "Password cannot be empty" });
+  const pool = db.prepare("SELECT is_public FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  if (pool.is_public) return res.status(400).json({ error: "Cannot set password on a public pool" });
+  db.prepare("UPDATE pools SET password = ? WHERE id = ?").run(password.trim(), poolId);
+  res.json({ success: true });
+});
+
 app.get("/api/pools/:poolId/player-awards-lock", (req, res) => {
   const poolId = req.params.poolId;
   const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(poolId);

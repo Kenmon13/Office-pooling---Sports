@@ -228,6 +228,15 @@ export async function fetchPoolPassword(poolId) {
   return (await fetch(`${API}/pools/${poolId}/password`, { headers: authHeaders() })).json();
 }
 
+export async function changePoolPassword(poolId, password) {
+  const res = await fetch(`${API}/pools/${poolId}/password`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ password }),
+  });
+  return res.json();
+}
+
 export async function fetchPublicPools(sport, tournament) {
   const params = new URLSearchParams();
   if (sport) params.set("sport", sport);
