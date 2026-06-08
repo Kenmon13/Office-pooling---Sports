@@ -2,6 +2,10 @@ import { useState, useEffect } from "react";
 import { createPool, joinPool, fetchPublicPools, fetchUserPools, fetchGlobalStats } from "../api";
 import { flag } from "../flags";
 
+const SHORT_NAMES = {
+  "Bosnia and Herzegovina": "Bosnia",
+};
+
 function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [mode, setMode] = useState(null); // null, "create", "join", "public"
   const [poolName, setPoolName] = useState("");
@@ -153,7 +157,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
                   <span className="stats-rank">#{i + 1}</span>
                   <span className="stats-team">
                     {flag(t.team_code)}
-                    {t.team_name}
+                    {SHORT_NAMES[t.team_name] || t.team_name}
                   </span>
                   <div className="stats-bar-wrapper">
                     <div className="stats-bar" style={{ width: `${t.percentage}%` }} />
@@ -183,7 +187,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
                       <span className="stats-rank-sm">#{i + 1}</span>
                       <span className="stats-team">
                         {flag(t.team_code)}
-                        {t.team_name}
+                        {SHORT_NAMES[t.team_name] || t.team_name}
                       </span>
                       <div className="stats-bar-wrapper">
                         <div className="stats-bar stats-bar-group" style={{ width: `${t.percentage}%` }} />

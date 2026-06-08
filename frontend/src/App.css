@@ -4275,7 +4275,9 @@ nav a.active {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 140px;
+  width: 160px;
+  min-width: 0;
+  flex-shrink: 0;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -4283,8 +4285,7 @@ nav a.active {
 }
 
 .stats-row-compact .stats-team {
-  min-width: 0;
-  max-width: 160px;
+  width: 140px;
 }
 
 .btn-show-more {
@@ -4395,11 +4396,11 @@ nav a.active {
     grid-template-columns: 1fr;
   }
   .stats-team {
-    min-width: 80px;
+    width: 120px;
     font-size: 0.85rem;
   }
   .stats-row-compact .stats-team {
-    max-width: 120px;
+    width: 110px;
   }
   .global-stats-box {
     padding: 14px;

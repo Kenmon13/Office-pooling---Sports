@@ -2,6 +2,10 @@ import { useState, useEffect } from "react";
 import { fetchGroupPickStats, fetchChampionPickStats } from "../api";
 import { flag } from "../flags";
 
+const SHORT_NAMES = {
+  "Bosnia and Herzegovina": "Bosnia",
+};
+
 function Stats({ poolId }) {
   const [groupStats, setGroupStats] = useState([]);
   const [championStats, setChampionStats] = useState([]);
@@ -36,7 +40,7 @@ function Stats({ poolId }) {
                 <span className="stats-rank">#{i + 1}</span>
                 <span className="stats-team">
                   {flag(t.team_code)}
-                  {t.team_name}
+                  {SHORT_NAMES[t.team_name] || t.team_name}
                 </span>
                 <div className="stats-bar-wrapper">
                   <div
@@ -67,7 +71,7 @@ function Stats({ poolId }) {
                     <span className="stats-rank-sm">#{i + 1}</span>
                     <span className="stats-team">
                       {flag(t.team_code)}
-                      {t.team_name}
+                      {SHORT_NAMES[t.team_name] || t.team_name}
                     </span>
                     <div className="stats-bar-wrapper">
                       <div
