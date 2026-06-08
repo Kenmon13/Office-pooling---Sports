@@ -257,6 +257,8 @@ function App() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [newPoolPassword, setNewPoolPassword] = useState("");
   const [changePasswordError, setChangePasswordError] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
 
   // Load pool admin status and chat_closed when pool changes
   useEffect(() => {
@@ -369,6 +371,8 @@ function App() {
     setShowChangePassword(false);
     setNewPoolPassword("");
     setChangePasswordError("");
+    setChangingPassword(false);
+    setChangePasswordSuccess(false);
     localStorage.removeItem("pool_session");
   };
 
@@ -751,7 +755,7 @@ function App() {
         </main>
 
         {showPoolSettings && (
-          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); }}>
+          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); setChangingPassword(false); setChangePasswordSuccess(false); }}>
             <div className="modal-box pool-settings-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Pool Settings</h3>
               <div className="pool-settings-row">
@@ -793,22 +797,27 @@ function App() {
                         type="text"
                         placeholder="New password"
                         value={newPoolPassword}
-                        onChange={(e) => { setNewPoolPassword(e.target.value); setChangePasswordError(""); }}
+                        onChange={(e) => { setNewPoolPassword(e.target.value); setChangePasswordError(""); setChangePasswordSuccess(false); }}
                       />
                       {changePasswordError && <span style={{ color: "#c0392b", fontSize: 13 }}>{changePasswordError}</span>}
+                      {changePasswordSuccess && <span style={{ color: "#5a8a5a", fontSize: 13 }}>Password updated.</span>}
                       <button
                         className="btn-submit"
                         style={{ alignSelf: "flex-start" }}
+                        disabled={changingPassword}
                         onClick={async () => {
                           if (!newPoolPassword.trim()) { setChangePasswordError("Password cannot be empty"); return; }
+                          setChangingPassword(true);
+                          setChangePasswordError("");
                           const res = await changePoolPassword(pool.id, newPoolPassword.trim());
+                          setChangingPassword(false);
                           if (res.error) { setChangePasswordError(res.error); return; }
                           setPoolPassword(newPoolPassword.trim());
-                          setShowChangePassword(false);
                           setNewPoolPassword("");
+                          setChangePasswordSuccess(true);
                         }}
                       >
-                        Save
+                        {changingPassword ? "Saving…" : "Save"}
                       </button>
                     </div>
                   )}
@@ -948,7 +957,7 @@ function App() {
               </div>
 
               <div className="modal-actions">
-                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); }}>Close</button>
+                <button className="btn-submit" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); setChangingPassword(false); setChangePasswordSuccess(false); }}>Close</button>
               </div>
             </div>
           </div>
