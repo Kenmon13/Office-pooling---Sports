@@ -8,6 +8,7 @@ import {
   fetchKnockoutPredictions, fetchWC2022KnockoutPredictions,
   fetchChampionPick, fetchWC2022ChampionPick,
   fetchPlayerAwardPicks,
+  fetchExactScoresSetting,
 } from "./api";
 
 const AWARD_KEYS = ["golden_ball", "golden_boot", "golden_glove", "young_player", "fair_play"];
@@ -58,7 +59,7 @@ export function applyDismissals(sections, poolId) {
   } catch { return sections; }
 }
 
-export function generateSections(now, { predDeadline, koMatches, groups, koDeadline, poolPicksData }) {
+export function generateSections(now, { predDeadline, koMatches, groups, koDeadline, poolPicksData, exactScoresDisabled = false }) {
   const totalPools = poolPicksData.length;
   const isSingle = totalPools === 1;
   const groupStageComplete = koDeadline?.groupStageComplete ?? false;
@@ -266,7 +267,7 @@ export function generateSections(now, { predDeadline, koMatches, groups, koDeadl
       const notPicked = poolPicksData.filter(
         (pp) => !(pp.koPreds || []).some((p) => p.match_id === match.id)
       );
-      const noScore = poolPicksData.filter((pp) => {
+      const noScore = exactScoresDisabled ? [] : poolPicksData.filter((pp) => {
         const pred = (pp.koPreds || []).find((p) => p.match_id === match.id);
         return pred && pred.predicted_home_score === null && pred.predicted_away_score === null;
       });
@@ -282,15 +283,15 @@ export function generateSections(now, { predDeadline, koMatches, groups, koDeadl
       } else if (past) {
         status = "gray";
         if (isSingle) {
-          missingMsg = !allPicked ? "No pick was made" : "Score not entered";
+          missingMsg = !allPicked ? "No pick was made" : (exactScoresDisabled ? null : "Score not entered");
         } else {
           const missingPools = new Set([...notPicked.map((pp) => pp.pool.name), ...noScore.map((pp) => pp.pool.name)]);
-          missingMsg = `Missing in: ${[...missingPools].join(", ")}`;
+          missingMsg = missingPools.size > 0 ? `Missing in: ${[...missingPools].join(", ")}` : null;
         }
       } else {
         status = "red";
         if (isSingle) {
-          missingMsg = !allPicked ? "Pick and score not entered" : "Score not entered";
+          missingMsg = !allPicked ? `Pick${exactScoresDisabled ? "" : " and score"} not entered` : (exactScoresDisabled ? null : "Score not entered");
         } else {
           const parts = [];
           if (notPicked.length > 0) parts.push(`Pick missing in: ${notPicked.map((pp) => pp.pool.name).join(", ")}`);
@@ -425,7 +426,7 @@ export async function fetchWindowsForPool(p) {
     ? Promise.resolve(undefined)
     : fetchPlayerAwardPicks(p.participant_id, p.id).catch(() => ({ picks: [], locked: false }));
 
-  const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardData] =
+  const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardData, exactScoresData] =
     await Promise.all([
       fetchDeadline(),
       fetchKoMatchesFn(),
@@ -435,6 +436,7 @@ export async function fetchWindowsForPool(p) {
       fetchKoPreds(),
       fetchChamp(),
       awardFetch,
+      fetchExactScoresSetting(p.id).catch(() => ({ exact_scores_disabled: 0 })),
     ]);
 
   return {
@@ -447,6 +449,7 @@ export async function fetchWindowsForPool(p) {
     champStatus,
     awardPicks: awardData?.picks,
     awardsLocked: awardData?.locked,
+    exactScoresDisabled: !!(exactScoresData && exactScoresData.exact_scores_disabled),
   };
 }
 
@@ -473,10 +476,10 @@ export async function computeWindowsUnreadCount() {
     const perPoolPicks = await Promise.all(
       tourPools.map(async (p) => {
         if (p.id === firstPool.id) {
-          return { pool: p, groupPreds: shared.groupPreds, koPreds: shared.koPreds, champStatus: shared.champStatus, awardPicks: shared.awardPicks, awardsLocked: shared.awardsLocked };
+          return { pool: p, groupPreds: shared.groupPreds, koPreds: shared.koPreds, champStatus: shared.champStatus, awardPicks: shared.awardPicks, awardsLocked: shared.awardsLocked, exactScoresDisabled: shared.exactScoresDisabled };
         }
-        const data = await fetchWindowsForPool(p).catch(() => ({ groupPreds: [], koPreds: [], champStatus: null, awardPicks: undefined, awardsLocked: false }));
-        return { pool: p, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus, awardPicks: data.awardPicks, awardsLocked: data.awardsLocked };
+        const data = await fetchWindowsForPool(p).catch(() => ({ groupPreds: [], koPreds: [], champStatus: null, awardPicks: undefined, awardsLocked: false, exactScoresDisabled: false }));
+        return { pool: p, groupPreds: data.groupPreds, koPreds: data.koPreds, champStatus: data.champStatus, awardPicks: data.awardPicks, awardsLocked: data.awardsLocked, exactScoresDisabled: data.exactScoresDisabled };
       })
     );
 
@@ -487,6 +490,7 @@ export async function computeWindowsUnreadCount() {
         groups: shared.groups,
         koDeadline: shared.koDeadline,
         poolPicksData: [pp],
+        exactScoresDisabled: pp.exactScoresDisabled,
       });
       const dismissed = applyDismissals(ps, pp.pool.id);
       total += dismissed.group.filter(hasAlert).length;

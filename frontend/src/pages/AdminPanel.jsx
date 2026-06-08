@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -32,6 +32,8 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const [poolSort, setPoolSort] = useState("recent");
   const [userSort, setUserSort] = useState("recent");
   const [issueFilter, setIssueFilter] = useState("all");
+  const [expandedUserId, setExpandedUserId] = useState(null);
+  const [userPools, setUserPools] = useState({});
   const fileInputRef = useRef(null);
 
   const loadBackups = () => adminListBackups().then((d) => { if (!d.error) setBackups(d); });
@@ -317,22 +319,56 @@ function AdminPanel({ user, onSelectPool, onBack }) {
             </select>
           </div>
           <div className="pool-list">
-            {sortUsers(users).map((u) => (
-              <div key={u.id} className="pool-list-item">
-                <div className="pool-list-btn user-list-info">
-                  <div>
-                    <span className="pool-list-name">{u.display_name}</span>
-                    <span className="user-username">@{u.username}</span>
+            {sortUsers(users).map((u) => {
+              const isExpanded = expandedUserId === u.id;
+              const pools = userPools[u.id];
+              return (
+                <div key={u.id} className="pool-list-item" style={{ flexDirection: "column", alignItems: "stretch" }}>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <button
+                      className="pool-list-btn user-list-info"
+                      style={{ flex: 1 }}
+                      onClick={async () => {
+                        if (isExpanded) { setExpandedUserId(null); return; }
+                        setExpandedUserId(u.id);
+                        if (!userPools[u.id]) {
+                          const data = await adminFetchUserPools(u.id);
+                          setUserPools((prev) => ({ ...prev, [u.id]: Array.isArray(data) ? data : [] }));
+                        }
+                      }}
+                    >
+                      <div>
+                        <span className="pool-list-name">{u.display_name}</span>
+                        <span className="user-username">@{u.username}</span>
+                      </div>
+                      <span className="pool-list-meta">{u.is_admin ? "Admin" : "User"}</span>
+                    </button>
+                    {!u.is_admin && (
+                      <button className="pool-delete-btn" onClick={() => handleDeleteUser(u.id)}>&times;</button>
+                    )}
                   </div>
-                  <span className="pool-list-meta">
-                    {u.is_admin ? "Admin" : "User"}
-                  </span>
+                  {isExpanded && (
+                    <div style={{ padding: "8px 12px 12px", borderTop: "1px solid #2a2a2a" }}>
+                      {!pools ? (
+                        <p className="notice" style={{ margin: 0 }}>Loading…</p>
+                      ) : pools.length === 0 ? (
+                        <p className="notice" style={{ margin: 0 }}>Not in any pools.</p>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {pools.map((p) => (
+                            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                              <span style={{ flex: 1, color: "#ccc" }}>{p.name}</span>
+                              {p.is_admin ? <span className="pool-admin-badge">Admin</span> : null}
+                              <span style={{ color: "#666", fontSize: 12 }}>{p.is_public ? "Public" : "Private"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {!u.is_admin && (
-                  <button className="pool-delete-btn" onClick={() => handleDeleteUser(u.id)}>&times;</button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

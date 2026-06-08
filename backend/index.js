@@ -357,6 +357,18 @@ app.get("/api/admin/users", requireAdminToken, (req, res) => {
   res.json(users);
 });
 
+app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
+  const pools = db.prepare(`
+    SELECT p.id, p.name, p.sport, p.tournament, p.is_public,
+           EXISTS(SELECT 1 FROM pool_admins pa WHERE pa.pool_id = p.id AND pa.user_id = ?) as is_admin
+    FROM participants part
+    JOIN pools p ON p.id = part.pool_id
+    WHERE part.user_id = ?
+    ORDER BY p.name
+  `).all(req.params.id, req.params.id);
+  res.json(pools);
+});
+
 app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
   const targetId = req.params.id;
   // Don't allow deleting yourself
@@ -609,11 +621,36 @@ app.put("/api/pools/:poolId/player-awards-lock", requirePoolAdmin, (req, res) =>
   res.json({ success: true, player_awards_locked: locked ? 1 : 0 });
 });
 
+app.put("/api/pools/:poolId/password", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { password } = req.body;
+  if (!password || !password.trim()) return res.status(400).json({ error: "Password cannot be empty" });
+  const pool = db.prepare("SELECT is_public FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  if (pool.is_public) return res.status(400).json({ error: "Cannot set password on a public pool" });
+  db.prepare("UPDATE pools SET password = ? WHERE id = ?").run(password.trim(), poolId);
+  res.json({ success: true });
+});
+
 app.get("/api/pools/:poolId/player-awards-lock", (req, res) => {
   const poolId = req.params.poolId;
   const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(poolId);
   if (!pool) return res.status(404).json({ error: "Pool not found" });
   res.json({ player_awards_locked: pool.player_awards_locked });
+});
+
+app.put("/api/pools/:poolId/exact-scores", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { disabled } = req.body;
+  db.prepare("UPDATE pools SET exact_scores_disabled = ? WHERE id = ?").run(disabled ? 1 : 0, poolId);
+  res.json({ success: true, exact_scores_disabled: disabled ? 1 : 0 });
+});
+
+app.get("/api/pools/:poolId/exact-scores", (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT exact_scores_disabled FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json({ exact_scores_disabled: pool.exact_scores_disabled });
 });
 
 // --- Participants ---
@@ -1065,6 +1102,8 @@ app.get("/api/leaderboard", (req, res) => {
 
   const koPointsMap = { R32: 3, R16: 5, QF: 7, SF: 10, F: 15 };
   const finalMatch = koMatches.find((m) => m.id === "F" && m.winner_team_id);
+  const poolRow = poolId ? db.prepare("SELECT exact_scores_disabled FROM pools WHERE id = ?").get(poolId) : null;
+  const exactScoresDisabled = !!(poolRow && poolRow.exact_scores_disabled);
 
   // Build per-group qualifying set (top 2 + 3rd if globally qualified)
   const qualifyingByGroup = {};
@@ -1121,7 +1160,8 @@ app.get("/api/leaderboard", (req, res) => {
                               Number(kp.predicted_winner);
       if (String(predictedTeamId) === String(match.winner_team_id)) {
         let roundPts = koPointsMap[match.round] || 0;
-        if (kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
+        if (!exactScoresDisabled &&
+            kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
             match.home_score !== null && match.away_score !== null &&
             kp.predicted_home_score === match.home_score && kp.predicted_away_score === match.away_score) {
           roundPts *= 2;
@@ -1555,8 +1595,9 @@ app.post("/api/wc2022/knockout-predictions", (req, res) => {
 
 app.get("/api/wc2022/leaderboard", (req, res) => {
   const poolId = req.query.pool_id;
-  const pool = poolId ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(poolId) : null;
+  const pool = poolId ? db.prepare("SELECT mock_date, exact_scores_disabled FROM pools WHERE id = ?").get(poolId) : null;
   const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
+  const exactScoresDisabled22 = !!(pool && pool.exact_scores_disabled);
 
   const participants = poolId
     ? db.prepare("SELECT p.* FROM participants p WHERE p.pool_id = ?").all(poolId)
@@ -1601,7 +1642,8 @@ app.get("/api/wc2022/leaderboard", (req, res) => {
       if (!match?.winner_team_id) continue;
       if (String(kp.predicted_winner) === String(match.winner_team_id)) {
         let roundPts = koPointsMap[match.round] || 0;
-        if (kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
+        if (!exactScoresDisabled22 &&
+            kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
             match.home_score !== null && match.away_score !== null &&
             kp.predicted_home_score === match.home_score && kp.predicted_away_score === match.away_score) {
           roundPts *= 2;
@@ -1867,9 +1909,10 @@ app.get("/api/admin/player-award-results", requireAdminToken, (req, res) => {
 app.get("/api/wc2022/history/:participantId", (req, res) => {
   const { participantId } = req.params;
   const { pool_id } = req.query;
-  const pool = pool_id ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(pool_id) : null;
+  const pool = pool_id ? db.prepare("SELECT mock_date, exact_scores_disabled FROM pools WHERE id = ?").get(pool_id) : null;
   const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
   const effectiveMs = effectiveNow.getTime();
+  const exactScoresDisabledH22 = !!(pool && pool.exact_scores_disabled);
 
   const allGMatches = db.prepare("SELECT * FROM wc2022_matches WHERE status='finished'").all()
     .filter((m) => !m.match_date || new Date(m.match_date.replace(" ", "T") + "Z").getTime() <= effectiveMs);
@@ -1925,7 +1968,8 @@ app.get("/api/wc2022/history/:participantId", (req, res) => {
     let desc = `${roundLabel}: ${home} vs ${away}`;
     if (String(kp.predicted_winner) === String(m.winner_team_id)) {
       pts = basePts;
-      const scoreCorrect = kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
+      const scoreCorrect = !exactScoresDisabledH22 &&
+                           kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
                            m.home_score !== null && m.away_score !== null &&
                            kp.predicted_home_score === m.home_score && kp.predicted_away_score === m.away_score;
       if (scoreCorrect) pts *= 2;
@@ -1965,6 +2009,8 @@ app.get("/api/history/:participantId", (req, res) => {
   const { participantId } = req.params;
   const { pool_id } = req.query;
   const events = [];
+  const poolRowH = pool_id ? db.prepare("SELECT exact_scores_disabled FROM pools WHERE id = ?").get(pool_id) : null;
+  const exactScoresDisabledH = !!(poolRowH && poolRowH.exact_scores_disabled);
 
   const groups = db.prepare("SELECT * FROM groups").all();
   const teams = db.prepare("SELECT * FROM teams").all();
@@ -2051,7 +2097,8 @@ app.get("/api/history/:participantId", (req, res) => {
       const predictedTeamId = kp.predicted_winner === "home" ? m.home_team_id : kp.predicted_winner === "away" ? m.away_team_id : Number(kp.predicted_winner);
       if (String(predictedTeamId) === String(m.winner_team_id)) {
         pts = basePts;
-        const scoreCorrect = kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
+        const scoreCorrect = !exactScoresDisabledH &&
+                             kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
                              m.home_score !== null && m.away_score !== null &&
                              kp.predicted_home_score === m.home_score && kp.predicted_away_score === m.away_score;
         if (scoreCorrect) pts *= 2;

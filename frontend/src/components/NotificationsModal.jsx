@@ -224,7 +224,7 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
 
 // ── main component ─────────────────────────────────────────────────────────────
 
-function NotificationsModal({ onClose, participant, poolId, tournament, onReadPoints, onUnreadWindows }) {
+function NotificationsModal({ onClose, participant, poolId, tournament, onReadPoints, onUnreadWindows, exactScoresDisabled = false }) {
   const isGlobal = !participant;
   const isWC2022 = tournament === "wc2022";
 
@@ -265,13 +265,14 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
     // Windows
     const p = { id: poolId, tournament, participant_id: participant.id };
     fetchWindowsForPool(p)
-      .then(({ predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardPicks, awardsLocked }) => {
+      .then(({ predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardPicks, awardsLocked, exactScoresDisabled: poolExactScoresDisabled }) => {
         const raw = generateSections(new Date(), {
           predDeadline,
           koMatches,
           groups,
           koDeadline,
           poolPicksData: [{ pool: { id: poolId, name: "" }, groupPreds, koPreds, champStatus, awardPicks, awardsLocked }],
+          exactScoresDisabled: poolExactScoresDisabled,
         });
         const sections = applyDismissals(raw, poolId);
         const wCount = countUnread(sections);
@@ -282,7 +283,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
       })
       .catch(() => {})
       .finally(() => setWindowsLoaded(true));
-  }, [isGlobal, participant, poolId, isWC2022, tournament, onUnreadWindows]);
+  }, [isGlobal, participant, poolId, isWC2022, tournament, onUnreadWindows, exactScoresDisabled]);
 
   // ── Global mode: fetch all pools then aggregate ───────────────────────────────
 
@@ -348,10 +349,11 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
                   champStatus: shared.champStatus,
                   awardPicks: shared.awardPicks,
                   awardsLocked: shared.awardsLocked,
+                  exactScoresDisabled: shared.exactScoresDisabled,
                 };
               }
               const data = await fetchWindowsForPool(p).catch(() => ({
-                groupPreds: [], koPreds: [], champStatus: null, awardPicks: undefined, awardsLocked: false,
+                groupPreds: [], koPreds: [], champStatus: null, awardPicks: undefined, awardsLocked: false, exactScoresDisabled: false,
               }));
               return {
                 pool: p,
@@ -360,6 +362,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
                 champStatus: data.champStatus,
                 awardPicks: data.awardPicks,
                 awardsLocked: data.awardsLocked,
+                exactScoresDisabled: data.exactScoresDisabled,
               };
             })
           );
@@ -387,6 +390,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
               groups: shared.groups,
               koDeadline: shared.koDeadline,
               poolPicksData: [pp],
+              exactScoresDisabled: pp.exactScoresDisabled,
             });
             const dismissed = applyDismissals(ps, pp.pool.id);
             allPoolSections.push({

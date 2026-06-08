@@ -171,6 +171,11 @@ export async function adminFetchUsers() {
   return res.json();
 }
 
+export async function adminFetchUserPools(userId) {
+  const res = await fetch(`${API}/admin/users/${userId}/pools`, { headers: authHeaders() });
+  return res.json();
+}
+
 export async function adminDeleteUser(targetId) {
   const res = await fetch(`${API}/admin/users/${targetId}`, {
     method: "DELETE",
@@ -226,6 +231,15 @@ export async function joinPoolById(pool_id, password) {
 
 export async function fetchPoolPassword(poolId) {
   return (await fetch(`${API}/pools/${poolId}/password`, { headers: authHeaders() })).json();
+}
+
+export async function changePoolPassword(poolId, password) {
+  const res = await fetch(`${API}/pools/${poolId}/password`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ password }),
+  });
+  return res.json();
 }
 
 export async function fetchPublicPools(sport, tournament) {
@@ -460,6 +474,18 @@ export async function updatePlayerAwardsLock(poolId, locked) {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify({ locked }),
+  });
+  return res.json();
+}
+
+export async function fetchExactScoresSetting(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/exact-scores`)).json();
+}
+export async function updateExactScoresSetting(poolId, disabled) {
+  const res = await fetch(`${API}/pools/${poolId}/exact-scores`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ disabled }),
   });
   return res.json();
 }
