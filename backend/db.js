@@ -535,10 +535,13 @@ for (const m of KO_SCHEDULE) {
 // Seed admin user
 const adminUsername = process.env.ADMIN_USERNAME || "admin";
 const adminPassword = process.env.ADMIN_PASSWORD || "messi";
-const existingAdmin = db.prepare("SELECT id FROM users WHERE username = ?").get(adminUsername);
+const existingAdmin = db.prepare("SELECT id, password FROM users WHERE username = ?").get(adminUsername);
 if (!existingAdmin) {
   const hashedAdminPw = bcrypt.hashSync(adminPassword, 10);
   db.prepare("INSERT INTO users (username, password, display_name, is_admin) VALUES (?, ?, ?, 1)").run(adminUsername, hashedAdminPw, "Admin");
+} else if (!bcrypt.compareSync(adminPassword, existingAdmin.password)) {
+  const hashedAdminPw = bcrypt.hashSync(adminPassword, 10);
+  db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashedAdminPw, existingAdmin.id);
 }
 
 // Migrate existing plaintext passwords to bcrypt
