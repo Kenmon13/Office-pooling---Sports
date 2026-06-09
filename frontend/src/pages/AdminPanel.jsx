@@ -510,45 +510,35 @@ function AdminPanel({ user, onSelectPool, onBack }) {
               <option value="resolved">Resolved</option>
             </select>
           </div>
-          {issues.length === 0 && <p className="notice">No issues reported.</p>}
-          <div className="pool-list">
-            {issues.filter((i) => issueFilter === "all" || i.status === issueFilter).sort((a, b) => (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1)).map((issue) => (
-              <div key={issue.id} className={`pool-list-item issue-item ${issue.status}`}>
-                <button className="pool-list-btn issue-list-info" onClick={() => openAdminThread(issue)}>
-                  <div className="issue-header">
-                    <span className={`issue-status-badge ${issue.status}`}>{issue.status}</span>
-                    <span className="issue-author">{issue.display_name}</span>
-                    <span className="pool-list-meta">{new Date(issue.created_at + "Z").toLocaleString()}</span>
-                  </div>
-                  <p className="issue-body">{issue.body}</p>
-                  {issue.reply_count > 0 && <span className="issue-reply-count">{issue.reply_count} repl{issue.reply_count === 1 ? "y" : "ies"}</span>}
-                </button>
-                <div className="issue-actions">
-                  {issue.status === "open" ? (
-                    <button
-                      className="btn-submit backup-restore-inline"
-                      onClick={async (e) => { e.stopPropagation(); await adminUpdateIssue(issue.id, "resolved"); loadIssues(); }}
-                    >
-                      Resolve
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-submit backup-restore-inline"
-                      onClick={async (e) => { e.stopPropagation(); await adminUpdateIssue(issue.id, "open"); loadIssues(); }}
-                    >
-                      Reopen
-                    </button>
-                  )}
-                  <button
-                    className="pool-delete-btn"
-                    onClick={async (e) => { e.stopPropagation(); if (confirm("Delete this issue?")) { await adminDeleteIssue(issue.id); loadIssues(); } }}
-                  >
-                    &times;
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          {issues.length === 0 ? <p className="notice">No issues reported.</p> : (
+            <table className="leaderboard-table issue-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {issues.filter((i) => issueFilter === "all" || i.status === issueFilter).sort((a, b) => (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1)).map((issue) => (
+                  <tr key={issue.id} className="clickable" onClick={() => openAdminThread(issue)}>
+                    <td className="name">{issue.display_name}</td>
+                    <td className="pts-sub">{new Date(issue.created_at + "Z").toLocaleDateString()} {new Date(issue.created_at + "Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+                    <td><span className={`issue-status-badge ${issue.status}`}>{issue.status}</span></td>
+                    <td className="issue-table-actions">
+                      {issue.status === "open" ? (
+                        <button className="btn-small" onClick={async (e) => { e.stopPropagation(); await adminUpdateIssue(issue.id, "resolved"); loadIssues(); }}>Resolve</button>
+                      ) : (
+                        <button className="btn-small" onClick={async (e) => { e.stopPropagation(); await adminUpdateIssue(issue.id, "open"); loadIssues(); }}>Reopen</button>
+                      )}
+                      <button className="pool-delete-btn" onClick={async (e) => { e.stopPropagation(); if (confirm("Delete this issue?")) { await adminDeleteIssue(issue.id); loadIssues(); } }}>&times;</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
 

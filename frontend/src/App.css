@@ -3079,29 +3079,11 @@ nav a.active {
 }
 
 /* Admin Issues tab */
-.issue-item {
-  flex-direction: column;
-  align-items: stretch !important;
-}
-.issue-item .pool-list-btn {
+.issue-table tr.clickable {
   cursor: pointer;
 }
-.issue-list-info {
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  gap: 6px;
-  background: none;
-  border: none;
-  text-align: left;
-  width: 100%;
-  color: inherit;
-  font: inherit;
-}
-.issue-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.issue-table tr.clickable:hover td {
+  background: rgba(255, 255, 255, 0.05);
 }
 .issue-status-badge {
   font-size: 0.7rem;
@@ -3109,6 +3091,7 @@ nav a.active {
   padding: 2px 8px;
   border-radius: 4px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .issue-status-badge.open {
   background: #ff5722;
@@ -3118,22 +3101,11 @@ nav a.active {
   background: #4caf50;
   color: #fff;
 }
-.issue-author {
-  font-weight: 600;
-  color: #ccc;
-}
-.issue-body {
-  color: #aaa;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.issue-actions {
+.issue-table-actions {
   display: flex;
   gap: 6px;
+  align-items: center;
   justify-content: flex-end;
-  margin-top: 8px;
 }
 .issue-reply-count {
   font-size: 0.75rem;
