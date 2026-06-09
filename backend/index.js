@@ -450,7 +450,8 @@ app.get("/api/pools/:id/password", authenticateToken, (req, res) => {
   const pool = db.prepare("SELECT id, password, is_public FROM pools WHERE id = ?").get(req.params.id);
   if (!pool) return res.status(404).json({ error: "Pool not found" });
   const member = db.prepare("SELECT id FROM participants WHERE pool_id = ? AND user_id = ?").get(req.params.id, req.user.id);
-  if (!member) return res.status(403).json({ error: "Not a member of this pool" });
+  const siteAdmin = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(req.user.id);
+  if (!member && !siteAdmin?.is_admin) return res.status(403).json({ error: "Not a member of this pool" });
   if (pool.is_public) return res.json({ is_public: true, password: null });
   res.json({ is_public: false, password: pool.password });
 });
