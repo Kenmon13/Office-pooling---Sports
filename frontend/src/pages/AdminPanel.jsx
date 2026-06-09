@@ -512,7 +512,7 @@ function AdminPanel({ user, onSelectPool, onBack }) {
           </div>
           {issues.length === 0 && <p className="notice">No issues reported.</p>}
           <div className="pool-list">
-            {issues.filter((i) => issueFilter === "all" || i.status === issueFilter).map((issue) => (
+            {issues.filter((i) => issueFilter === "all" || i.status === issueFilter).sort((a, b) => (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1)).map((issue) => (
               <div key={issue.id} className={`pool-list-item issue-item ${issue.status}`}>
                 <button className="pool-list-btn issue-list-info" onClick={() => openAdminThread(issue)}>
                   <div className="issue-header">
