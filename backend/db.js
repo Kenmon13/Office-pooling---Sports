@@ -720,6 +720,9 @@ try {
   // Reseed if empty or count doesn't match the official squad list
   if (currentCount !== totalSquadPlayers) {
     const reseed = db.transaction(() => {
+      // Clear dependent tables first to satisfy FK constraints
+      db.prepare("DELETE FROM player_award_results").run();
+      db.prepare("DELETE FROM player_award_picks").run();
       db.prepare("DELETE FROM wc_players").run();
       const insert = db.prepare("INSERT OR IGNORE INTO wc_players (name, team_id, position, dob) VALUES (?, ?, ?, ?)");
       for (const [code, players] of Object.entries(WC2026_SQUADS)) {
