@@ -4546,7 +4546,7 @@ nav a.active {
 }
 .password-eye-btn {
   position: absolute;
-  right: 8px;
+  right: 6px;
   background: none;
   border: none;
   cursor: pointer;
@@ -4560,6 +4560,7 @@ nav a.active {
   color: #fff;
 }
 .password-eye-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 11px;
+  height: 11px;
+  transform: scale(1.4);
 }
