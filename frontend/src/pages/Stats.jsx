@@ -1,28 +1,41 @@
 import { useState, useEffect } from "react";
-import { fetchGroupPickStats, fetchChampionPickStats } from "../api";
+import { fetchGroupPickStats, fetchChampionPickStats, fetchAwardPickStats } from "../api";
 import { flag } from "../flags";
 
 const SHORT_NAMES = {
   "Bosnia and Herzegovina": "Bosnia",
 };
 
+const AWARDS = [
+  { key: "golden_ball",  label: "Golden Ball",           emoji: "🥇" },
+  { key: "golden_boot",  label: "Golden Boot",           emoji: "👟" },
+  { key: "golden_glove", label: "Golden Glove",          emoji: "🧤" },
+  { key: "young_player", label: "FIFA Young Player",     emoji: "🌟" },
+  { key: "fair_play",    label: "FIFA Fair Play Trophy",  emoji: "🤝" },
+];
+
 function Stats({ poolId }) {
   const [groupStats, setGroupStats] = useState([]);
   const [championStats, setChampionStats] = useState([]);
+  const [awardStats, setAwardStats] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetchGroupPickStats(poolId),
       fetchChampionPickStats(poolId),
-    ]).then(([groups, champions]) => {
+      fetchAwardPickStats(poolId),
+    ]).then(([groups, champions, awards]) => {
       if (!groups.error) setGroupStats(groups);
       if (!champions.error) setChampionStats(champions);
+      if (!awards.error) setAwardStats(awards);
       setLoading(false);
     });
   }, [poolId]);
 
   if (loading) return <p className="notice">Loading stats...</p>;
+
+  const hasAnyAwardPicks = AWARDS.some((a) => (awardStats[a.key] || []).length > 0);
 
   return (
     <div className="page">
@@ -84,6 +97,47 @@ function Stats({ poolId }) {
                 ))}
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="stats-section">
+        <h3>Award Picks</h3>
+        <p className="stats-subtitle">Top 5 picks per award across the pool</p>
+        {!hasAnyAwardPicks ? (
+          <p className="notice">No award picks yet.</p>
+        ) : (
+          <div className="stats-groups-grid">
+            {AWARDS.map((award) => {
+              const picks = awardStats[award.key] || [];
+              if (picks.length === 0) return null;
+              return (
+                <div key={award.key} className="stats-group-card">
+                  <h4>{award.emoji} {award.label}</h4>
+                  {picks.map((p, i) => (
+                    <div key={i} className="stats-row stats-row-compact">
+                      <span className="stats-rank-sm">#{i + 1}</span>
+                      <span className="stats-team stats-team-award">
+                        {flag(p.team_code)}
+                        <span className="stats-award-name">
+                          {p.player_name || SHORT_NAMES[p.team_name] || p.team_name}
+                          {p.player_name && (
+                            <span className="stats-award-team">{SHORT_NAMES[p.team_name] || p.team_name}</span>
+                          )}
+                        </span>
+                      </span>
+                      <div className="stats-bar-wrapper">
+                        <div
+                          className="stats-bar stats-bar-group"
+                          style={{ width: `${p.percentage}%` }}
+                        />
+                      </div>
+                      <span className="stats-pct">{p.percentage}%</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

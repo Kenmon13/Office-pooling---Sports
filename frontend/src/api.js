@@ -678,3 +678,8 @@ export async function fetchChampionPickStats(poolId) {
   const res = await fetch(`${API}/stats/champion-picks?pool_id=${poolId}`, { headers: authHeaders() });
   return res.json();
 }
+
+export async function fetchAwardPickStats(poolId) {
+  const res = await fetch(`${API}/stats/award-picks?pool_id=${poolId}`, { headers: authHeaders() });
+  return res.json();
+}
