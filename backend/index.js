@@ -2472,6 +2472,51 @@ app.get("/api/stats/champion-picks", (req, res) => {
   })));
 });
 
+app.get("/api/stats/award-picks", (req, res) => {
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.json({ error: "pool_id required" });
+
+  const rows = db.prepare(`
+    SELECT
+      pap.award_category,
+      pap.player_id,
+      pap.team_id AS pick_team_id,
+      wp.name     AS player_name,
+      t.name      AS team_name,
+      t.code      AS team_code,
+      COUNT(*)    AS pick_count
+    FROM player_award_picks pap
+    JOIN participants p ON p.id = pap.participant_id AND p.pool_id = ?
+    LEFT JOIN wc_players wp ON wp.id = pap.player_id
+    LEFT JOIN teams t ON t.id = COALESCE(wp.team_id, pap.team_id)
+    GROUP BY pap.award_category, COALESCE(pap.player_id, pap.team_id)
+    ORDER BY pap.award_category, pick_count DESC
+  `).all(poolId);
+
+  const totalByAward = {};
+  for (const r of rows) {
+    totalByAward[r.award_category] = (totalByAward[r.award_category] || 0) + r.pick_count;
+  }
+
+  const awards = {};
+  for (const r of rows) {
+    if (!awards[r.award_category]) awards[r.award_category] = [];
+    if (awards[r.award_category].length < 5) {
+      const total = totalByAward[r.award_category];
+      awards[r.award_category].push({
+        player_id: r.player_id,
+        player_name: r.player_name,
+        team_name: r.team_name,
+        team_code: r.team_code,
+        pick_count: r.pick_count,
+        percentage: total > 0 ? Math.round((r.pick_count / total) * 100) : 0,
+      });
+    }
+  }
+
+  res.json(awards);
+});
+
 // Client-side routing fallback
 app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));

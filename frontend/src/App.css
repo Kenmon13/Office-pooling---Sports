@@ -4333,6 +4333,21 @@ nav a.active {
 .stats-row-compact .stats-team {
   width: 140px;
 }
+.stats-team-award {
+  overflow: visible;
+  white-space: normal;
+  line-height: 1.2;
+}
+.stats-award-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.stats-award-team {
+  font-size: 11px;
+  color: #aaa;
+  font-weight: 400;
+}
 
 .btn-show-more {
   display: block;
