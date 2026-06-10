@@ -1,5 +1,11 @@
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect, useCallback, useRef } from "react";
+
+function NavigationExecutor({ to, onDone }) {
+  const navigate = useNavigate();
+  useEffect(() => { navigate(to); onDone(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 import Matches from "./pages/Matches";
 import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
@@ -39,6 +45,7 @@ function App() {
   const [testTzOffset, setTestTzOffset] = useState(8);
 
   const [showAdmin, setShowAdmin] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showPatchNotes, setShowPatchNotes] = useState(false);
   const [unreadPoints, setUnreadPoints] = useState(0);
@@ -245,6 +252,11 @@ function App() {
       "pool_session",
       JSON.stringify({ sport, tournament, pool: poolData })
     );
+  };
+
+  const handleAdminViewPicks = (poolData, participantId) => {
+    handleJoinPool(poolData);
+    setPendingNavigation(`/picks/${participantId}`);
   };
 
   const handleBackToSport = () => {
@@ -549,6 +561,7 @@ function App() {
           user={user}
           onSelectPool={handleJoinPool}
           onBack={() => setShowAdmin(false)}
+          onViewPicks={handleAdminViewPicks}
         />
       </div>
     );
@@ -709,6 +722,7 @@ function App() {
   // Step 4: The main pool view
   return (
     <BrowserRouter>
+      {pendingNavigation && <NavigationExecutor to={pendingNavigation} onDone={() => setPendingNavigation(null)} />}
       <div className="app">
         <header>
           <div className="header-top">

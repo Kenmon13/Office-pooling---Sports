@@ -13,7 +13,7 @@ const TOURNAMENT_LABELS = {
   epl2627: "English Premier League 26/27",
 };
 
-function AdminPanel({ user, onSelectPool, onBack }) {
+function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [tab, setTab] = useState("pools");
   const [pools, setPools] = useState([]);
   const [users, setUsers] = useState([]);
@@ -34,10 +34,20 @@ function AdminPanel({ user, onSelectPool, onBack }) {
   const [issueFilter, setIssueFilter] = useState("all");
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [userPools, setUserPools] = useState({});
+  const [issueProfileUserId, setIssueProfileUserId] = useState(null);
+  const [issueProfilePools, setIssueProfilePools] = useState(null);
   const fileInputRef = useRef(null);
 
   const loadBackups = () => adminListBackups().then((d) => { if (!d.error) setBackups(d); });
   const loadIssues = () => adminFetchIssues().then((d) => { if (!d.error) setIssues(d); });
+
+  const handleOpenIssueProfile = async (userId) => {
+    if (issueProfileUserId === userId) { setIssueProfileUserId(null); setIssueProfilePools(null); return; }
+    setIssueProfileUserId(userId);
+    setIssueProfilePools(null);
+    const data = await adminFetchUserPools(userId);
+    setIssueProfilePools(Array.isArray(data) ? data : []);
+  };
 
   const openAdminThread = async (issue) => {
     setSelectedIssue(issue);
@@ -523,7 +533,33 @@ function AdminPanel({ user, onSelectPool, onBack }) {
               <tbody>
                 {issues.filter((i) => issueFilter === "all" || i.status === issueFilter).sort((a, b) => (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1)).map((issue) => (
                   <tr key={issue.id} className="clickable" onClick={() => openAdminThread(issue)}>
-                    <td className="name">{issue.display_name}</td>
+                    <td className="name" style={{ position: "relative" }}>
+                      <span
+                        className="issue-user-link"
+                        onClick={(e) => { e.stopPropagation(); handleOpenIssueProfile(issue.user_id); }}
+                      >
+                        {issue.display_name}
+                      </span>
+                      {issueProfileUserId === issue.user_id && (
+                        <div className="issue-profile-dropdown">
+                          {issueProfilePools === null ? (
+                            <span className="issue-profile-loading">Loading…</span>
+                          ) : issueProfilePools.length === 0 ? (
+                            <span className="issue-profile-loading">No pools</span>
+                          ) : (
+                            issueProfilePools.map((p) => (
+                              <button
+                                key={p.id}
+                                className="issue-profile-pool-btn"
+                                onClick={(e) => { e.stopPropagation(); onViewPicks({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, is_public: p.is_public }, p.participant_id); }}
+                              >
+                                {p.name} <span className="issue-profile-arrow">→</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td className="pts-sub">{new Date(issue.created_at + "Z").toLocaleDateString()} {new Date(issue.created_at + "Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
                     <td><span className={`issue-status-badge ${issue.status}`}>{issue.status}</span></td>
                     <td className="issue-table-actions">
@@ -546,7 +582,29 @@ function AdminPanel({ user, onSelectPool, onBack }) {
         <div className="admin-issue-chat">
           <div className="issue-chat-header">
             <button className="btn-back" onClick={() => { setSelectedIssue(null); loadIssues(); }}>&larr;</button>
-            <h3>Issue #{selectedIssue.id} &mdash; {selectedIssue.display_name}</h3>
+            <h3>
+              Issue #{selectedIssue.id} &mdash;{" "}
+              <span className="issue-user-link" onClick={() => handleOpenIssueProfile(selectedIssue.user_id)}>{selectedIssue.display_name}</span>
+            </h3>
+            {issueProfileUserId === selectedIssue.user_id && (
+              <div className="issue-profile-dropdown issue-profile-dropdown-header">
+                {issueProfilePools === null ? (
+                  <span className="issue-profile-loading">Loading…</span>
+                ) : issueProfilePools.length === 0 ? (
+                  <span className="issue-profile-loading">Not in any pools</span>
+                ) : (
+                  issueProfilePools.map((p) => (
+                    <button
+                      key={p.id}
+                      className="issue-profile-pool-btn"
+                      onClick={() => onViewPicks({ id: p.id, name: p.name, sport: p.sport, tournament: p.tournament, is_public: p.is_public }, p.participant_id)}
+                    >
+                      {p.name} <span className="issue-profile-arrow">→</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
             <span className={`issue-status-badge ${selectedIssue.status}`}>{selectedIssue.status}</span>
             <div className="issue-actions" style={{ marginLeft: "auto" }}>
               {selectedIssue.status === "open" ? (
