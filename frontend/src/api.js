@@ -489,6 +489,17 @@ export async function updateExactScoresSetting(poolId, disabled) {
   });
   return res.json();
 }
+export async function fetchGroupStageUnlock(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/group-stage-unlock`)).json();
+}
+export async function updateGroupStageUnlock(poolId, unlocked) {
+  const res = await fetch(`${API}/pools/${poolId}/group-stage-unlock`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ unlocked }),
+  });
+  return res.json();
+}
 
 // ── History ───────────────────────────────────────────────────────────────────
 

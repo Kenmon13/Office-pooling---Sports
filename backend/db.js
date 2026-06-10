@@ -703,6 +703,9 @@ try { db.exec("ALTER TABLE pools ADD COLUMN player_awards_locked INTEGER NOT NUL
 // Pool admin toggle to disable exact score predictions
 try { db.exec("ALTER TABLE pools ADD COLUMN exact_scores_disabled INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 
+// Pool admin toggle to unlock group stage predictions after matches have started
+try { db.exec("ALTER TABLE pools ADD COLUMN group_stage_unlocked INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
 // Add dob column to wc_players
 try { db.exec("ALTER TABLE wc_players ADD COLUMN dob TEXT"); } catch (_) {}
 
