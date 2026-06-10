@@ -126,7 +126,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
             <li>Round of 16 opens once all group stage matches are complete.</li>
             <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
             <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
-            {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>}
+            {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>. <em>Pool admins can disable this in Pool Settings.</em></li>}
+            {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
             <li>Points for each correct winner prediction:
               <div className="ko-points-grid">
                 <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score predicted)"}</span>
@@ -179,7 +180,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
           <li>Round of 32 opens once all group stage matches are complete.</li>
           <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
           <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
-          {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>.</li>}
+          {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>. <em>Pool admins can disable this in Pool Settings.</em></li>}
+          {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
           <li>Points for each correct winner prediction:
             <div className="ko-points-grid">
               <span>Round of 32</span><span>{exactScoresDisabled ? "3 pts" : "3 pts (6 if correct score predicted)"}</span>
