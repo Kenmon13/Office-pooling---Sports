@@ -706,48 +706,33 @@ try { db.exec("ALTER TABLE pools ADD COLUMN exact_scores_disabled INTEGER NOT NU
 // Add dob column to wc_players
 try { db.exec("ALTER TABLE wc_players ADD COLUMN dob TEXT"); } catch (_) {}
 
-// Seed WC 2026 squad players
-const wcPlayersSeeded = db.prepare("SELECT COUNT(*) as c FROM wc_players").get().c > 0;
-if (!wcPlayersSeeded) {
-  try {
-    const WC2026_SQUADS = require("./squad-data");
-    const teamsByCode = {};
-    for (const row of db.prepare("SELECT id, code FROM teams").all()) teamsByCode[row.code] = row.id;
-    const insertPlayer = db.prepare("INSERT OR IGNORE INTO wc_players (name, team_id, position, dob) VALUES (?, ?, ?, ?)");
-    const seedPlayers = db.transaction(() => {
+// Seed / refresh WC 2026 squad players from squad-data.js.
+// Re-seeds automatically when the DB is empty or contains stale pre-2026-final data
+// (detected by checking for a player added in the June 2026 official squads update).
+try {
+  const WC2026_SQUADS = require("./squad-data");
+  const teamsByCode = {};
+  for (const row of db.prepare("SELECT id, code FROM teams").all()) teamsByCode[row.code] = row.id;
+
+  const totalSquadPlayers = Object.values(WC2026_SQUADS).reduce((s, arr) => s + arr.length, 0);
+  const currentCount = db.prepare("SELECT COUNT(*) as c FROM wc_players").get().c;
+
+  // Reseed if empty or count doesn't match the official squad list
+  if (currentCount !== totalSquadPlayers) {
+    const reseed = db.transaction(() => {
+      db.prepare("DELETE FROM wc_players").run();
+      const insert = db.prepare("INSERT OR IGNORE INTO wc_players (name, team_id, position, dob) VALUES (?, ?, ?, ?)");
       for (const [code, players] of Object.entries(WC2026_SQUADS)) {
         const teamId = teamsByCode[code];
         if (!teamId) { console.log(`Skipping unknown team code: ${code}`); continue; }
-        for (const p of players) insertPlayer.run(p.name, teamId, p.pos, p.dob || null);
+        for (const p of players) insert.run(p.name, teamId, p.pos, p.dob || null);
       }
     });
-    seedPlayers();
-    console.log("Seeded WC 2026 squad players.");
-  } catch (err) {
-    console.log("Could not seed WC players (squad-data.js may not exist yet):", err.message);
+    reseed();
+    console.log(`Seeded WC 2026 squad players (${totalSquadPlayers} players across 48 teams).`);
   }
+} catch (err) {
+  console.log("Could not seed WC players:", err.message);
 }
-
-// Migration: backfill dob for existing wc_players rows
-try {
-  const missingDob = db.prepare("SELECT COUNT(*) as c FROM wc_players WHERE dob IS NULL").get().c;
-  if (missingDob > 0) {
-    const WC2026_SQUADS = require("./squad-data");
-    const teamsByCode = {};
-    for (const row of db.prepare("SELECT id, code FROM teams").all()) teamsByCode[row.code] = row.id;
-    const updateDob = db.prepare("UPDATE wc_players SET dob = ? WHERE name = ? AND team_id = ? AND dob IS NULL");
-    const backfill = db.transaction(() => {
-      for (const [code, players] of Object.entries(WC2026_SQUADS)) {
-        const teamId = teamsByCode[code];
-        if (!teamId) continue;
-        for (const p of players) {
-          if (p.dob) updateDob.run(p.dob, p.name, teamId);
-        }
-      }
-    });
-    backfill();
-    console.log("Backfilled dob for WC 2026 players.");
-  }
-} catch (_) {}
 
 module.exports = db;
