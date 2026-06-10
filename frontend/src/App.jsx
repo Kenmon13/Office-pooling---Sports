@@ -23,7 +23,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
@@ -141,6 +141,7 @@ function App() {
   }, [participant, pool]);
 
   const [exactScoresDisabled, setExactScoresDisabled] = useState(false);
+  const [groupStageUnlocked, setGroupStageUnlocked] = useState(false);
   const [hasFinishedKoMatches, setHasFinishedKoMatches] = useState(false);
 
   // Ref tracking current pool so periodic refresh can check without stale closure
@@ -313,6 +314,11 @@ function App() {
       fetchExactScoresSetting(pool.id).then((data) => {
         if (data && typeof data.exact_scores_disabled !== "undefined") {
           setExactScoresDisabled(!!data.exact_scores_disabled);
+        }
+      }).catch(() => {});
+      fetchGroupStageUnlock(pool.id).then((data) => {
+        if (data && typeof data.group_stage_unlocked !== "undefined") {
+          setGroupStageUnlocked(!!data.group_stage_unlocked);
         }
       }).catch(() => {});
       const koFetch = pool.tournament === "wc2022" ? () => fetchWC2022KnockoutMatches(pool.id) : fetchKnockoutMatches;
@@ -819,7 +825,7 @@ function App() {
             <TestControls pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} tzOffset={testTzOffset} onTzOffsetChange={setTestTzOffset} />
           )}
           <Routes>
-            <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} />} />
+            <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} groupStageUnlocked={groupStageUnlocked} />} />
             <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} exactScoresDisabled={exactScoresDisabled} />} />
             <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} />} />
@@ -993,6 +999,29 @@ function App() {
                     {hasFinishedKoMatches && (
                       <span style={{ fontSize: "0.72rem", color: "#f0a500", marginTop: 4, display: "block", textAlign: "right" }}>
                         ⚠ Affects points for already-finished matches
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {isPoolAdmin && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Group Stage Predictions</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${groupStageUnlocked ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !groupStageUnlocked;
+                        const res = await updateGroupStageUnlock(pool.id, newVal);
+                        if (!res.error) setGroupStageUnlocked(newVal);
+                      }}
+                    >
+                      {groupStageUnlocked ? "Unlocked — Lock" : "Locked — Unlock"}
+                    </button>
+                    {groupStageUnlocked && (
+                      <span style={{ fontSize: "0.72rem", color: "#f0a500", marginTop: 4, display: "block", textAlign: "right" }}>
+                        ⚠ Groups auto-lock once all their matches finish
                       </span>
                     )}
                   </span>

@@ -657,6 +657,20 @@ app.get("/api/pools/:poolId/exact-scores", (req, res) => {
   res.json({ exact_scores_disabled: pool.exact_scores_disabled });
 });
 
+app.put("/api/pools/:poolId/group-stage-unlock", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { unlocked } = req.body;
+  db.prepare("UPDATE pools SET group_stage_unlocked = ? WHERE id = ?").run(unlocked ? 1 : 0, poolId);
+  res.json({ success: true, group_stage_unlocked: unlocked ? 1 : 0 });
+});
+
+app.get("/api/pools/:poolId/group-stage-unlock", (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT group_stage_unlocked FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json({ group_stage_unlocked: pool.group_stage_unlocked });
+});
+
 // --- Participants ---
 
 app.get("/api/participants", (req, res) => {
@@ -798,7 +812,11 @@ app.post("/api/group-predictions", (req, res) => {
     return res.status(400).json({ error: "participant_id and predictions array required" });
   }
 
-  // Check per-group deadlines — filter out groups whose first match has started
+  const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+  const pool = participant ? db.prepare("SELECT group_stage_unlocked FROM pools WHERE id = ?").get(participant.pool_id) : null;
+  const groupStageUnlocked = !!(pool && pool.group_stage_unlocked);
+
+  // Check per-group deadlines — filter out locked groups
   const now = new Date();
   const groupFirstMatches = db.prepare("SELECT group_id, MIN(match_date) as first_match FROM matches GROUP BY group_id").all();
   const groupDeadlineMap = {};
@@ -806,8 +824,18 @@ app.post("/api/group-predictions", (req, res) => {
 
   const lockedGroupNames = [];
   const saveable = predictions.filter((pred) => {
+    if (groupStageUnlocked) {
+      // When unlocked: only lock the group if ALL its matches are finished
+      const allFinished = db.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END) as done FROM matches WHERE group_id = ?").get(pred.group_id);
+      if (allFinished && allFinished.total > 0 && allFinished.total === allFinished.done) {
+        const group = db.prepare("SELECT name FROM groups WHERE id = ?").get(pred.group_id);
+        lockedGroupNames.push(group ? `Group ${group.name}` : `Group ${pred.group_id}`);
+        return false;
+      }
+      return true;
+    }
     const dl = groupDeadlineMap[pred.group_id];
-    if (dl && now >= new Date(dl.replace(" ", "T"))) {
+    if (dl && now >= new Date(dl.replace(" ", "T") + "Z")) {
       const group = db.prepare("SELECT name FROM groups WHERE id = ?").get(pred.group_id);
       lockedGroupNames.push(group ? `Group ${group.name}` : `Group ${pred.group_id}`);
       return false;
@@ -891,7 +919,7 @@ app.post("/api/third-place-predictions", (req, res) => {
   // Check deadline - lock predictions before first match
   const firstMatch = db.prepare("SELECT match_date FROM matches ORDER BY match_date ASC LIMIT 1").get();
   if (firstMatch) {
-    const deadline = new Date(firstMatch.match_date.replace(" ", "T"));
+    const deadline = new Date(firstMatch.match_date.replace(" ", "T") + "Z");
     if (new Date() >= deadline) {
       return res.status(403).json({ error: "Predictions are locked - the tournament has started" });
     }
@@ -1573,10 +1601,24 @@ app.post("/api/wc2022/group-predictions", (req, res) => {
 
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
   if (!participant) return res.status(404).json({ error: "Participant not found" });
-  const pool = db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(participant.pool_id);
+  const pool = db.prepare("SELECT mock_date, group_stage_unlocked FROM pools WHERE id = ?").get(participant.pool_id);
   const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
-  const firstMatch = new Date("2022-11-20T16:00:00Z");
-  if (effectiveNow >= firstMatch) return res.status(403).json({ error: "Group predictions are locked" });
+  const groupStageUnlocked = !!(pool && pool.group_stage_unlocked);
+
+  if (groupStageUnlocked) {
+    const groupMatches = db.prepare("SELECT match_date FROM wc2022_matches WHERE group_id = ?").all(group_id);
+    const allFinished = groupMatches.length > 0 && groupMatches.every(
+      (m) => effectiveNow >= new Date(m.match_date.replace(" ", "T") + "Z")
+    );
+    if (allFinished) {
+      return res.status(403).json({ error: "Group predictions are locked — all matches in this group are finished" });
+    }
+  } else {
+    const groupFirstMatch = db.prepare("SELECT MIN(match_date) as first_match FROM wc2022_matches WHERE group_id = ?").get(group_id);
+    if (groupFirstMatch?.first_match && effectiveNow >= new Date(groupFirstMatch.first_match.replace(" ", "T") + "Z")) {
+      return res.status(403).json({ error: "Group predictions are locked — matches have started" });
+    }
+  }
 
   const teams = db.prepare("SELECT id FROM wc2022_teams WHERE group_id = ? AND id IN (?, ?)").all(group_id, team1_id, team2_id);
   if (teams.length !== 2) return res.status(400).json({ error: "Teams must belong to this group" });
@@ -1684,12 +1726,12 @@ app.get("/api/wc2022/leaderboard", (req, res) => {
 });
 
 app.get("/api/wc2022/prediction-deadline", (req, res) => {
-  const poolId = req.query.pool_id;
-  const pool = poolId ? db.prepare("SELECT mock_date FROM pools WHERE id = ?").get(poolId) : null;
-  const effectiveNow = pool?.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
-  const deadline = "2022-11-20 16:00";
-  const locked = effectiveNow >= new Date(deadline.replace(" ", "T") + "Z");
-  res.json({ deadline, locked });
+  const firstMatch = db.prepare("SELECT match_date FROM wc2022_matches ORDER BY match_date ASC LIMIT 1").get();
+  if (!firstMatch) return res.json({ deadline: null, groupDeadlines: {} });
+  const groupFirstMatches = db.prepare("SELECT group_id, MIN(match_date) as first_match FROM wc2022_matches GROUP BY group_id").all();
+  const groupDeadlines = {};
+  for (const gm of groupFirstMatches) groupDeadlines[gm.group_id] = gm.first_match;
+  res.json({ deadline: firstMatch.match_date, groupDeadlines });
 });
 
 app.get("/api/admin/test/pools", requireAdminToken, (req, res) => {
