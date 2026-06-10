@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPool, joinPool, fetchPublicPools, fetchUserPools, fetchGlobalStats } from "../api";
 import { flag } from "../flags";
+import PasswordInput from "../components/PasswordInput";
 
 const SHORT_NAMES = {
   "Bosnia and Herzegovina": "Bosnia",
@@ -253,8 +254,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
             autoFocus
           />
           {!isPublic && (
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
@@ -287,8 +287,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
           placeholder="Pool name"
           autoFocus
         />
-        <input
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"

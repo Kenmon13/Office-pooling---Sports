@@ -258,11 +258,11 @@ export async function fetchAnnouncement(tournament) {
   return res.json();
 }
 
-export async function updateAnnouncement(announcement, tournament) {
+export async function updateAnnouncement(announcements, tournament) {
   const res = await fetch(`${API}/announcement`, {
     method: "PUT",
     headers: authHeaders(),
-    body: JSON.stringify({ announcement, tournament }),
+    body: JSON.stringify({ announcements, tournament }),
   });
   return res.json();
 }

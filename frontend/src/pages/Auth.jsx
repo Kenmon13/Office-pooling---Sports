@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { signUp, signIn, forgotPassword, resetPassword, googleSignIn } from "../api";
 import { GoogleLogin } from "@react-oauth/google";
+import PasswordInput from "../components/PasswordInput";
 
 function Auth({ onAuth, initialView }) {
   const [mode, setMode] = useState(initialView || "signin"); // "signin", "signup", "forgot", "reset"
@@ -112,15 +113,13 @@ function Auth({ onAuth, initialView }) {
         <h2>Reset Password</h2>
         <p className="select-subtitle">Enter your new password.</p>
         <form onSubmit={handleResetPassword} className="pool-form-vertical">
-          <input
-            type="password"
+          <PasswordInput
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="New password"
             autoFocus
           />
-          <input
-            type="password"
+          <PasswordInput
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Confirm new password"
@@ -187,8 +186,7 @@ function Auth({ onAuth, initialView }) {
           placeholder="Username"
           autoFocus={mode === "signin"}
         />
-        <input
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"

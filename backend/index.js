@@ -734,15 +734,26 @@ app.get("/api/announcement", (req, res) => {
   const tournament = req.query.tournament;
   const key = tournament ? `announcement_${tournament}` : "announcement";
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
-  res.json({ announcement: row ? row.value : "" });
+  let announcements = [];
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.value);
+      announcements = Array.isArray(parsed) ? parsed : [{ text: row.value, createdAt: 0 }];
+    } catch {
+      // Legacy plain-text — treat each line as a separate item with no timestamp
+      announcements = row.value.split("\n").filter(Boolean).map((text) => ({ text, createdAt: 0 }));
+    }
+  }
+  const updatedAt = announcements.length > 0 ? Math.max(...announcements.map((a) => a.createdAt)) : null;
+  res.json({ announcements, updatedAt });
 });
 
 app.put("/api/announcement", requireAdminToken, (req, res) => {
-  const { announcement, tournament } = req.body;
+  const { announcements, tournament } = req.body;
   const key = tournament ? `announcement_${tournament}` : "announcement";
-  const text = (announcement || "").trim();
-  if (text) {
-    db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, text);
+  const items = Array.isArray(announcements) ? announcements.filter((a) => a.text?.trim()) : [];
+  if (items.length > 0) {
+    db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, JSON.stringify(items));
   } else {
     db.prepare("DELETE FROM settings WHERE key = ?").run(key);
   }

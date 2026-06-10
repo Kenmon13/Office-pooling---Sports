@@ -607,7 +607,7 @@ nav a.active {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
 }
 .announcement-text {
@@ -646,7 +646,6 @@ nav a.active {
   background: #4a0000;
   color: #fff;
   font-size: 14px;
-  resize: vertical;
   font-family: inherit;
 }
 .announcement-input::placeholder {
@@ -656,6 +655,81 @@ nav a.active {
 .announcement-sep {
   display: inline-block;
   width: 60px;
+}
+.ticker-new-label {
+  display: inline-block;
+  background: #ff1744;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+.announcement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+.announcement-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.announcement-list-text {
+  flex: 1;
+  font-size: 13px;
+  color: #fff;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.announcement-delete-btn {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  font-size: 12px;
+}
+.announcement-add-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+.announcement-new-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: #ff1744;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  animation: badge-fade 60s ease forwards;
+  pointer-events: none;
+  z-index: 10;
+}
+@keyframes badge-fade {
+  0%   { opacity: 0; transform: scale(0.5); }
+  3%   { opacity: 1; transform: scale(1.1); }
+  5%   { transform: scale(1); }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.5); }
 }
 
 /* Group section (legacy) */
@@ -4387,4 +4461,35 @@ nav a.active {
     flex-wrap: wrap;
   }
 
+}
+
+/* Password input with eye toggle */
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.password-input-wrapper .password-input-field {
+  width: 100%;
+  padding-right: 38px;
+}
+.password-eye-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  color: #aaa;
+  line-height: 1;
+}
+.password-eye-btn:hover {
+  color: #fff;
+}
+.password-eye-btn svg {
+  width: 18px;
+  height: 18px;
 }

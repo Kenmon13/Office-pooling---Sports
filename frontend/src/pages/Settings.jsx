@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchProfile, updateProfile, changePassword, fetchMyPools } from "../api";
+import PasswordInput from "../components/PasswordInput";
 
 const SPORT_LABELS = {
   soccer: "\u26BD",
@@ -237,8 +238,7 @@ function Settings({ user, onBack, onUpdateUser, onSelectPool }) {
             <h3>Change Password</h3>
             <div className="settings-field">
               <label>Current Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password"
@@ -247,8 +247,7 @@ function Settings({ user, onBack, onUpdateUser, onSelectPool }) {
             </div>
             <div className="settings-field">
               <label>New Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Enter new password"
@@ -257,8 +256,7 @@ function Settings({ user, onBack, onUpdateUser, onSelectPool }) {
             </div>
             <div className="settings-field">
               <label>Confirm New Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
