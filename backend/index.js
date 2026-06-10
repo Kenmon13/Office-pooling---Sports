@@ -362,6 +362,7 @@ app.get("/api/admin/users", requireAdminToken, (req, res) => {
 app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
   const pools = db.prepare(`
     SELECT p.id, p.name, p.sport, p.tournament, p.is_public,
+           part.id as participant_id,
            EXISTS(SELECT 1 FROM pool_admins pa WHERE pa.pool_id = p.id AND pa.user_id = ?) as is_admin
     FROM participants part
     JOIN pools p ON p.id = part.pool_id

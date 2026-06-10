@@ -658,8 +658,8 @@ nav a.active {
 }
 .ticker-new-label {
   display: inline-block;
-  background: #ff1744;
-  color: #fff;
+  background: #ffd600;
+  color: #1a1a1a;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -707,8 +707,8 @@ nav a.active {
   position: absolute;
   top: -10px;
   right: -10px;
-  background: #ff1744;
-  color: #fff;
+  background: #ffd600;
+  color: #1a1a1a;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -718,7 +718,7 @@ nav a.active {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #fff;
+  border: 2px solid #fff3b0;
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   animation: badge-fade 60s ease forwards;
   pointer-events: none;
@@ -3185,6 +3185,61 @@ nav a.active {
   font-size: 0.75rem;
   color: #4fc3f7;
   font-weight: 600;
+}
+
+/* Issue user profile link & dropdown */
+.issue-user-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.issue-user-link:hover {
+  color: #90caf9;
+}
+.issue-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.issue-profile-dropdown-header {
+  position: static;
+  margin-top: 6px;
+}
+.issue-profile-pool-btn {
+  background: #2a2a2a;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.issue-profile-pool-btn:hover {
+  background: #333;
+}
+.issue-profile-arrow {
+  color: #4fc3f7;
+  font-size: 14px;
+}
+.issue-profile-loading {
+  font-size: 12px;
+  color: #888;
+  padding: 4px 8px;
 }
 
 /* Issue Chat Modal */
