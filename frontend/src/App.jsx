@@ -19,6 +19,7 @@ import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
+import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
 import "./App.css";
@@ -74,7 +75,8 @@ function App() {
   });
 
   // Invite link handling
-  const [announcement, setAnnouncement] = useState("");
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementIsNew, setAnnouncementIsNew] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState("");
   const [invitePool, setInvitePool] = useState(null);
@@ -108,9 +110,17 @@ function App() {
   useEffect(() => {
     if (!currentTournamentId) return;
     fetchAnnouncement(currentTournamentId).then((data) => {
-      setAnnouncement(data.announcement || "");
+      const items = data.announcements || [];
+      setAnnouncements(items);
+      if (items.length > 0) {
+        const seenAt = Number(localStorage.getItem(`seen_announcement_${currentTournamentId}_${user?.id ?? "guest"}`) || 0);
+        const latestAt = data.updatedAt ?? Date.now();
+        setAnnouncementIsNew(latestAt > seenAt);
+      } else {
+        setAnnouncementIsNew(false);
+      }
     });
-  }, [currentTournamentId]);
+  }, [currentTournamentId, user?.id]);
 
   // Refresh points whenever participant or pool changes
   useEffect(() => {
@@ -400,12 +410,51 @@ function App() {
     handleLeavePool();
   };
 
-  const announcementBar = currentTournamentId && (!!announcement || !!(user && user.is_admin)) ? (
+  const handleAddAnnouncement = async () => {
+    const text = announcementDraft.trim();
+    if (!text) return;
+    const newItem = { text, createdAt: Date.now() };
+    const updated = [...announcements, newItem];
+    const res = await updateAnnouncement(updated, currentTournamentId);
+    if (res.success) {
+      setAnnouncements(updated);
+      setAnnouncementDraft("");
+      localStorage.setItem(`seen_announcement_${currentTournamentId}_${user?.id ?? "guest"}`, String(newItem.createdAt));
+      setAnnouncementIsNew(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (index) => {
+    const updated = announcements.filter((_, i) => i !== index);
+    await updateAnnouncement(updated, currentTournamentId);
+    setAnnouncements(updated);
+    if (updated.length === 0) {
+      setAnnouncementIsNew(false);
+      localStorage.removeItem(`seen_announcement_${currentTournamentId}_${user?.id ?? "guest"}`);
+    }
+  };
+
+  const announcementBar = currentTournamentId && (announcements.length > 0 || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
-      {announcement && !editingAnnouncement && (() => {
-        const items = announcement.split("\n").filter(Boolean);
-        const renderItems = (prefix) => items.map((line, i) => (
-          <span key={`${prefix}-${i}`}>{line}<span className="announcement-sep" /></span>
+      {announcementIsNew && !editingAnnouncement && (
+        <span
+          className="announcement-new-badge"
+          onAnimationEnd={() => {
+            setAnnouncementIsNew(false);
+            localStorage.setItem(`seen_announcement_${currentTournamentId}_${user?.id ?? "guest"}`, String(Date.now()));
+          }}
+        >
+          NEW
+        </span>
+      )}
+      {announcements.length > 0 && !editingAnnouncement && (() => {
+        const seenAt = Number(localStorage.getItem(`seen_announcement_${currentTournamentId}_${user?.id ?? "guest"}`) || 0);
+        const renderItems = (prefix) => announcements.map((item, i) => (
+          <span key={`${prefix}-${i}`}>
+            {item.createdAt > seenAt && <span className="ticker-new-label">NEW</span>}
+            {item.text}
+            <span className="announcement-sep" />
+          </span>
         ));
         return (
           <div className="announcement-text">
@@ -414,32 +463,33 @@ function App() {
         );
       })()}
       {!!(user && user.is_admin) && !editingAnnouncement && (
-        <button className="btn-small announcement-edit-btn" onClick={() => { setAnnouncementDraft(announcement); setEditingAnnouncement(true); }}>
-          {announcement ? "Edit" : "Set Announcement"}
+        <button className="btn-small announcement-edit-btn" onClick={() => setEditingAnnouncement(true)}>
+          {announcements.length > 0 ? "Edit" : "Add Announcement"}
         </button>
       )}
       {editingAnnouncement && (
         <div className="announcement-editor">
-          <textarea
-            value={announcementDraft}
-            onChange={(e) => setAnnouncementDraft(e.target.value)}
-            placeholder={"One announcement per line:\nRow 1 — first ticker item\nRow 2 — second ticker item"}
-            className="announcement-input"
-            rows={3}
-          />
-          <button className="btn-small" onClick={async () => {
-            await updateAnnouncement(announcementDraft, currentTournamentId);
-            setAnnouncement(announcementDraft.trim());
-            setEditingAnnouncement(false);
-          }}>Save</button>
-          {announcement && (
-            <button className="btn-small btn-danger" onClick={async () => {
-              await updateAnnouncement("", currentTournamentId);
-              setAnnouncement("");
-              setEditingAnnouncement(false);
-            }}>Clear</button>
+          {announcements.length > 0 && (
+            <div className="announcement-list">
+              {announcements.map((item, i) => (
+                <div key={i} className="announcement-list-item">
+                  <span className="announcement-list-text">{item.text}</span>
+                  <button className="btn-small btn-danger announcement-delete-btn" onClick={() => handleDeleteAnnouncement(i)}>✕</button>
+                </div>
+              ))}
+            </div>
           )}
-          <button className="btn-small" onClick={() => setEditingAnnouncement(false)}>Cancel</button>
+          <div className="announcement-add-row">
+            <input
+              value={announcementDraft}
+              onChange={(e) => setAnnouncementDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddAnnouncement(); } }}
+              placeholder="New announcement..."
+              className="announcement-input"
+            />
+            <button className="btn-small" onClick={handleAddAnnouncement}>Add</button>
+          </div>
+          <button className="btn-small" onClick={() => { setEditingAnnouncement(false); setAnnouncementDraft(""); }}>Done</button>
         </div>
       )}
     </div>
@@ -1310,8 +1360,7 @@ function InviteJoin({ pool, onJoin, onCancel }) {
       <h2>Join "{pool.name}"</h2>
       <p className="select-subtitle">This pool requires a password to join.</p>
       <form onSubmit={handleSubmit} className="pool-form-vertical">
-        <input
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Pool password"
