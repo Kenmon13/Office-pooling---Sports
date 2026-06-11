@@ -7,6 +7,14 @@ const SHORT_NAMES = {
   "Bosnia and Herzegovina": "Bosnia",
 };
 
+const AWARDS = [
+  { key: "golden_ball",  label: "Golden Ball",           emoji: "🥇" },
+  { key: "golden_boot",  label: "Golden Boot",           emoji: "👟" },
+  { key: "golden_glove", label: "Golden Glove",          emoji: "🧤" },
+  { key: "young_player", label: "FIFA Young Player",     emoji: "🌟" },
+  { key: "fair_play",    label: "FIFA Fair Play Trophy",  emoji: "🤝" },
+];
+
 function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [mode, setMode] = useState(null); // null, "create", "join", "public"
   const [poolName, setPoolName] = useState("");
@@ -198,6 +206,41 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
                   ))}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {globalStats && globalStats.awards && AWARDS.some((a) => (globalStats.awards[a.key] || []).length > 0) && (
+          <div className="global-stats-section">
+            <h4>Award Picks</h4>
+            <div className="stats-groups-grid">
+              {AWARDS.map((award) => {
+                const picks = (globalStats.awards[award.key] || []);
+                if (picks.length === 0) return null;
+                return (
+                  <div key={award.key} className="stats-group-card">
+                    <h4>{award.emoji} {award.label}</h4>
+                    {picks.slice(0, 5).map((p, i) => (
+                      <div key={i} className="stats-row stats-row-compact">
+                        <span className="stats-rank-sm">#{i + 1}</span>
+                        <span className="stats-team stats-team-award">
+                          {flag(p.team_code)}
+                          <span className="stats-award-name">
+                            {p.player_name || SHORT_NAMES[p.team_name] || p.team_name}
+                            {p.player_name && (
+                              <span className="stats-award-team">{SHORT_NAMES[p.team_name] || p.team_name}</span>
+                            )}
+                          </span>
+                        </span>
+                        <div className="stats-bar-wrapper">
+                          <div className="stats-bar stats-bar-group" style={{ width: `${p.percentage}%` }} />
+                        </div>
+                        <span className="stats-pct">{p.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
