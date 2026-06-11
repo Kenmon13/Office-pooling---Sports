@@ -2401,9 +2401,49 @@ app.get("/api/stats/global", (req, res) => {
     });
   }
 
+  // Award picks across all pools for this tournament
+  const awardRows = db.prepare(`
+    SELECT
+      pap.award_category,
+      pap.player_id,
+      pap.team_id AS pick_team_id,
+      wp.name     AS player_name,
+      t.name      AS team_name,
+      t.code      AS team_code,
+      COUNT(*)    AS pick_count
+    FROM player_award_picks pap
+    JOIN participants p ON p.id = pap.participant_id
+    JOIN pools po ON po.id = p.pool_id
+    LEFT JOIN wc_players wp ON wp.id = pap.player_id
+    LEFT JOIN teams t ON t.id = COALESCE(wp.team_id, pap.team_id)
+    WHERE po.tournament = ?
+    GROUP BY pap.award_category, COALESCE(pap.player_id, pap.team_id)
+    ORDER BY pap.award_category, pick_count DESC
+  `).all(tournament);
+
+  const totalByAward = {};
+  for (const r of awardRows) {
+    totalByAward[r.award_category] = (totalByAward[r.award_category] || 0) + r.pick_count;
+  }
+  const awards = {};
+  for (const r of awardRows) {
+    if (!awards[r.award_category]) awards[r.award_category] = [];
+    if (awards[r.award_category].length < 10) {
+      const total = totalByAward[r.award_category];
+      awards[r.award_category].push({
+        player_id: r.player_id,
+        player_name: r.player_name,
+        team_name: r.team_name,
+        team_code: r.team_code,
+        pick_count: r.pick_count,
+        percentage: total > 0 ? Math.round((r.pick_count / total) * 100) : 0,
+      });
+    }
+  }
+
   const totalPlayers = champTotal;
 
-  res.json({ champions, groups: Object.values(groups), totalPlayers });
+  res.json({ champions, groups: Object.values(groups), awards, totalPlayers });
 });
 
 // ── Stats endpoints ──────────────────────────────────────────────────────────
