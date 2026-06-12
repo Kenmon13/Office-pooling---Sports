@@ -23,7 +23,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
@@ -279,6 +279,7 @@ function App() {
   const [isPoolAdmin, setIsPoolAdmin] = useState(false);
   const [chatClosed, setChatClosed] = useState(false);
   const [championW2Locked, setChampionW2Locked] = useState(false);
+  const [championUnlocked, setChampionUnlocked] = useState(false);
   const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -304,6 +305,11 @@ function App() {
       fetchChampionW2Lock(pool.id).then((data) => {
         if (data && typeof data.champion_w2_locked !== "undefined") {
           setChampionW2Locked(!!data.champion_w2_locked);
+        }
+      }).catch(() => {});
+      fetchChampionUnlock(pool.id).then((data) => {
+        if (data && typeof data.champion_unlocked !== "undefined") {
+          setChampionUnlocked(!!data.champion_unlocked);
         }
       }).catch(() => {});
       fetchPlayerAwardsLock(pool.id).then((data) => {
@@ -942,6 +948,29 @@ function App() {
                     >
                       {chatClosed ? "Chat Closed — Reopen" : "Open — Close Chat"}
                     </button>
+                  </span>
+                </div>
+              )}
+
+              {isPoolAdmin && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Champion Pick (During Groups)</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${championUnlocked ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !championUnlocked;
+                        const res = await updateChampionUnlock(pool.id, newVal);
+                        if (!res.error) setChampionUnlocked(newVal);
+                      }}
+                    >
+                      {championUnlocked ? "Unlocked — Lock" : "Locked — Unlock"}
+                    </button>
+                    {championUnlocked && (
+                      <span style={{ fontSize: "0.72rem", color: "#f0a500", marginTop: 4, display: "block", textAlign: "right" }}>
+                        ⚠ Players can change their champion pick during group stage
+                      </span>
+                    )}
                   </span>
                 </div>
               )}

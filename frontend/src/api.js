@@ -559,6 +559,18 @@ export async function updateChatStatus(poolId, closed) {
   return res.json();
 }
 
+export async function fetchChampionUnlock(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/champion-unlock`)).json();
+}
+export async function updateChampionUnlock(poolId, unlocked) {
+  const res = await fetch(`${API}/pools/${poolId}/champion-unlock`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ unlocked }),
+  });
+  return res.json();
+}
+
 export async function fetchChampionW2Lock(poolId) {
   return (await fetch(`${API}/pools/${poolId}/champion-w2-lock`)).json();
 }
