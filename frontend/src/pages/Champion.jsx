@@ -31,6 +31,7 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   const canInteract = (canPick || canChange) && !!currentUser;
   const hasPick = !!status?.pick;
   const isLocked = !!status?.locked;
+  const adminUnlocked = !!status?.adminUnlocked;
   const w2AdminLocked = !!status?.w2AdminLocked;
   const pickCorrect = !!status?.pickCorrect;
   const changeCost = status?.changeCost || 0;
@@ -119,9 +120,15 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
 
       {renderPick()}
 
-      {statusLoaded && isLocked && (
+      {statusLoaded && isLocked && !adminUnlocked && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
           <span className="deadline-locked-text">Winner pick locked during group stage — change window reopens after the final group match</span>
+        </div>
+      )}
+
+      {statusLoaded && adminUnlocked && (
+        <div className="champion-change-banner">
+          <strong>Admin has unlocked champion picks</strong> — you may change your pick during the group stage.
         </div>
       )}
 

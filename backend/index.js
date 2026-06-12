@@ -616,6 +616,22 @@ app.get("/api/pools/:poolId/champion-w2-lock", (req, res) => {
   res.json({ champion_w2_locked: pool.champion_w2_locked });
 });
 
+// --- Champion Unlock (during group stage) ---
+
+app.put("/api/pools/:poolId/champion-unlock", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { unlocked } = req.body;
+  db.prepare("UPDATE pools SET champion_unlocked = ? WHERE id = ?").run(unlocked ? 1 : 0, poolId);
+  res.json({ success: true, champion_unlocked: unlocked ? 1 : 0 });
+});
+
+app.get("/api/pools/:poolId/champion-unlock", (req, res) => {
+  const poolId = req.params.poolId;
+  const pool = db.prepare("SELECT champion_unlocked FROM pools WHERE id = ?").get(poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json({ champion_unlocked: pool.champion_unlocked });
+});
+
 // --- Player Awards Lock ---
 
 app.put("/api/pools/:poolId/player-awards-lock", requirePoolAdmin, (req, res) => {
@@ -1810,11 +1826,13 @@ app.get("/api/champion-pick/:participantId", (req, res) => {
   const koStarted = db.prepare("SELECT COUNT(*) as c FROM knockout_matches WHERE status != 'upcoming'").get().c > 0;
   const inPreGroupWindow  = !groupStarted;
   const inPostGroupWindow = groupStageComplete && !koStarted;
-  // Check if admin has locked champion pick window 2
-  const pool = pool_id ? db.prepare("SELECT champion_w2_locked FROM pools WHERE id = ?").get(pool_id) : null;
+  // Check pool-level admin overrides
+  const pool = pool_id ? db.prepare("SELECT champion_w2_locked, champion_unlocked FROM pools WHERE id = ?").get(pool_id) : null;
   const w2AdminLocked = !!(pool && pool.champion_w2_locked && inPostGroupWindow);
-  const windowOpen = inPreGroupWindow || (inPostGroupWindow && !w2AdminLocked);
+  const championUnlocked = !!(pool && pool.champion_unlocked);
   const lockedDuringGroups = groupStarted && !groupStageComplete;
+  const adminUnlockedDuringGroups = lockedDuringGroups && championUnlocked;
+  const windowOpen = inPreGroupWindow || (inPostGroupWindow && !w2AdminLocked) || adminUnlockedDuringGroups;
   const pick = db.prepare(`
     SELECT cp.*, t.name as team_name, t.code as team_code
     FROM champion_picks cp
@@ -1827,7 +1845,7 @@ app.get("/api/champion-pick/:participantId", (req, res) => {
   const changeCost = (inPostGroupWindow && !w2AdminLocked && !feePaid) ? 5 : 0;
   const finalMatch = db.prepare("SELECT winner_team_id FROM knockout_matches WHERE id = 'F'").get();
   const pickCorrect = !!(pick && finalMatch?.winner_team_id && String(pick.team_id) === String(finalMatch.winner_team_id));
-  res.json({ canInitialPick, canChange, locked: lockedDuringGroups, w2AdminLocked, changeCost, pick: pick || null, pickCorrect });
+  res.json({ canInitialPick, canChange, locked: lockedDuringGroups && !adminUnlockedDuringGroups, adminUnlocked: adminUnlockedDuringGroups, w2AdminLocked, changeCost, pick: pick || null, pickCorrect });
 });
 
 app.post("/api/champion-pick", (req, res) => {
@@ -1840,15 +1858,15 @@ app.post("/api/champion-pick", (req, res) => {
   const koStarted = db.prepare("SELECT COUNT(*) as c FROM knockout_matches WHERE status != 'upcoming'").get().c > 0;
   const inPreGroupWindow  = !groupStarted;
   const inPostGroupWindow = groupStageComplete && !koStarted;
-  // Check if admin has locked champion pick window 2
-  if (inPostGroupWindow) {
-    const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
-    if (participant) {
-      const pool = db.prepare("SELECT champion_w2_locked FROM pools WHERE id = ?").get(participant.pool_id);
-      if (pool && pool.champion_w2_locked) return res.status(403).json({ error: "Champion pick window 2 has been locked by your pool admin" });
-    }
+  const lockedDuringGroups = groupStarted && !groupStageComplete;
+  // Check pool-level admin overrides
+  const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+  const pool = participant ? db.prepare("SELECT champion_w2_locked, champion_unlocked FROM pools WHERE id = ?").get(participant.pool_id) : null;
+  if (inPostGroupWindow && pool && pool.champion_w2_locked) {
+    return res.status(403).json({ error: "Champion pick window 2 has been locked by your pool admin" });
   }
-  if (!inPreGroupWindow && !inPostGroupWindow) return res.status(403).json({ error: "Champion pick window is closed" });
+  const adminUnlocked = !!(lockedDuringGroups && pool && pool.champion_unlocked);
+  if (!inPreGroupWindow && !inPostGroupWindow && !adminUnlocked) return res.status(403).json({ error: "Champion pick window is closed" });
   const existing = db.prepare("SELECT * FROM champion_picks WHERE participant_id = ?").get(participant_id);
   // Charge 5pt fee on the first pick/change made in the post-group window, even if no prior pick
   const isFirstPostGroupChange = inPostGroupWindow && (existing?.change_cost || 0) === 0;
