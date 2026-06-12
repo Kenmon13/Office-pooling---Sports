@@ -4,9 +4,17 @@ import {
   fetchGroupPredictions, fetchKnockoutPredictions, fetchChampionPick,
   fetchWC2022GroupPredictions, fetchWC2022KnockoutPredictions, fetchWC2022ChampionPick,
   fetchGroups, fetchWC2022Groups, fetchKnockoutMatches, fetchWC2022KnockoutMatches,
-  fetchLeaderboard, fetchWC2022Leaderboard,
+  fetchLeaderboard, fetchWC2022Leaderboard, fetchPlayerAwardPicks,
 } from "../api";
 import { flag } from "../flags";
+
+const AWARDS = [
+  { key: "golden_ball",  label: "Golden Ball",           emoji: "🥇" },
+  { key: "golden_boot",  label: "Golden Boot",           emoji: "👟" },
+  { key: "golden_glove", label: "Golden Glove",          emoji: "🧤" },
+  { key: "young_player", label: "FIFA Young Player",     emoji: "🌟" },
+  { key: "fair_play",    label: "FIFA Fair Play Trophy",  emoji: "🤝" },
+];
 
 function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
   const { participantId } = useParams();
@@ -21,6 +29,7 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
   const [koScores, setKoScores] = useState({});
   const [koMatches, setKoMatches] = useState([]);
   const [championPick, setChampionPick] = useState(null);
+  const [awardPicks, setAwardPicks] = useState({});
   const [loaded, setLoaded] = useState(false);
 
   // Compare mode
@@ -29,6 +38,7 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
   const [myKoPreds, setMyKoPreds] = useState({});
   const [myKoScores, setMyKoScores] = useState({});
   const [myChampionPick, setMyChampionPick] = useState(null);
+  const [myAwardPicks, setMyAwardPicks] = useState({});
   const [myLoaded, setMyLoaded] = useState(false);
 
   useEffect(() => {
@@ -52,9 +62,10 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
       koPredsFn(participantId),
       isWC2022 ? koMatchesFn(poolId) : koMatchesFn(),
       champFn(participantId, poolId),
+      !isWC2022 ? fetchPlayerAwardPicks(participantId, poolId) : Promise.resolve({ picks: [] }),
     ];
 
-    Promise.all(promises).then(([groupsData, gPreds, kPreds, koData, champData]) => {
+    Promise.all(promises).then(([groupsData, gPreds, kPreds, koData, champData, awardsData]) => {
       setGroups(groupsData);
 
       const gMap = {};
@@ -77,6 +88,11 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
       setKoScores(sMap);
       setKoMatches(koData);
       setChampionPick(champData?.pick || null);
+
+      const aMap = {};
+      (awardsData?.picks || []).forEach((p) => { aMap[p.award_category] = p; });
+      setAwardPicks(aMap);
+
       setLoaded(true);
     });
   }, [participantId, poolId, isWC2022]);
@@ -92,7 +108,8 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
       groupPredsFn(currentUser.id),
       koPredsFn(currentUser.id),
       champFn(currentUser.id, poolId),
-    ]).then(([gPreds, kPreds, champData]) => {
+      !isWC2022 ? fetchPlayerAwardPicks(currentUser.id, poolId) : Promise.resolve({ picks: [] }),
+    ]).then(([gPreds, kPreds, champData, awardsData]) => {
       const gMap = {};
       gPreds.forEach((p) => {
         const picks = [p.team1_id, p.team2_id];
@@ -112,6 +129,11 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
       setMyKoPreds(kMap);
       setMyKoScores(sMap);
       setMyChampionPick(champData?.pick || null);
+
+      const aMap = {};
+      (awardsData?.picks || []).forEach((p) => { aMap[p.award_category] = p; });
+      setMyAwardPicks(aMap);
+
       setMyLoaded(true);
     });
   }, [comparing, currentUser, poolId, isWC2022, myLoaded]);
@@ -303,6 +325,57 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
           )
         )}
       </section>
+
+      {/* Award Picks */}
+      {!isWC2022 && (
+        <section className="view-picks-section">
+          <h3>Award Picks</h3>
+          {Object.keys(awardPicks).length === 0 && !showCompare && (
+            <p className="notice">No award picks yet.</p>
+          )}
+          {(Object.keys(awardPicks).length > 0 || showCompare) && (
+            <div className="view-picks-awards">
+              {AWARDS.map((award) => {
+                const their = awardPicks[award.key];
+                const mine = showCompare ? myAwardPicks[award.key] : null;
+                if (!their && !mine) return null;
+                const theirLabel = their ? (their.player_name || their.team_name) : null;
+                const mineLabel = mine ? (mine.player_name || mine.team_name) : null;
+                const samePick = their && mine && (
+                  (their.player_id && their.player_id === mine.player_id) ||
+                  (!their.player_id && their.team_id === mine.team_id)
+                );
+                return (
+                  <div key={award.key} className="view-picks-award-row">
+                    <span className="view-picks-award-label">{award.emoji} {award.label}</span>
+                    <span className="view-picks-award-pick">
+                      {their ? (
+                        <>
+                          {flag(their.team_code)} {theirLabel}
+                        </>
+                      ) : (
+                        <span className="notice" style={{ margin: 0 }}>No pick</span>
+                      )}
+                    </span>
+                    {showCompare && (
+                      <span className={`view-picks-award-compare ${samePick ? "compare-match" : mine ? "compare-differ" : ""}`}>
+                        {mine ? (
+                          <>
+                            You: {flag(mine.team_code)} {mineLabel}
+                            {samePick && " ✓"}
+                          </>
+                        ) : (
+                          <span className="compare-no-pick">You: No pick</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

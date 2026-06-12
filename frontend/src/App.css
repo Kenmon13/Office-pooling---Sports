@@ -2706,6 +2706,52 @@ nav a.active {
   color: #a5d6a7;
 }
 
+/* ── Award Picks in ViewPicks ─────────────────────────────────────────────── */
+.view-picks-awards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.view-picks-award-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #122412;
+  border: 1px solid #1e3a1e;
+  border-radius: 8px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+.view-picks-award-label {
+  font-weight: 700;
+  font-size: 13px;
+  color: #a5d6a7;
+  width: 180px;
+  flex-shrink: 0;
+}
+.view-picks-award-pick {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-picks-award-compare {
+  font-size: 13px;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-picks-award-compare.compare-match {
+  color: #6fdc6f;
+}
+.view-picks-award-compare.compare-differ {
+  color: #ef9a9a;
+}
+
 /* ── Compare Picks ────────────────────────────────────────────────────────── */
 
 .btn-compare-active {
