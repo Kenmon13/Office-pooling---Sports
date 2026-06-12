@@ -11,7 +11,7 @@ async function fetchLiveScores() {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/competitions/${COMPETITION}/matches?status=FINISHED`, {
+    const res = await fetch(`${API_BASE}/competitions/${COMPETITION}/matches?status=IN_PLAY,PAUSED,FINISHED`, {
       headers: { "X-Auth-Token": apiKey },
     });
 
@@ -23,25 +23,42 @@ async function fetchLiveScores() {
     const data = await res.json();
     const matches = data.matches || [];
 
-    const updateMatch = db.prepare(
-      "UPDATE matches SET home_score = ?, away_score = ?, status = 'finished' WHERE home_team_id = (SELECT id FROM teams WHERE code = ?) AND away_team_id = (SELECT id FROM teams WHERE code = ?) AND status = 'upcoming'"
+    const updateFinished = db.prepare(
+      "UPDATE matches SET home_score = ?, away_score = ?, status = 'finished' WHERE home_team_id = (SELECT id FROM teams WHERE code = ?) AND away_team_id = (SELECT id FROM teams WHERE code = ?) AND status IN ('upcoming', 'live')"
     );
 
-    let updated = 0;
+    const updateLive = db.prepare(
+      "UPDATE matches SET home_score = ?, away_score = ?, status = 'live' WHERE home_team_id = (SELECT id FROM teams WHERE code = ?) AND away_team_id = (SELECT id FROM teams WHERE code = ?) AND status IN ('upcoming', 'live')"
+    );
+
+    let finished = 0;
+    let live = 0;
     for (const m of matches) {
       const homeCode = m.homeTeam?.tla;
       const awayCode = m.awayTeam?.tla;
-      const homeScore = m.score?.fullTime?.home;
-      const awayScore = m.score?.fullTime?.away;
+      if (!homeCode || !awayCode) continue;
 
-      if (homeCode && awayCode && homeScore != null && awayScore != null) {
-        const result = updateMatch.run(homeScore, awayScore, homeCode, awayCode);
-        if (result.changes > 0) updated++;
+      if (m.status === "FINISHED") {
+        const homeScore = m.score?.fullTime?.home;
+        const awayScore = m.score?.fullTime?.away;
+        if (homeScore != null && awayScore != null) {
+          const result = updateFinished.run(homeScore, awayScore, homeCode, awayCode);
+          if (result.changes > 0) finished++;
+        }
+      } else {
+        // IN_PLAY or PAUSED — use current score
+        const homeScore = m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? 0;
+        const awayScore = m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? 0;
+        const result = updateLive.run(homeScore, awayScore, homeCode, awayCode);
+        if (result.changes > 0) live++;
       }
     }
 
-    if (updated > 0) {
-      console.log(`Updated ${updated} match result(s) from API.`);
+    if (finished > 0 || live > 0) {
+      const parts = [];
+      if (finished > 0) parts.push(`${finished} finished`);
+      if (live > 0) parts.push(`${live} live`);
+      console.log(`Score update: ${parts.join(", ")}.`);
     }
   } catch (err) {
     console.log("Score fetch error:", err.message);
