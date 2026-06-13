@@ -503,7 +503,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                       onClick={currentUser && !gLocked ? (e) => { e.stopPropagation(); toggleTeam(g.id, teamId); } : undefined}
                     >
                       <span className="standings-team-col">
-                        {flag(code)} {t.name}
+                        {flag(code)} {t.name === "Bosnia and Herzegovina" ? "Bosnia" : t.name}
                       </span>
                       <span className="standings-stat">{t.won ?? 0}</span>
                       <span className="standings-stat">{t.drawn ?? 0}</span>

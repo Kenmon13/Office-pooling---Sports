@@ -4731,4 +4731,44 @@ nav a.active {
     width: auto !important;
     height: auto !important;
   }
+
+  .standings-stat {
+    width: 20px;
+    font-size: 12px;
+  }
+
+  .standings-team-col {
+    font-size: 13px;
+  }
+
+  .group-card-team-row {
+    padding: 6px 8px;
+  }
+
+  .group-standings-header {
+    padding: 4px 8px;
+  }
+
+  .group-standings-header .standings-stat {
+    font-size: 10px;
+  }
+
+  .deadline-banner {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .deadline-info {
+    align-items: center;
+  }
+
+  .timer-value {
+    font-size: 22px;
+  }
+
+  .deadline-date {
+    font-size: 13px;
+  }
 }
