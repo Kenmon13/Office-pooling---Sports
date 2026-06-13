@@ -272,6 +272,18 @@ function App() {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [showIssueChat, setShowIssueChat] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const hamburgerRef = useRef(null);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    function handleClickOutside(e) {
+      if (hamburgerRef.current && !hamburgerRef.current.contains(e.target)) {
+        setMobileMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [mobileMenuOpen]);
   const [poolPassword, setPoolPassword] = useState(null);
   const [showPoolSettings, setShowPoolSettings] = useState(false);
   const [revealPassword, setRevealPassword] = useState(false);
@@ -743,52 +755,102 @@ function App() {
       <div className="app">
         <header>
           <div className="header-top">
-            <div className="header-title-row">
+            <div>
+              <div className="header-title-row">
+                <button className="mobile-back-btn" onClick={handleSwitchPool}>Back</button>
+                <div className="mobile-header-controls">
+                  <div className="bell-wrapper">
+                    <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
+                    {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
+                  </div>
+                  <div className="hamburger-container" ref={hamburgerRef}>
+                    <button className="hamburger-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
+                      <span className={`hamburger-icon ${mobileMenuOpen ? "open" : ""}`}>
+                        <span></span><span></span><span></span>
+                      </span>
+                    </button>
+                    <div className={`hamburger-dropdown ${mobileMenuOpen ? "open" : ""}`}>
+                      <div className="hamburger-menu-user">
+                        <div className="hamburger-avatar-row">
+                          <div className="hamburger-avatar">{user.display_name.charAt(0).toUpperCase()}</div>
+                          <div className="hamburger-name-col">
+                            <button onClick={() => { setShowSettings(true); setMobileMenuOpen(false); }} className="btn-link hamburger-username">{user.display_name}</button>
+                            {!!user.is_admin && <span className="header-admin-badge">Admin</span>}
+                            {participant && !user.is_admin && <span className="header-user-points">{points} pts</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <hr className="hamburger-divider" />
+                      <button className="hamburger-item" onClick={async () => {
+                        if (!pool.is_public && !poolPassword) {
+                          const pwRes = await fetchPoolPassword(pool.id);
+                          if (!pwRes.error) setPoolPassword(pwRes.password);
+                        }
+                        const [adminsData, membersData] = await Promise.all([
+                          fetchPoolAdmins(pool.id),
+                          fetchParticipants(pool.id),
+                        ]);
+                        if (!adminsData.error && Array.isArray(adminsData)) {
+                          setPoolAdmins(adminsData);
+                          setIsPoolAdmin(adminsData.some((a) => a.user_id === user.id));
+                        }
+                        if (!membersData.error && Array.isArray(membersData)) setPoolMembers(membersData);
+                        setShowPoolSettings(true);
+                        setMobileMenuOpen(false);
+                      }}>Pool Settings</button>
+                      <button onClick={(e) => {
+                        const url = `${window.location.origin}/join/${pool.id}`;
+                        navigator.clipboard.writeText(url);
+                        const btn = e.currentTarget;
+                        btn.textContent = "Copied!";
+                        setTimeout(() => { btn.textContent = "Share Link"; setMobileMenuOpen(false); }, 2000);
+                      }} className="hamburger-item">Share Link</button>
+                      <button onClick={() => { setShowQuitConfirm(true); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Quit Pool</button>
+                      <hr className="hamburger-divider" />
+                      <button onClick={() => { openIssueChat(); setMobileMenuOpen(false); }} className="hamburger-item">Report Issue</button>
+                      <button onClick={() => { handleSignOut(); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Sign Out</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <h1><span className="pool-title-emoji">{selectedTournament.emoji}</span> {pool.name}</h1>
-              <button className="hamburger-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
-                <span className={`hamburger-icon ${mobileMenuOpen ? "open" : ""}`}>
-                  <span></span><span></span><span></span>
-                </span>
-              </button>
+              <p className="pool-meta">
+                {selectedTournament.name}
+                <button onClick={handleSwitchPool} className="btn-small">
+                  Switch Pool
+                </button>
+                <button onClick={() => setShowQuitConfirm(true)} className="btn-small btn-quit">
+                  Quit Pool
+                </button>
+                <button onClick={(e) => {
+                  const url = `${window.location.origin}/join/${pool.id}`;
+                  navigator.clipboard.writeText(url);
+                  const btn = e.currentTarget;
+                  btn.textContent = "Copied!";
+                  setTimeout(() => { btn.textContent = "Share Link"; }, 2000);
+                }} className="btn-small btn-share">
+                  Share Link
+                </button>
+                <button className="btn-small" onClick={async () => {
+                  if (!pool.is_public && !poolPassword) {
+                    const pwRes = await fetchPoolPassword(pool.id);
+                    if (!pwRes.error) setPoolPassword(pwRes.password);
+                  }
+                  const [adminsData, membersData] = await Promise.all([
+                    fetchPoolAdmins(pool.id),
+                    fetchParticipants(pool.id),
+                  ]);
+                  if (!adminsData.error && Array.isArray(adminsData)) {
+                    setPoolAdmins(adminsData);
+                    setIsPoolAdmin(adminsData.some((a) => a.user_id === user.id));
+                  }
+                  if (!membersData.error && Array.isArray(membersData)) setPoolMembers(membersData);
+                  setShowPoolSettings(true);
+                }}>
+                  Pool Settings
+                </button>
+              </p>
             </div>
-            <p className="pool-tournament-label">{selectedTournament.name}</p>
-            <div className={`mobile-menu-content ${mobileMenuOpen ? "mobile-open" : ""}`}>
-            <p className="pool-meta">
-              <span className="pool-meta-tournament">{selectedTournament.name}</span>
-              <button onClick={handleSwitchPool} className="btn-small">
-                Switch Pool
-              </button>
-              <button onClick={() => setShowQuitConfirm(true)} className="btn-small btn-quit">
-                Quit Pool
-              </button>
-              <button onClick={(e) => {
-                const url = `${window.location.origin}/join/${pool.id}`;
-                navigator.clipboard.writeText(url);
-                const btn = e.currentTarget;
-                btn.textContent = "Copied!";
-                setTimeout(() => { btn.textContent = "Share Link"; }, 2000);
-              }} className="btn-small btn-share">
-                Share Link
-              </button>
-              <button className="btn-small" onClick={async () => {
-                if (!pool.is_public && !poolPassword) {
-                  const pwRes = await fetchPoolPassword(pool.id);
-                  if (!pwRes.error) setPoolPassword(pwRes.password);
-                }
-                const [adminsData, membersData] = await Promise.all([
-                  fetchPoolAdmins(pool.id),
-                  fetchParticipants(pool.id),
-                ]);
-                if (!adminsData.error && Array.isArray(adminsData)) {
-                  setPoolAdmins(adminsData);
-                  setIsPoolAdmin(adminsData.some((a) => a.user_id === user.id));
-                }
-                if (!membersData.error && Array.isArray(membersData)) setPoolMembers(membersData);
-                setShowPoolSettings(true);
-              }}>
-                Pool Settings
-              </button>
-            </p>
             <div className="header-right">
               <div className="header-user">
                 <button onClick={() => setShowSettings(true)} className="btn-link header-user-name">{user.display_name}</button>
@@ -823,7 +885,6 @@ function App() {
                 <polygon points="74,76 82,64 88,72" fill="#222" opacity="0.15"/>
                 <polygon points="44,94 44,82 56,82 56,94" fill="#222" opacity="0.15"/>
               </svg>
-            </div>
             </div>
           </div>
           {announcementBar}
