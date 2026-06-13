@@ -5,6 +5,7 @@ import { fetchLeaderboard, fetchWC2022Leaderboard } from "../api";
 function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
   const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState([]);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const prevRankRef = useRef({});
 
   useEffect(() => {
@@ -29,12 +30,17 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
 
   return (
     <div className="page">
-      <h2>Leaderboard</h2>
+      <div className="lb-title-row">
+        <h2>Leaderboard</h2>
+        <button className="lb-breakdown-toggle" onClick={() => setShowBreakdown(v => !v)}>
+          {showBreakdown ? "Hide breakdown" : "Show breakdown"}
+        </button>
+      </div>
       {leaderboard.length === 0 ? (
         <p className="notice">No participants yet. Join the pool to get started!</p>
       ) : (<>
         {/* Desktop table */}
-        <div className="leaderboard-scroll">
+        <div className={`leaderboard-scroll ${showBreakdown ? "lb-expanded" : ""}`}>
           <table className="leaderboard-table">
             <thead>
               <tr>
@@ -93,19 +99,30 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                   </div>
                   <span className="lb-card-total">{p.points || 0} pts</span>
                 </div>
-                <div className="lb-card-breakdown">
-                  <span>Group <strong>{p.group_pts}</strong></span>
-                  <span className="lb-sep">·</span>
-                  <span>KO <strong>{p.ko_points || 0}</strong></span>
-                  <span className="lb-sep">·</span>
-                  <span className={champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}>
-                    Champ <strong>{champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}</strong>
-                  </span>
-                  <span className="lb-sep">·</span>
-                  <span className={awards > 0 ? "pts-champ-win" : ""}>
-                    Awards <strong>{awards > 0 ? `+${awards}` : "—"}</strong>
-                  </span>
-                </div>
+                {showBreakdown && (
+                  <div className="lb-card-breakdown">
+                    <div className="lb-breakdown-row">
+                      <span className="lb-breakdown-label">Group</span>
+                      <span className="lb-breakdown-val">{p.group_pts}</span>
+                    </div>
+                    <div className="lb-breakdown-row">
+                      <span className="lb-breakdown-label">KO</span>
+                      <span className="lb-breakdown-val">{p.ko_points || 0}</span>
+                    </div>
+                    <div className="lb-breakdown-row">
+                      <span className="lb-breakdown-label">Champ</span>
+                      <span className={`lb-breakdown-val ${champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}`}>
+                        {champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}
+                      </span>
+                    </div>
+                    <div className="lb-breakdown-row">
+                      <span className="lb-breakdown-label">Awards</span>
+                      <span className={`lb-breakdown-val ${awards > 0 ? "pts-champ-win" : ""}`}>
+                        {awards > 0 ? `+${awards}` : "—"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

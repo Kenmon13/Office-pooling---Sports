@@ -13,7 +13,9 @@ const TYPE_ICON = {
 function formatDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr.replace(" ", "T") + "Z");
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const time = d.toLocaleString("en-US", { hour: "2-digit", minute: "2-digit" });
+  return { date, time };
 }
 
 function History({ currentUser, tournament = "wc2026", poolId, mockDate }) {
@@ -67,7 +69,10 @@ function History({ currentUser, tournament = "wc2026", poolId, mockDate }) {
           <tbody>
             {events.map((e, i) => (
               <tr key={i} className={`history-row history-${e.type}`}>
-                <td className="history-date">{formatDate(e.event_date)}</td>
+                <td className="history-date">
+                  <span className="history-date-day">{formatDate(e.event_date).date}</span>
+                  <span className="history-date-time">{formatDate(e.event_date).time}</span>
+                </td>
                 <td className="history-desc">
                   <span className="history-icon">{TYPE_ICON[e.type] || "•"}</span>
                   {e.description}
