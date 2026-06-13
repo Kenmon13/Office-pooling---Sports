@@ -1029,7 +1029,7 @@ app.post("/api/knockout-predictions", (req, res) => {
 // --- Standings (calculate from match results) ---
 
 app.get("/api/standings", (req, res) => {
-  const matches = db.prepare("SELECT * FROM matches WHERE status = 'finished'").all();
+  const matches = db.prepare("SELECT * FROM matches WHERE status IN ('finished', 'live')").all();
   const teams = db.prepare("SELECT * FROM teams").all();
 
   // Build standings per team
