@@ -390,6 +390,15 @@ nav a.active {
   color: #6fdc6f;
 }
 
+.group-card-team-row.team-live {
+  background: #0f1a2e;
+  border-color: #4a90d9;
+}
+
+.group-card-team-row.team-live .standings-team-col {
+  color: #7ab8ff;
+}
+
 .group-standings-header {
   display: flex;
   align-items: center;
@@ -777,6 +786,11 @@ nav a.active {
   border-color: #2a5a2a;
 }
 
+.match-card.live {
+  border-color: #4a90d9;
+  background: #0f1a2a;
+}
+
 .match-date {
   font-size: 12px;
   color: #5a8a5a;
@@ -832,6 +846,21 @@ nav a.active {
 .match-status.finished {
   color: #6fdc6f;
   background: #1a3a1a;
+}
+
+.match-status.live {
+  color: #fff;
+  background: #d9534f;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.vs.live {
+  color: #7ab8ff;
 }
 
 /* Predictions */
