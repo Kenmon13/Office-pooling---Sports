@@ -459,6 +459,11 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
           const score = getScore(g.id);
           const gMatches = groupMatches[g.name] || [];
           const gLocked = isGroupLocked(g.id);
+          const liveTeamIds = new Set();
+          gMatches.filter((m) => m.status === "live").forEach((m) => {
+            if (m.home_team_id) liveTeamIds.add(m.home_team_id);
+            if (m.away_team_id) liveTeamIds.add(m.away_team_id);
+          });
 
           return (
             <div key={g.id} className={`group-card ${score ? score.cls : !saved && !gLocked ? "unpicked" : ""} ${isExpanded ? "expanded" : ""}`}>
@@ -494,7 +499,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                   return (
                     <div
                       key={teamId}
-                      className={`group-card-team-row ${currentUser && !gLocked ? "clickable" : ""} ${isTop2 || isThird ? "selected" : ""}`}
+                      className={`group-card-team-row ${currentUser && !gLocked ? "clickable" : ""} ${isTop2 || isThird ? "selected" : ""} ${liveTeamIds.has(teamId) ? "team-live" : ""}`}
                       onClick={currentUser && !gLocked ? (e) => { e.stopPropagation(); toggleTeam(g.id, teamId); } : undefined}
                     >
                       <span className="standings-team-col">
@@ -540,9 +545,9 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                       <div className="match-date">{formatMatchDate(m.match_date, displayTzOffset)}</div>
                       <div className="match-teams">
                         <span className="team home">{flag(m.home_code)} {m.home_team}</span>
-                        <span className="vs">
-                          {m.status === "finished"
-                            ? `${m.home_score} - ${m.away_score}`
+                        <span className={`vs ${m.status === "live" ? "live" : ""}`}>
+                          {m.status === "finished" || m.status === "live"
+                            ? `${m.home_score ?? 0} - ${m.away_score ?? 0}`
                             : "vs"}
                         </span>
                         <span className="team away">{m.away_team} {flag(m.away_code)}</span>
