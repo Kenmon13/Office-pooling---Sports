@@ -32,46 +32,85 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
       <h2>Leaderboard</h2>
       {leaderboard.length === 0 ? (
         <p className="notice">No participants yet. Join the pool to get started!</p>
-      ) : (
-        <table className="leaderboard-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th></th>
-              <th>Name</th>
-              <th>Group</th>
-              <th>KO</th>
-              <th>Champ</th>
-              <th>Awards</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leaderboard.map((p, i) => {
-              const delta = p.prevRank - p.currentRank;
-              const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
-              return (
-                <tr key={p.id} className={i < 3 ? `rank-${i + 1}` : ""}>
-                  <td className="rank">{p.currentRank}</td>
-                  <td className="rank-change">
-                    {delta > 0 ? <span className="rank-up">↑</span> : delta < 0 ? <span className="rank-down">↓</span> : <span className="rank-static">–</span>}
-                  </td>
-                  <td className="name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</td>
-                  <td className="pts-sub">{p.group_pts}</td>
-                  <td className="pts-sub">{p.ko_points || 0}</td>
-                  <td className={`pts-sub ${champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}`}>
-                    {champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}
-                  </td>
-                  <td className={`pts-sub ${(p.player_awards_points || 0) > 0 ? "pts-champ-win" : ""}`}>
-                    {(p.player_awards_points || 0) > 0 ? `+${p.player_awards_points}` : "—"}
-                  </td>
-                  <td className="points">{p.points || 0}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+      ) : (<>
+        {/* Desktop table */}
+        <div className="leaderboard-scroll">
+          <table className="leaderboard-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>↑↓</th>
+                <th>Name</th>
+                <th>Group</th>
+                <th>KO</th>
+                <th>Champ</th>
+                <th>Awards</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.map((p, i) => {
+                const delta = p.prevRank - p.currentRank;
+                const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
+                return (
+                  <tr key={p.id} className={i < 3 ? `rank-${i + 1}` : ""}>
+                    <td className="rank">{p.currentRank}</td>
+                    <td className="rank-change">
+                      {delta > 0 ? <span className="rank-up">↑</span> : delta < 0 ? <span className="rank-down">↓</span> : <span className="rank-static">–</span>}
+                    </td>
+                    <td className="name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</td>
+                    <td className="pts-sub">{p.group_pts}</td>
+                    <td className="pts-sub">{p.ko_points || 0}</td>
+                    <td className={`pts-sub ${champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}`}>
+                      {champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}
+                    </td>
+                    <td className={`pts-sub ${(p.player_awards_points || 0) > 0 ? "pts-champ-win" : ""}`}>
+                      {(p.player_awards_points || 0) > 0 ? `+${p.player_awards_points}` : "—"}
+                    </td>
+                    <td className="points">{p.points || 0}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="leaderboard-cards">
+          {leaderboard.map((p, i) => {
+            const delta = p.prevRank - p.currentRank;
+            const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
+            const awards = p.player_awards_points || 0;
+            return (
+              <div key={p.id} className={`leaderboard-card ${i < 3 ? `rank-${i + 1}` : ""}`}>
+                <div className="lb-card-top">
+                  <div className="lb-card-left">
+                    <span className="lb-card-rank">{p.currentRank}</span>
+                    <span className="rank-change">
+                      {delta > 0 ? <span className="rank-up">↑</span> : delta < 0 ? <span className="rank-down">↓</span> : <span className="rank-static">–</span>}
+                    </span>
+                    <span className="lb-card-name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</span>
+                  </div>
+                  <span className="lb-card-total">{p.points || 0} pts</span>
+                </div>
+                <div className="lb-card-breakdown">
+                  <span>Group <strong>{p.group_pts}</strong></span>
+                  <span className="lb-sep">·</span>
+                  <span>KO <strong>{p.ko_points || 0}</strong></span>
+                  <span className="lb-sep">·</span>
+                  <span className={champNet > 0 ? "pts-champ-win" : champNet < 0 ? "pts-champ-loss" : ""}>
+                    Champ <strong>{champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet}</strong>
+                  </span>
+                  <span className="lb-sep">·</span>
+                  <span className={awards > 0 ? "pts-champ-win" : ""}>
+                    Awards <strong>{awards > 0 ? `+${awards}` : "—"}</strong>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>)}
     </div>
   );
 }
