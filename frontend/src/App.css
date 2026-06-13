@@ -1758,6 +1758,13 @@ nav a.active {
   margin-top: 4px;
 }
 
+.pool-tournament-label {
+  display: none;
+  font-size: 13px;
+  color: #5a8a5a;
+  margin-top: 4px;
+}
+
 /* Admin */
 .admin-list {
   display: flex;
@@ -4643,32 +4650,102 @@ nav a.active {
   vertical-align: middle;
 }
 
+/* Hamburger menu — hidden on desktop */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.hamburger-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 24px;
+}
+
+.hamburger-icon span {
+  display: block;
+  height: 2px;
+  background: #6fdc6f;
+  border-radius: 2px;
+  transition: all 0.3s;
+}
+
+.hamburger-icon.open span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger-icon.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-icon.open span:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 /* Mobile layout */
 @media (max-width: 600px) {
   header h1 {
     font-size: 22px;
   }
+  .hamburger-btn {
+    display: block;
+  }
+
   .header-top {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    position: relative;
+    align-items: stretch;
+    gap: 0;
   }
 
   .header-top .soccer-ball {
-    position: absolute;
-    top: 0;
-    right: 0;
+    display: none;
   }
 
-  .header-right {
+  .mobile-menu-content {
+    display: none;
     flex-direction: column;
-    align-items: flex-end;
-    align-self: flex-end;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #1e3a1e;
+    margin-top: 12px;
+  }
+
+  .mobile-menu-content.mobile-open {
+    display: flex;
+  }
+
+  .pool-tournament-label {
+    display: block;
+  }
+
+  .pool-meta-tournament {
+    display: none;
+  }
+
+  .mobile-menu-content .pool-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .mobile-menu-content .header-right {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .header-user {
-    align-items: flex-end;
+    align-items: flex-start;
+    width: 100%;
   }
 
   .header-user-actions {

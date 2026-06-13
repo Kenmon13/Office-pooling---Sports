@@ -641,6 +641,14 @@ app.put("/api/pools/:poolId/player-awards-lock", requirePoolAdmin, (req, res) =>
   res.json({ success: true, player_awards_locked: locked ? 1 : 0 });
 });
 
+app.put("/api/pools/:poolId/name", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Pool name cannot be empty" });
+  db.prepare("UPDATE pools SET name = ? WHERE id = ?").run(name.trim(), poolId);
+  res.json({ success: true, name: name.trim() });
+});
+
 app.put("/api/pools/:poolId/password", requirePoolAdmin, (req, res) => {
   const poolId = req.params.poolId;
   const { password } = req.body;

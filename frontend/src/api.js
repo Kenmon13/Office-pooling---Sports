@@ -233,6 +233,15 @@ export async function fetchPoolPassword(poolId) {
   return (await fetch(`${API}/pools/${poolId}/password`, { headers: authHeaders() })).json();
 }
 
+export async function renamePool(poolId, name) {
+  const res = await fetch(`${API}/pools/${poolId}/name`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ name }),
+  });
+  return res.json();
+}
+
 export async function changePoolPassword(poolId, password) {
   const res = await fetch(`${API}/pools/${poolId}/password`, {
     method: "PUT",

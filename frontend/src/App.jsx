@@ -23,7 +23,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
@@ -271,6 +271,7 @@ function App() {
 
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [showIssueChat, setShowIssueChat] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [poolPassword, setPoolPassword] = useState(null);
   const [showPoolSettings, setShowPoolSettings] = useState(false);
   const [revealPassword, setRevealPassword] = useState(false);
@@ -283,6 +284,10 @@ function App() {
   const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [editingPoolName, setEditingPoolName] = useState(false);
+  const [newPoolName, setNewPoolName] = useState("");
+  const [renamingPool, setRenamingPool] = useState(false);
+  const [renameError, setRenameError] = useState("");
   const [newPoolPassword, setNewPoolPassword] = useState("");
   const [changePasswordError, setChangePasswordError] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
@@ -738,45 +743,52 @@ function App() {
       <div className="app">
         <header>
           <div className="header-top">
-            <div>
+            <div className="header-title-row">
               <h1><span className="pool-title-emoji">{selectedTournament.emoji}</span> {pool.name}</h1>
-              <p className="pool-meta">
-                {selectedTournament.name}
-                <button onClick={handleSwitchPool} className="btn-small">
-                  Switch Pool
-                </button>
-                <button onClick={() => setShowQuitConfirm(true)} className="btn-small btn-quit">
-                  Quit Pool
-                </button>
-                <button onClick={(e) => {
-                  const url = `${window.location.origin}/join/${pool.id}`;
-                  navigator.clipboard.writeText(url);
-                  const btn = e.currentTarget;
-                  btn.textContent = "Copied!";
-                  setTimeout(() => { btn.textContent = "Share Link"; }, 2000);
-                }} className="btn-small btn-share">
-                  Share Link
-                </button>
-                <button className="btn-small" onClick={async () => {
-                  if (!pool.is_public && !poolPassword) {
-                    const pwRes = await fetchPoolPassword(pool.id);
-                    if (!pwRes.error) setPoolPassword(pwRes.password);
-                  }
-                  const [adminsData, membersData] = await Promise.all([
-                    fetchPoolAdmins(pool.id),
-                    fetchParticipants(pool.id),
-                  ]);
-                  if (!adminsData.error && Array.isArray(adminsData)) {
-                    setPoolAdmins(adminsData);
-                    setIsPoolAdmin(adminsData.some((a) => a.user_id === user.id));
-                  }
-                  if (!membersData.error && Array.isArray(membersData)) setPoolMembers(membersData);
-                  setShowPoolSettings(true);
-                }}>
-                  Pool Settings
-                </button>
-              </p>
+              <button className="hamburger-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
+                <span className={`hamburger-icon ${mobileMenuOpen ? "open" : ""}`}>
+                  <span></span><span></span><span></span>
+                </span>
+              </button>
             </div>
+            <p className="pool-tournament-label">{selectedTournament.name}</p>
+            <div className={`mobile-menu-content ${mobileMenuOpen ? "mobile-open" : ""}`}>
+            <p className="pool-meta">
+              <span className="pool-meta-tournament">{selectedTournament.name}</span>
+              <button onClick={handleSwitchPool} className="btn-small">
+                Switch Pool
+              </button>
+              <button onClick={() => setShowQuitConfirm(true)} className="btn-small btn-quit">
+                Quit Pool
+              </button>
+              <button onClick={(e) => {
+                const url = `${window.location.origin}/join/${pool.id}`;
+                navigator.clipboard.writeText(url);
+                const btn = e.currentTarget;
+                btn.textContent = "Copied!";
+                setTimeout(() => { btn.textContent = "Share Link"; }, 2000);
+              }} className="btn-small btn-share">
+                Share Link
+              </button>
+              <button className="btn-small" onClick={async () => {
+                if (!pool.is_public && !poolPassword) {
+                  const pwRes = await fetchPoolPassword(pool.id);
+                  if (!pwRes.error) setPoolPassword(pwRes.password);
+                }
+                const [adminsData, membersData] = await Promise.all([
+                  fetchPoolAdmins(pool.id),
+                  fetchParticipants(pool.id),
+                ]);
+                if (!adminsData.error && Array.isArray(adminsData)) {
+                  setPoolAdmins(adminsData);
+                  setIsPoolAdmin(adminsData.some((a) => a.user_id === user.id));
+                }
+                if (!membersData.error && Array.isArray(membersData)) setPoolMembers(membersData);
+                setShowPoolSettings(true);
+              }}>
+                Pool Settings
+              </button>
+            </p>
             <div className="header-right">
               <div className="header-user">
                 <button onClick={() => setShowSettings(true)} className="btn-link header-user-name">{user.display_name}</button>
@@ -812,6 +824,7 @@ function App() {
                 <polygon points="44,94 44,82 56,82 56,94" fill="#222" opacity="0.15"/>
               </svg>
             </div>
+            </div>
           </div>
           {announcementBar}
           <nav>
@@ -844,12 +857,38 @@ function App() {
         </main>
 
         {showPoolSettings && (
-          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); setChangingPassword(false); setChangePasswordSuccess(false); }}>
+          <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); setChangingPassword(false); setChangePasswordSuccess(false); setEditingPoolName(false); setRenameError(""); }}>
             <div className="modal-box pool-settings-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Pool Settings</h3>
               <div className="pool-settings-row">
                 <span className="pool-settings-label">Pool name</span>
-                <span className="pool-settings-value">{pool.name}</span>
+                {editingPoolName ? (
+                  <span className="pool-settings-value" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="text"
+                      value={newPoolName}
+                      onChange={(e) => setNewPoolName(e.target.value)}
+                      style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #1e3a1e", background: "#0b1a0b", color: "#d4e8d4", fontSize: 13, width: 140 }}
+                    />
+                    <button className="btn-small" disabled={renamingPool} onClick={async () => {
+                      if (!newPoolName.trim()) return;
+                      setRenamingPool(true);
+                      setRenameError("");
+                      const res = await renamePool(pool.id, newPoolName.trim());
+                      if (res.error) { setRenameError(res.error); setRenamingPool(false); return; }
+                      setPool({ ...pool, name: res.name });
+                      setEditingPoolName(false);
+                      setRenamingPool(false);
+                    }}>{renamingPool ? "..." : "Save"}</button>
+                    <button className="btn-small" onClick={() => { setEditingPoolName(false); setRenameError(""); }}>Cancel</button>
+                    {renameError && <span className="error" style={{ fontSize: 11 }}>{renameError}</span>}
+                  </span>
+                ) : (
+                  <span className="pool-settings-value">
+                    {pool.name}
+                    {isPoolAdmin && <button className="btn-small" style={{ marginLeft: 8 }} onClick={() => { setNewPoolName(pool.name); setEditingPoolName(true); }}>Edit</button>}
+                  </span>
+                )}
               </div>
               <div className="pool-settings-row">
                 <span className="pool-settings-label">Type</span>
