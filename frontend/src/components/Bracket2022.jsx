@@ -198,14 +198,14 @@ function Bracket2022({ predictions = {}, scores = {}, onPick, onScore, saving, k
   return (
     <div className="bracket">
       <div className="bracket-canvas" style={{ position: "relative", width: TOTAL_W, height: TOTAL_H }}>
-        <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+        <svg className="bracket-lines" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
           {LINES.map((l, i) => (
             <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#2a5a2a" strokeWidth="1" />
           ))}
         </svg>
 
         {ROUNDS.map((round, ri) => (
-          <div key={round.name}>
+          <div key={round.name} className="bracket-round">
             <div className="bracket-round-title" style={{ position: "absolute", left: roundLeft(ri), top: 0, width: ROUND_W }}>
               {round.name}
               {pointsMap[round.name] && <span className="bracket-pts-label"> ({pointsMap[round.name]} pts)</span>}

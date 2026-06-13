@@ -739,7 +739,7 @@ function App() {
         <header>
           <div className="header-top">
             <div>
-              <h1>{selectedTournament.emoji} {pool.name}</h1>
+              <h1><span className="pool-title-emoji">{selectedTournament.emoji}</span> {pool.name}</h1>
               <p className="pool-meta">
                 {selectedTournament.name}
                 <button onClick={handleSwitchPool} className="btn-small">

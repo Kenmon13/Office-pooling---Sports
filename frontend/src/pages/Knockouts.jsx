@@ -130,10 +130,10 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
             {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
             <li>Points for each correct winner prediction:
               <div className="ko-points-grid">
-                <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score predicted)"}</span>
-                <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score predicted)"}</span>
-                <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score predicted)"}</span>
-                <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score predicted)"}</span>
+                <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score)"}</span>
+                <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score)"}</span>
+                <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score)"}</span>
+                <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score)"}</span>
               </div>
             </li>
           </ul>
@@ -184,11 +184,11 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
           {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
           <li>Points for each correct winner prediction:
             <div className="ko-points-grid">
-              <span>Round of 32</span><span>{exactScoresDisabled ? "3 pts" : "3 pts (6 if correct score predicted)"}</span>
-              <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score predicted)"}</span>
-              <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score predicted)"}</span>
-              <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score predicted)"}</span>
-              <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score predicted)"}</span>
+              <span>Round of 32</span><span>{exactScoresDisabled ? "3 pts" : "3 pts (6 if correct score)"}</span>
+              <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score)"}</span>
+              <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score)"}</span>
+              <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score)"}</span>
+              <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score)"}</span>
             </div>
           </li>
         </ul>

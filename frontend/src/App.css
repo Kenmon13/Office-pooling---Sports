@@ -1143,9 +1143,9 @@ nav a.active {
 }
 
 .sport-grid {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 140px);
+  gap: 16px;
   justify-content: center;
 }
 
@@ -1160,8 +1160,7 @@ nav a.active {
   border-radius: 16px;
   cursor: pointer;
   transition: all 0.2s;
-  width: 180px;
-  height: 160px;
+  height: 140px;
   justify-content: center;
 }
 
@@ -4638,4 +4637,98 @@ nav a.active {
   width: 11px;
   height: 11px;
   transform: scale(1.4);
+}
+
+.pool-title-emoji {
+  vertical-align: middle;
+}
+
+/* Mobile layout */
+@media (max-width: 600px) {
+  header h1 {
+    font-size: 22px;
+  }
+  .header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    position: relative;
+  }
+
+  .header-top .soccer-ball {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .header-right {
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: flex-end;
+  }
+
+  .header-user {
+    align-items: flex-end;
+  }
+
+  .header-user-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  nav {
+    flex-wrap: wrap;
+  }
+
+  nav a {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .bracket {
+    overflow-x: visible;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .bracket-canvas {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .bracket-lines {
+    display: none;
+  }
+
+  .bracket-round {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .bracket-round-title {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    text-align: center;
+    font-size: 13px !important;
+    padding: 8px;
+    background: #132613;
+    border-radius: 6px;
+  }
+
+  .bracket-match {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    height: auto !important;
+  }
 }
