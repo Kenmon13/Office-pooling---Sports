@@ -1,19 +1,23 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchLeaderboard, fetchWC2022Leaderboard } from "../api";
+import { fetchLeaderboard, fetchWC2022Leaderboard, fetchEPL2627Leaderboard } from "../api";
 
 function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
   const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const prevRankRef = useRef({});
+  const isEPL = tournament === "epl2627";
 
   useEffect(() => {
-    const fetchFn = tournament === "wc2022" ? fetchWC2022Leaderboard : fetchLeaderboard;
+    const fetchFn = tournament === "wc2022" ? fetchWC2022Leaderboard : isEPL ? fetchEPL2627Leaderboard : fetchLeaderboard;
     fetchFn(poolId).then((data) => {
       const withRanks = data.map((p, i) => {
         const currentRank = i + 1;
         const prevRank = prevRankRef.current[p.id] !== undefined ? prevRankRef.current[p.id] : currentRank;
+        if (isEPL) {
+          return { ...p, currentRank, prevRank };
+        }
         const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
         const playerAwards = p.player_awards_points || 0;
         return {
@@ -26,7 +30,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
       prevRankRef.current = Object.fromEntries(data.map((p, i) => [p.id, i + 1]));
       setLeaderboard(withRanks);
     });
-  }, [poolId, tournament, mockDate]);
+  }, [poolId, tournament, isEPL, mockDate]);
 
   return (
     <div className="page">
@@ -47,16 +51,35 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                 <th>#</th>
                 <th>↑↓</th>
                 <th>Name</th>
-                <th>Group</th>
-                <th>KO</th>
-                <th>Champ</th>
-                <th>Awards</th>
+                {isEPL ? (<>
+                  <th>Match</th>
+                  <th>Season</th>
+                </>) : (<>
+                  <th>Group</th>
+                  <th>KO</th>
+                  <th>Champ</th>
+                  <th>Awards</th>
+                </>)}
                 <th>Total</th>
               </tr>
             </thead>
             <tbody>
               {leaderboard.map((p, i) => {
                 const delta = p.prevRank - p.currentRank;
+                if (isEPL) {
+                  return (
+                    <tr key={p.id} className={i < 3 ? `rank-${i + 1}` : ""}>
+                      <td className="rank">{p.currentRank}</td>
+                      <td className="rank-change">
+                        {delta > 0 ? <span className="rank-up">↑</span> : delta < 0 ? <span className="rank-down">↓</span> : <span className="rank-static">–</span>}
+                      </td>
+                      <td className="name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</td>
+                      <td className="pts-sub">{p.match_points || 0}</td>
+                      <td className="pts-sub">{p.season_points || 0}</td>
+                      <td className="points">{p.points || 0}</td>
+                    </tr>
+                  );
+                }
                 const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
                 return (
                   <tr key={p.id} className={i < 3 ? `rank-${i + 1}` : ""}>
@@ -85,6 +108,34 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
         <div className="leaderboard-cards">
           {leaderboard.map((p, i) => {
             const delta = p.prevRank - p.currentRank;
+            if (isEPL) {
+              return (
+                <div key={p.id} className={`leaderboard-card ${i < 3 ? `rank-${i + 1}` : ""}`}>
+                  <div className="lb-card-top">
+                    <div className="lb-card-left">
+                      <span className="lb-card-rank">{p.currentRank}</span>
+                      <span className="rank-change">
+                        {delta > 0 ? <span className="rank-up">↑</span> : delta < 0 ? <span className="rank-down">↓</span> : <span className="rank-static">–</span>}
+                      </span>
+                      <span className="lb-card-name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</span>
+                    </div>
+                    <span className="lb-card-total">{p.points || 0} pts</span>
+                  </div>
+                  {showBreakdown && (
+                    <div className="lb-card-breakdown">
+                      <div className="lb-breakdown-row">
+                        <span className="lb-breakdown-label">Match</span>
+                        <span className="lb-breakdown-val">{p.match_points || 0}</span>
+                      </div>
+                      <div className="lb-breakdown-row">
+                        <span className="lb-breakdown-label">Season</span>
+                        <span className="lb-breakdown-val">{p.season_points || 0}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
             const champNet = (p.champion_bonus || 0) - (p.champion_change_cost || 0);
             const awards = p.player_awards_points || 0;
             return (

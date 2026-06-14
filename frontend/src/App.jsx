@@ -14,6 +14,7 @@ import PLMatchday from "./pages/PLMatchday";
 import SeasonPredictions from "./pages/SeasonPredictions";
 import History from "./pages/History";
 import ViewPicks from "./pages/ViewPicks";
+import ViewEPLPicks from "./pages/ViewEPLPicks";
 import SelectSport from "./pages/SelectSport";
 import SelectTournament from "./pages/SelectTournament";
 import JoinPool from "./pages/JoinPool";
@@ -926,7 +927,11 @@ function App() {
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
-            <Route path="/picks/:participantId" element={<ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} currentUser={participant} />} />
+            <Route path="/picks/:participantId" element={
+              pool.tournament === "epl2627"
+                ? <ViewEPLPicks poolId={pool.id} currentUser={participant} />
+                : <ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} currentUser={participant} />
+            } />
           </Routes>
         </main>
 

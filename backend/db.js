@@ -820,35 +820,68 @@ db.exec(`
   );
 `);
 
-// Seed PL 26/27 teams (projected 2026-27 season)
+// Seed PL 26/27 teams (2026-27 season)
+const PL_TEAMS_2627 = [
+  { name: "Arsenal", code: "ARS", short_name: "Arsenal" },
+  { name: "Aston Villa", code: "AVL", short_name: "Aston Villa" },
+  { name: "AFC Bournemouth", code: "BOU", short_name: "Bournemouth" },
+  { name: "Brentford", code: "BRE", short_name: "Brentford" },
+  { name: "Brighton & Hove Albion", code: "BHA", short_name: "Brighton" },
+  { name: "Chelsea", code: "CHE", short_name: "Chelsea" },
+  { name: "Coventry City", code: "COV", short_name: "Coventry" },
+  { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace" },
+  { name: "Everton", code: "EVE", short_name: "Everton" },
+  { name: "Fulham", code: "FUL", short_name: "Fulham" },
+  { name: "Hull City", code: "HUL", short_name: "Hull City" },
+  { name: "Ipswich Town", code: "IPS", short_name: "Ipswich" },
+  { name: "Leeds United", code: "LEE", short_name: "Leeds" },
+  { name: "Liverpool", code: "LIV", short_name: "Liverpool" },
+  { name: "Manchester City", code: "MCI", short_name: "Man City" },
+  { name: "Manchester United", code: "MUN", short_name: "Man United" },
+  { name: "Newcastle United", code: "NEW", short_name: "Newcastle" },
+  { name: "Nottingham Forest", code: "NFO", short_name: "Nott'm Forest" },
+  { name: "Sunderland", code: "SUN", short_name: "Sunderland" },
+  { name: "Tottenham Hotspur", code: "TOT", short_name: "Tottenham" },
+];
+
 const pl2627Seeded = db.prepare("SELECT COUNT(*) as c FROM pl2627_teams").get().c > 0;
 if (!pl2627Seeded) {
-  const PL_TEAMS = [
-    { name: "Arsenal", code: "ARS", short_name: "Arsenal" },
-    { name: "Aston Villa", code: "AVL", short_name: "Aston Villa" },
-    { name: "AFC Bournemouth", code: "BOU", short_name: "Bournemouth" },
-    { name: "Brentford", code: "BRE", short_name: "Brentford" },
-    { name: "Brighton & Hove Albion", code: "BHA", short_name: "Brighton" },
-    { name: "Chelsea", code: "CHE", short_name: "Chelsea" },
-    { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace" },
-    { name: "Everton", code: "EVE", short_name: "Everton" },
-    { name: "Fulham", code: "FUL", short_name: "Fulham" },
-    { name: "Liverpool", code: "LIV", short_name: "Liverpool" },
-    { name: "Manchester City", code: "MCI", short_name: "Man City" },
-    { name: "Manchester United", code: "MUN", short_name: "Man United" },
-    { name: "Newcastle United", code: "NEW", short_name: "Newcastle" },
-    { name: "Nottingham Forest", code: "NFO", short_name: "Nott'm Forest" },
-    { name: "Tottenham Hotspur", code: "TOT", short_name: "Tottenham" },
-    { name: "West Ham United", code: "WHU", short_name: "West Ham" },
-    { name: "Wolverhampton Wanderers", code: "WOL", short_name: "Wolves" },
-    { name: "Ipswich Town", code: "IPS", short_name: "Ipswich" },
-    { name: "Leicester City", code: "LEI", short_name: "Leicester" },
-    { name: "Southampton", code: "SOU", short_name: "Southampton" },
-  ];
-
   const insertPLTeam = db.prepare("INSERT INTO pl2627_teams (name, code, short_name) VALUES (?, ?, ?)");
-  for (const t of PL_TEAMS) insertPLTeam.run(t.name, t.code, t.short_name);
+  for (const t of PL_TEAMS_2627) insertPLTeam.run(t.name, t.code, t.short_name);
   console.log("Seeded PL 26/27 teams (20 clubs).");
+}
+
+// Migrate existing PL teams from 25/26 to 26/27 if needed
+const existingPLTeams = db.prepare("SELECT code FROM pl2627_teams").all().map(t => t.code);
+const expectedCodes = PL_TEAMS_2627.map(t => t.code);
+const hasOldTeams = existingPLTeams.some(c => !expectedCodes.includes(c));
+if (hasOldTeams) {
+  const relegated = ["WHU", "WOL", "LEI", "SOU"];
+  for (const code of relegated) {
+    const team = db.prepare("SELECT id FROM pl2627_teams WHERE code = ?").get(code);
+    if (team) {
+      // Only delete if no match/prediction data references this team
+      const hasMatches = db.prepare("SELECT COUNT(*) as c FROM pl2627_matches WHERE home_team_id = ? OR away_team_id = ?").get(team.id, team.id).c > 0;
+      const hasSeasonPreds = db.prepare("SELECT COUNT(*) as c FROM pl2627_season_predictions WHERE team_id = ?").get(team.id).c > 0;
+      if (!hasMatches && !hasSeasonPreds) {
+        db.prepare("DELETE FROM pl2627_player_award_picks WHERE team_id = ?").run(team.id);
+        db.prepare("DELETE FROM pl2627_player_award_results WHERE team_id = ?").run(team.id);
+        db.prepare("DELETE FROM pl2627_players WHERE team_id = ?").run(team.id);
+        db.prepare("DELETE FROM pl2627_teams WHERE id = ?").run(team.id);
+        console.log(`Removed old PL team: ${code}`);
+      } else {
+        console.log(`Skipped removing ${code} — has existing match/prediction data.`);
+      }
+    }
+  }
+  // Add new promoted teams
+  const insertPLTeam = db.prepare("INSERT OR IGNORE INTO pl2627_teams (name, code, short_name) VALUES (?, ?, ?)");
+  for (const t of PL_TEAMS_2627) {
+    if (!existingPLTeams.includes(t.code)) {
+      insertPLTeam.run(t.name, t.code, t.short_name);
+      console.log(`Added new PL team: ${t.code}`);
+    }
+  }
 }
 
 module.exports = db;

@@ -49,9 +49,9 @@ export function flag(code) {
 
 const plCrestMap = {
   ARS: 57, AVL: 58, BOU: 1044, BRE: 402, BHA: 397,
-  CHE: 61, CRY: 354, EVE: 62, FUL: 63, LIV: 64,
-  MCI: 65, MUN: 66, NEW: 67, NFO: 351, TOT: 73,
-  WHU: 563, WOL: 76, IPS: 349, LEI: 338, SOU: 340,
+  CHE: 61, COV: 1076, CRY: 354, EVE: 62, FUL: 63,
+  HUL: 322, IPS: 349, LEE: 341, LIV: 64, MCI: 65,
+  MUN: 66, NEW: 67, NFO: 351, SUN: 71, TOT: 73,
 };
 
 export function plCrest(code) {
