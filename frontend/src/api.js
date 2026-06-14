@@ -786,3 +786,11 @@ export async function submitEPL2627PlayerAwardPick(participant_id, award_categor
   });
   return res.json();
 }
+
+export async function adminSyncPLFixtures() {
+  const res = await fetch(`${API}/admin/sync-pl-fixtures`, {
+    method: "POST",
+    headers: { ...authHeaders() },
+  });
+  return res.json();
+}

@@ -16,7 +16,7 @@ const APP_URL = process.env.APP_URL || "https://sportspooling.com";
 
 // Seed on first run
 require("./seed");
-const { startScoreRefresh } = require("./scores");
+const { startScoreRefresh, syncPLFixtures } = require("./scores");
 
 const app = express();
 app.use(cors());
@@ -2954,6 +2954,17 @@ app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
       .run(participant_id, award_category, player_id, player?.team_id || null);
   }
   res.json({ success: true });
+});
+
+// Manual PL fixture sync
+app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
+  try {
+    await syncPLFixtures();
+    const count = db.prepare("SELECT COUNT(*) as c FROM pl2627_matches").get().c;
+    res.json({ success: true, matches: count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Client-side routing fallback

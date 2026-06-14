@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -428,6 +428,29 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
 
       {tab === "backup" && (
         <>
+          <div className="backup-restore-section" style={{ marginBottom: 16 }}>
+            <h3>PL Fixture Sync</h3>
+            <p className="backup-help">Fetch Premier League 26/27 match dates and scores from football-data.org API.</p>
+            <button
+              className="btn-submit"
+              onClick={async () => {
+                setBackupLoading("pl-sync");
+                setBackupMsg(null);
+                try {
+                  const res = await adminSyncPLFixtures();
+                  if (res.error) setBackupMsg({ type: "error", text: res.error });
+                  else setBackupMsg({ type: "success", text: `PL fixtures synced — ${res.matches} matches in DB.` });
+                } catch (err) {
+                  setBackupMsg({ type: "error", text: err.message });
+                }
+                setBackupLoading("");
+              }}
+              disabled={!!backupLoading}
+            >
+              {backupLoading === "pl-sync" ? "Syncing..." : "Sync PL Fixtures"}
+            </button>
+          </div>
+
           <p className="select-subtitle">Download, save, or restore database backups.</p>
 
           {backupMsg && (
