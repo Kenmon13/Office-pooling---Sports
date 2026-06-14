@@ -4932,6 +4932,11 @@ nav a.active {
   border-radius: 6px 6px 0 0;
 }
 
+.zone-divider.champion {
+  background: #3a2a00;
+  color: #f5c518;
+}
+
 .zone-divider.cl {
   background: #0a2a4a;
   color: #5dade2;
@@ -4984,6 +4989,10 @@ nav a.active {
 
 .season-row.locked {
   cursor: default;
+}
+
+.season-row.champion {
+  border-left: 3px solid #f5c518;
 }
 
 .season-row.cl {

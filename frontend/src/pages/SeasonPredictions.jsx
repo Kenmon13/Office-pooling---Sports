@@ -50,14 +50,15 @@ function formatDeadlineFull(dateStr) {
 
 const ZONE_LABELS = {
   1: "Champion",
-  4: "Champions League",
+  2: "Champions League",
   5: "Europa League",
   6: "Conference League",
   18: "Relegation Zone",
 };
 
 function getZone(pos) {
-  if (pos <= 4) return "cl";
+  if (pos === 1) return "champion";
+  if (pos >= 2 && pos <= 4) return "cl";
   if (pos === 5) return "europa";
   if (pos === 6) return "conference";
   if (pos >= 18) return "relegation";
