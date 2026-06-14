@@ -820,35 +820,43 @@ db.exec(`
   );
 `);
 
+// Add manager column if missing
+try { db.exec("ALTER TABLE pl2627_teams ADD COLUMN manager TEXT"); } catch (_) { /* already exists */ }
+
 // Seed PL 26/27 teams (2026-27 season)
 const PL_TEAMS_2627 = [
-  { name: "Arsenal", code: "ARS", short_name: "Arsenal" },
-  { name: "Aston Villa", code: "AVL", short_name: "Aston Villa" },
-  { name: "AFC Bournemouth", code: "BOU", short_name: "Bournemouth" },
-  { name: "Brentford", code: "BRE", short_name: "Brentford" },
-  { name: "Brighton & Hove Albion", code: "BHA", short_name: "Brighton" },
-  { name: "Chelsea", code: "CHE", short_name: "Chelsea" },
-  { name: "Coventry City", code: "COV", short_name: "Coventry" },
-  { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace" },
-  { name: "Everton", code: "EVE", short_name: "Everton" },
-  { name: "Fulham", code: "FUL", short_name: "Fulham" },
-  { name: "Hull City", code: "HUL", short_name: "Hull City" },
-  { name: "Ipswich Town", code: "IPS", short_name: "Ipswich" },
-  { name: "Leeds United", code: "LEE", short_name: "Leeds" },
-  { name: "Liverpool", code: "LIV", short_name: "Liverpool" },
-  { name: "Manchester City", code: "MCI", short_name: "Man City" },
-  { name: "Manchester United", code: "MUN", short_name: "Man United" },
-  { name: "Newcastle United", code: "NEW", short_name: "Newcastle" },
-  { name: "Nottingham Forest", code: "NFO", short_name: "Nott'm Forest" },
-  { name: "Sunderland", code: "SUN", short_name: "Sunderland" },
-  { name: "Tottenham Hotspur", code: "TOT", short_name: "Tottenham" },
+  { name: "Arsenal", code: "ARS", short_name: "Arsenal", manager: "Mikel Arteta" },
+  { name: "Aston Villa", code: "AVL", short_name: "Aston Villa", manager: "Unai Emery" },
+  { name: "AFC Bournemouth", code: "BOU", short_name: "Bournemouth", manager: "Marco Rose" },
+  { name: "Brentford", code: "BRE", short_name: "Brentford", manager: "Keith Andrews" },
+  { name: "Brighton & Hove Albion", code: "BHA", short_name: "Brighton", manager: "Fabian Hürzeler" },
+  { name: "Chelsea", code: "CHE", short_name: "Chelsea", manager: "Xabi Alonso" },
+  { name: "Coventry City", code: "COV", short_name: "Coventry", manager: "Frank Lampard" },
+  { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace", manager: null },
+  { name: "Everton", code: "EVE", short_name: "Everton", manager: "David Moyes" },
+  { name: "Fulham", code: "FUL", short_name: "Fulham", manager: null },
+  { name: "Hull City", code: "HUL", short_name: "Hull City", manager: "Sergej Jakirović" },
+  { name: "Ipswich Town", code: "IPS", short_name: "Ipswich", manager: null },
+  { name: "Leeds United", code: "LEE", short_name: "Leeds", manager: "Daniel Farke" },
+  { name: "Liverpool", code: "LIV", short_name: "Liverpool", manager: "Andoni Iraola" },
+  { name: "Manchester City", code: "MCI", short_name: "Man City", manager: null },
+  { name: "Manchester United", code: "MUN", short_name: "Man United", manager: "Michael Carrick" },
+  { name: "Newcastle United", code: "NEW", short_name: "Newcastle", manager: "Eddie Howe" },
+  { name: "Nottingham Forest", code: "NFO", short_name: "Nott'm Forest", manager: "Vítor Pereira" },
+  { name: "Sunderland", code: "SUN", short_name: "Sunderland", manager: "Régis Le Bris" },
+  { name: "Tottenham Hotspur", code: "TOT", short_name: "Tottenham", manager: "Roberto De Zerbi" },
 ];
 
 const pl2627Seeded = db.prepare("SELECT COUNT(*) as c FROM pl2627_teams").get().c > 0;
 if (!pl2627Seeded) {
-  const insertPLTeam = db.prepare("INSERT INTO pl2627_teams (name, code, short_name) VALUES (?, ?, ?)");
-  for (const t of PL_TEAMS_2627) insertPLTeam.run(t.name, t.code, t.short_name);
+  const insertPLTeam = db.prepare("INSERT INTO pl2627_teams (name, code, short_name, manager) VALUES (?, ?, ?, ?)");
+  for (const t of PL_TEAMS_2627) insertPLTeam.run(t.name, t.code, t.short_name, t.manager);
   console.log("Seeded PL 26/27 teams (20 clubs).");
+}
+
+// Update manager names on existing teams
+for (const t of PL_TEAMS_2627) {
+  db.prepare("UPDATE pl2627_teams SET manager = ? WHERE code = ? AND (manager IS NULL OR manager != ?)").run(t.manager, t.code, t.manager);
 }
 
 // Migrate existing PL teams from 25/26 to 26/27 if needed

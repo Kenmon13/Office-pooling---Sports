@@ -12,11 +12,11 @@ const WC_AWARDS = [
 ];
 
 const EPL_AWARDS = [
-  { key: "golden_boot",   label: "Golden Boot",              emoji: "👟", pts: 2, type: "player", desc: "Awarded to the top goalscorer of the season." },
-  { key: "golden_glove",  label: "Golden Glove",             emoji: "🧤", pts: 2, type: "player", posFilter: "GK", desc: "Awarded to the goalkeeper with the most clean sheets." },
-  { key: "pots",          label: "Player of the Season",     emoji: "🥇", pts: 2, type: "player", desc: "Awarded to the best overall player of the season." },
-  { key: "ypots",         label: "Young Player of the Season", emoji: "🌟", pts: 2, type: "player", desc: "Awarded to the best player aged 23 or younger." },
-  { key: "mots",          label: "Manager of the Season",    emoji: "🧑‍💼", pts: 2, type: "team", desc: "Awarded to the best manager of the season." },
+  { key: "golden_boot",   label: "Golden Boot",              emoji: "👟", pts: 5, type: "player", desc: "Awarded to the top goalscorer of the season." },
+  { key: "golden_glove",  label: "Golden Glove",             emoji: "🧤", pts: 5, type: "player", posFilter: "GK", desc: "Awarded to the goalkeeper with the most clean sheets." },
+  { key: "pots",          label: "Player of the Season",     emoji: "🥇", pts: 5, type: "player", desc: "Awarded to the best overall player of the season." },
+  { key: "ypots",         label: "Young Player of the Season", emoji: "🌟", pts: 5, type: "player", desc: "Awarded to the best player aged 23 or younger." },
+  { key: "mots",          label: "Manager of the Season",    emoji: "🧑‍💼", pts: 5, type: "team", desc: "Awarded to the best manager of the season." },
 ];
 
 function Players({ currentUser, poolId, mockDate, tournament }) {
@@ -147,7 +147,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
                   <span className="award-pick-label">Your pick:</span>
                   <span className="award-pick-value">
                     {award.type === "team"
-                      ? <>{crestFn(pick.team_code)} {pick.team_name}</>
+                      ? <>{crestFn(pick.team_code)} {pick.team_name}{pick.manager ? ` — ${pick.manager}` : ""}</>
                       : <>{crestFn(pick.team_code)} {pick.player_name}</>
                     }
                   </span>
@@ -158,7 +158,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
               {result && !isCorrect && pick && (
                 <div className="award-result-info">
                   Winner: {award.type === "team"
-                    ? <>{crestFn(result.team_code)} {result.team_name}</>
+                    ? <>{crestFn(result.team_code)} {result.team_name}{result.manager ? ` — ${result.manager}` : ""}</>
                     : <>{result.player_name}</>
                   }
                 </div>
@@ -275,7 +275,8 @@ function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isEPL }) {
     ? teams.filter((t) =>
         (t.name || "").toLowerCase().includes(search.toLowerCase()) ||
         (t.short_name || "").toLowerCase().includes(search.toLowerCase()) ||
-        (t.code || "").toLowerCase().includes(search.toLowerCase())
+        (t.code || "").toLowerCase().includes(search.toLowerCase()) ||
+        (t.manager || "").toLowerCase().includes(search.toLowerCase())
       )
     : teams;
 
@@ -304,7 +305,7 @@ function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isEPL }) {
                 onClick={() => { onSelect(t.id); setOpen(false); setSearch(""); }}
                 disabled={saving}
               >
-                {crestFn(t.code)} {t.short_name || t.name}
+                {crestFn(t.code)} {t.short_name || t.name}{t.manager ? ` — ${t.manager}` : ""}
               </button>
             ))}
           </div>
@@ -365,7 +366,7 @@ function AwardRules({ isEPL }) {
         <p className="ko-rules-title">How player award picks work</p>
         <ul>
           <li>Predict the winners of five individual/team awards given at the end of the season.</li>
-          <li>Each correct pick earns <strong>2 pts</strong>.</li>
+          <li>Each correct pick earns <strong>5 pts</strong>.</li>
           <li>The <strong>Manager of the Season</strong> is awarded to a team&apos;s manager — pick the club.</li>
           <li>Picks can be changed freely until locked by the pool admin.</li>
         </ul>

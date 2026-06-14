@@ -54,6 +54,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                 {isEPL ? (<>
                   <th>Match</th>
                   <th>Season</th>
+                  <th>Awards</th>
                 </>) : (<>
                   <th>Group</th>
                   <th>KO</th>
@@ -76,6 +77,9 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                       <td className="name clickable" onClick={() => navigate(`/picks/${p.id}`)}>{p.name}</td>
                       <td className="pts-sub">{p.match_points || 0}</td>
                       <td className="pts-sub">{p.season_points || 0}</td>
+                      <td className={`pts-sub ${(p.award_points || 0) > 0 ? "pts-champ-win" : ""}`}>
+                        {(p.award_points || 0) > 0 ? `+${p.award_points}` : "—"}
+                      </td>
                       <td className="points">{p.points || 0}</td>
                     </tr>
                   );
@@ -130,6 +134,12 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                       <div className="lb-breakdown-row">
                         <span className="lb-breakdown-label">Season</span>
                         <span className="lb-breakdown-val">{p.season_points || 0}</span>
+                      </div>
+                      <div className="lb-breakdown-row">
+                        <span className="lb-breakdown-label">Awards</span>
+                        <span className={`lb-breakdown-val ${(p.award_points || 0) > 0 ? "pts-champ-win" : ""}`}>
+                          {(p.award_points || 0) > 0 ? `+${p.award_points}` : "—"}
+                        </span>
                       </div>
                     </div>
                   )}

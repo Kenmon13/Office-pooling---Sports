@@ -2804,6 +2804,15 @@ app.get("/api/epl2627/leaderboard", (req, res) => {
     seasonByParticipant[sp.participant_id].push(sp);
   }
 
+  // Player award scoring
+  const allAwardPicks = db.prepare("SELECT * FROM pl2627_player_award_picks").all();
+  const awardResults = db.prepare("SELECT * FROM pl2627_player_award_results").all();
+  const awardPicksByParticipant = {};
+  for (const ap of allAwardPicks) {
+    if (!awardPicksByParticipant[ap.participant_id]) awardPicksByParticipant[ap.participant_id] = [];
+    awardPicksByParticipant[ap.participant_id].push(ap);
+  }
+
   const result = participants.map((part) => {
     let matchPoints = 0, matchCorrect = 0, matchExact = 0;
     const preds = predsByParticipant[part.id] || [];
@@ -2856,7 +2865,20 @@ app.get("/api/epl2627/leaderboard", (req, res) => {
       }
     }
 
-    const totalPoints = matchPoints + seasonPoints;
+    // Award scoring (5 pts each)
+    let awardPoints = 0;
+    const myAwardPicks = awardPicksByParticipant[part.id] || [];
+    for (const ap of myAwardPicks) {
+      const result = awardResults.find((r) => r.award_category === ap.award_category);
+      if (!result) continue;
+      if (ap.award_category === "mots") {
+        if (ap.team_id && String(ap.team_id) === String(result.team_id)) awardPoints += 5;
+      } else {
+        if (ap.player_id && String(ap.player_id) === String(result.player_id)) awardPoints += 5;
+      }
+    }
+
+    const totalPoints = matchPoints + seasonPoints + awardPoints;
     return {
       id: part.id,
       name: part.name,
@@ -2865,6 +2887,7 @@ app.get("/api/epl2627/leaderboard", (req, res) => {
       match_correct: matchCorrect,
       match_exact: matchExact,
       season_points: seasonPoints,
+      award_points: awardPoints,
     };
   });
 
@@ -2886,7 +2909,8 @@ app.get("/api/epl2627/player-award-picks/:participantId", (req, res) => {
   const locked = !!(pool && pool.player_awards_locked);
 
   const picks = db.prepare(`SELECT pap.*, p.name as player_name,
-    COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code
+    COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code,
+    COALESCE(t2.manager, t.manager) as manager
     FROM pl2627_player_award_picks pap
     LEFT JOIN pl2627_players p ON pap.player_id = p.id
     LEFT JOIN pl2627_teams t ON p.team_id = t.id
@@ -2894,7 +2918,8 @@ app.get("/api/epl2627/player-award-picks/:participantId", (req, res) => {
     WHERE pap.participant_id = ?`).all(req.params.participantId);
 
   const results = db.prepare(`SELECT par.*, p.name as player_name,
-    COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code
+    COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code,
+    COALESCE(t2.manager, t.manager) as manager
     FROM pl2627_player_award_results par
     LEFT JOIN pl2627_players p ON par.player_id = p.id
     LEFT JOIN pl2627_teams t ON p.team_id = t.id
