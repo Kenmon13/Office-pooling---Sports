@@ -10,6 +10,8 @@ import Matches from "./pages/Matches";
 import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
 import Champion from "./pages/Champion";
+import PLMatchday from "./pages/PLMatchday";
+import SeasonPredictions from "./pages/SeasonPredictions";
 import History from "./pages/History";
 import ViewPicks from "./pages/ViewPicks";
 import SelectSport from "./pages/SelectSport";
@@ -33,6 +35,7 @@ import "./App.css";
 const TOURNAMENT_META = {
   wc2026: { id: "wc2026", name: "World Cup 2026", emoji: "🏆" },
   wc2022: { id: "wc2022", name: "World Cup 2022", emoji: "🏆" },
+  epl2627: { id: "epl2627", name: "Premier League 26/27", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
 };
 
 function App() {
@@ -889,9 +892,14 @@ function App() {
           </div>
           {announcementBar}
           <nav>
-            <NavLink to="/">Groups</NavLink>
-            <NavLink to="/knockouts">Knockouts</NavLink>
-            <NavLink to="/champion">Winner</NavLink>
+            {pool.tournament === "epl2627" ? (<>
+              <NavLink to="/">Matchday</NavLink>
+              <NavLink to="/season">Season</NavLink>
+            </>) : (<>
+              <NavLink to="/">Groups</NavLink>
+              <NavLink to="/knockouts">Knockouts</NavLink>
+              <NavLink to="/champion">Winner</NavLink>
+            </>)}
             <NavLink to="/players">Awards</NavLink>
             <NavLink to="/stats">Stats</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
@@ -905,10 +913,15 @@ function App() {
             <TestControls pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} tzOffset={testTzOffset} onTzOffsetChange={setTestTzOffset} />
           )}
           <Routes>
-            <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} groupStageUnlocked={groupStageUnlocked} />} />
-            <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} exactScoresDisabled={exactScoresDisabled} />} />
-            <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
-            <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} />} />
+            {pool.tournament === "epl2627" ? (<>
+              <Route path="/" element={<PLMatchday currentUser={participant} />} />
+              <Route path="/season" element={<SeasonPredictions currentUser={participant} />} />
+            </>) : (<>
+              <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} groupStageUnlocked={groupStageUnlocked} />} />
+              <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} exactScoresDisabled={exactScoresDisabled} />} />
+              <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
+            </>)}
+            <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} tournament={pool.tournament} />} />
             <Route path="/stats" element={<Stats poolId={pool.id} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />

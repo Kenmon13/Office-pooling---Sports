@@ -562,6 +562,12 @@ if (!existingPublicPool) {
   db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("World Cup 2026 Open", "soccer", "wc2026", "");
 }
 
+// Seed default public pool for EPL 26/27
+const existingEPLPool = db.prepare("SELECT id FROM pools WHERE name = 'English Premier League 26/27' AND is_public = 1").get();
+if (!existingEPLPool) {
+  db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("English Premier League 26/27", "soccer", "epl2627", "");
+}
+
 // Migration: update WC2026 group stage match dates to official FIFA schedule
 const WC2026_MATCH_DATES = [
   // Group A
@@ -742,6 +748,107 @@ try {
   }
 } catch (err) {
   console.log("Could not seed WC players:", err.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Premier League 26/27 Schema
+// ═══════════════════════════════════════════════════════════════════════════════
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pl2627_teams (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    code TEXT NOT NULL UNIQUE,
+    short_name TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS pl2627_matches (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    matchday     INTEGER NOT NULL CHECK(matchday BETWEEN 1 AND 38),
+    home_team_id INTEGER NOT NULL REFERENCES pl2627_teams(id),
+    away_team_id INTEGER NOT NULL REFERENCES pl2627_teams(id),
+    match_date   TEXT,
+    home_score   INTEGER,
+    away_score   INTEGER,
+    status       TEXT DEFAULT 'upcoming' CHECK(status IN ('upcoming','live','finished'))
+  );
+
+  CREATE TABLE IF NOT EXISTS pl2627_match_predictions (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id       INTEGER NOT NULL REFERENCES participants(id),
+    match_id             INTEGER NOT NULL REFERENCES pl2627_matches(id),
+    predicted_outcome    TEXT NOT NULL CHECK(predicted_outcome IN ('home','draw','away')),
+    predicted_home_score INTEGER,
+    predicted_away_score INTEGER,
+    created_at           TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, match_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS pl2627_season_predictions (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    position       INTEGER NOT NULL CHECK(position BETWEEN 1 AND 20),
+    team_id        INTEGER NOT NULL REFERENCES pl2627_teams(id),
+    created_at     TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, position)
+  );
+
+  CREATE TABLE IF NOT EXISTS pl2627_players (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name     TEXT NOT NULL,
+    team_id  INTEGER NOT NULL REFERENCES pl2627_teams(id),
+    position TEXT NOT NULL CHECK(position IN ('GK','DF','MF','FW')),
+    UNIQUE(name, team_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS pl2627_player_award_picks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id  INTEGER NOT NULL REFERENCES participants(id),
+    award_category  TEXT NOT NULL CHECK(award_category IN ('golden_boot','golden_glove','pots','ypots','mots')),
+    player_id       INTEGER REFERENCES pl2627_players(id),
+    team_id         INTEGER REFERENCES pl2627_teams(id),
+    updated_at      TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, award_category)
+  );
+
+  CREATE TABLE IF NOT EXISTS pl2627_player_award_results (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    award_category TEXT NOT NULL UNIQUE CHECK(award_category IN ('golden_boot','golden_glove','pots','ypots','mots')),
+    player_id      INTEGER REFERENCES pl2627_players(id),
+    team_id        INTEGER REFERENCES pl2627_teams(id),
+    set_at         TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// Seed PL 26/27 teams (projected 2026-27 season)
+const pl2627Seeded = db.prepare("SELECT COUNT(*) as c FROM pl2627_teams").get().c > 0;
+if (!pl2627Seeded) {
+  const PL_TEAMS = [
+    { name: "Arsenal", code: "ARS", short_name: "Arsenal" },
+    { name: "Aston Villa", code: "AVL", short_name: "Aston Villa" },
+    { name: "AFC Bournemouth", code: "BOU", short_name: "Bournemouth" },
+    { name: "Brentford", code: "BRE", short_name: "Brentford" },
+    { name: "Brighton & Hove Albion", code: "BHA", short_name: "Brighton" },
+    { name: "Chelsea", code: "CHE", short_name: "Chelsea" },
+    { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace" },
+    { name: "Everton", code: "EVE", short_name: "Everton" },
+    { name: "Fulham", code: "FUL", short_name: "Fulham" },
+    { name: "Liverpool", code: "LIV", short_name: "Liverpool" },
+    { name: "Manchester City", code: "MCI", short_name: "Man City" },
+    { name: "Manchester United", code: "MUN", short_name: "Man United" },
+    { name: "Newcastle United", code: "NEW", short_name: "Newcastle" },
+    { name: "Nottingham Forest", code: "NFO", short_name: "Nott'm Forest" },
+    { name: "Tottenham Hotspur", code: "TOT", short_name: "Tottenham" },
+    { name: "West Ham United", code: "WHU", short_name: "West Ham" },
+    { name: "Wolverhampton Wanderers", code: "WOL", short_name: "Wolves" },
+    { name: "Ipswich Town", code: "IPS", short_name: "Ipswich" },
+    { name: "Leicester City", code: "LEI", short_name: "Leicester" },
+    { name: "Southampton", code: "SOU", short_name: "Southampton" },
+  ];
+
+  const insertPLTeam = db.prepare("INSERT INTO pl2627_teams (name, code, short_name) VALUES (?, ?, ?)");
+  for (const t of PL_TEAMS) insertPLTeam.run(t.name, t.code, t.short_name);
+  console.log("Seeded PL 26/27 teams (20 clubs).");
 }
 
 module.exports = db;

@@ -715,3 +715,74 @@ export async function fetchAwardPickStats(poolId) {
   const res = await fetch(`${API}/stats/award-picks?pool_id=${poolId}`, { headers: authHeaders() });
   return res.json();
 }
+
+// ── EPL 26/27 ────────────────────────────────────────────────────────────────
+
+export async function fetchEPL2627Teams() {
+  return (await fetch(`${API}/epl2627/teams`)).json();
+}
+
+export async function fetchEPL2627Matches(matchday) {
+  const q = matchday ? `?matchday=${matchday}` : "";
+  return (await fetch(`${API}/epl2627/matches${q}`)).json();
+}
+
+export async function fetchEPL2627Standings() {
+  return (await fetch(`${API}/epl2627/standings`)).json();
+}
+
+export async function fetchEPL2627MatchdayDeadline(matchday) {
+  return (await fetch(`${API}/epl2627/matchday-deadline?matchday=${matchday}`)).json();
+}
+
+export async function fetchEPL2627SeasonDeadline() {
+  return (await fetch(`${API}/epl2627/season-deadline`)).json();
+}
+
+export async function fetchEPL2627MatchPredictions(participantId, matchday) {
+  const q = matchday ? `?matchday=${matchday}` : "";
+  return (await fetch(`${API}/epl2627/match-predictions/${participantId}${q}`, { headers: authHeaders() })).json();
+}
+
+export async function submitEPL2627MatchPredictions(participant_id, predictions) {
+  const res = await fetch(`${API}/epl2627/match-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ participant_id, predictions }),
+  });
+  return res.json();
+}
+
+export async function fetchEPL2627SeasonPredictions(participantId) {
+  return (await fetch(`${API}/epl2627/season-predictions/${participantId}`, { headers: authHeaders() })).json();
+}
+
+export async function submitEPL2627SeasonPredictions(participant_id, predictions) {
+  const res = await fetch(`${API}/epl2627/season-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ participant_id, predictions }),
+  });
+  return res.json();
+}
+
+export async function fetchEPL2627Leaderboard(poolId) {
+  return (await fetch(`${API}/epl2627/leaderboard?pool_id=${poolId}`, { headers: authHeaders() })).json();
+}
+
+export async function fetchEPL2627Players() {
+  return (await fetch(`${API}/epl2627/players`)).json();
+}
+
+export async function fetchEPL2627PlayerAwardPicks(participantId, poolId) {
+  return (await fetch(`${API}/epl2627/player-award-picks/${participantId}?pool_id=${poolId}`, { headers: authHeaders() })).json();
+}
+
+export async function submitEPL2627PlayerAwardPick(participant_id, award_category, player_id, team_id) {
+  const res = await fetch(`${API}/epl2627/player-award-picks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ participant_id, award_category, player_id, team_id }),
+  });
+  return res.json();
+}

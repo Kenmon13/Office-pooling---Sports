@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchWcPlayers, fetchPlayerAwardPicks, submitPlayerAwardPick, fetchGroups } from "../api";
-import { flag } from "../flags";
+import { fetchWcPlayers, fetchPlayerAwardPicks, submitPlayerAwardPick, fetchGroups,
+  fetchEPL2627Players, fetchEPL2627PlayerAwardPicks, submitEPL2627PlayerAwardPick, fetchEPL2627Teams } from "../api";
+import { flag, plCrest } from "../flags";
 
-const AWARDS = [
+const WC_AWARDS = [
   { key: "golden_ball",   label: "Golden Ball",          emoji: "🥇", pts: 5, type: "player", desc: "Awarded to the best overall player of the tournament." },
   { key: "golden_boot",   label: "Golden Boot",          emoji: "👟", pts: 5, type: "player", desc: "Awarded to the top goalscorer of the tournament." },
   { key: "golden_glove",  label: "Golden Glove",         emoji: "🧤", pts: 5, type: "player", posFilter: "GK", desc: "Awarded to the best goalkeeper of the tournament." },
@@ -10,7 +11,18 @@ const AWARDS = [
   { key: "fair_play",     label: "FIFA Fair Play Trophy", emoji: "🤝", pts: 2, type: "team", desc: "Awarded to the team with the best fair play record (fewest fouls, cards, and disciplinary incidents)." },
 ];
 
-function Players({ currentUser, poolId, mockDate }) {
+const EPL_AWARDS = [
+  { key: "golden_boot",   label: "Golden Boot",              emoji: "👟", pts: 2, type: "player", desc: "Awarded to the top goalscorer of the season." },
+  { key: "golden_glove",  label: "Golden Glove",             emoji: "🧤", pts: 2, type: "player", posFilter: "GK", desc: "Awarded to the goalkeeper with the most clean sheets." },
+  { key: "pots",          label: "Player of the Season",     emoji: "🥇", pts: 2, type: "player", desc: "Awarded to the best overall player of the season." },
+  { key: "ypots",         label: "Young Player of the Season", emoji: "🌟", pts: 2, type: "player", desc: "Awarded to the best player aged 23 or younger." },
+  { key: "mots",          label: "Manager of the Season",    emoji: "🧑‍💼", pts: 2, type: "team", desc: "Awarded to the best manager of the season." },
+];
+
+function Players({ currentUser, poolId, mockDate, tournament }) {
+  const isEPL = tournament === "epl2627";
+  const AWARDS = isEPL ? EPL_AWARDS : WC_AWARDS;
+
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [picks, setPicks] = useState({});
@@ -20,37 +32,48 @@ function Players({ currentUser, poolId, mockDate }) {
   const [saving, setSaving] = useState({});
   const [msg, setMsg] = useState("");
 
+  const crestFn = isEPL ? plCrest : flag;
+
   useEffect(() => {
-    fetchWcPlayers().then(setPlayers);
-    fetchGroups().then((gs) => {
-      const allTeams = gs.flatMap((g) => (g.teams || []).map((t) => ({ ...t, groupName: g.name })));
-      setTeams(allTeams);
-    });
-  }, []);
+    if (isEPL) {
+      fetchEPL2627Players().then(setPlayers);
+      fetchEPL2627Teams().then(setTeams);
+    } else {
+      fetchWcPlayers().then(setPlayers);
+      fetchGroups().then((gs) => {
+        const allTeams = gs.flatMap((g) => (g.teams || []).map((t) => ({ ...t, groupName: g.name })));
+        setTeams(allTeams);
+      });
+    }
+  }, [isEPL]);
 
   useEffect(() => {
     if (!currentUser) return;
-    fetchPlayerAwardPicks(currentUser.id, poolId).then((data) => {
+    const fetchFn = isEPL ? fetchEPL2627PlayerAwardPicks : fetchPlayerAwardPicks;
+    fetchFn(currentUser.id, poolId).then((data) => {
       const pickMap = {};
-      for (const p of data.picks || []) pickMap[p.award_category] = p;
+      for (const p of (data.picks || data)) pickMap[p.award_category] = p;
       setPicks(pickMap);
       setResults(data.results || []);
       setLocked(!!data.locked);
       setLoaded(true);
     }).catch(() => setLoaded(true));
-  }, [currentUser, poolId, mockDate]);
+  }, [currentUser, poolId, mockDate, isEPL]);
 
   const handleSave = async (awardKey, playerId, teamId) => {
     if (!currentUser) return;
     setSaving((s) => ({ ...s, [awardKey]: true }));
     setMsg("");
-    const res = await submitPlayerAwardPick(currentUser.id, awardKey, playerId, teamId);
+    const res = isEPL
+      ? await submitEPL2627PlayerAwardPick(currentUser.id, awardKey, playerId, teamId)
+      : await submitPlayerAwardPick(currentUser.id, awardKey, playerId, teamId);
     if (res.error) {
       setMsg(res.error);
     } else {
-      const data = await fetchPlayerAwardPicks(currentUser.id, poolId);
+      const fetchFn = isEPL ? fetchEPL2627PlayerAwardPicks : fetchPlayerAwardPicks;
+      const data = await fetchFn(currentUser.id, poolId);
       const pickMap = {};
-      for (const p of data.picks || []) pickMap[p.award_category] = p;
+      for (const p of (data.picks || data)) pickMap[p.award_category] = p;
       setPicks(pickMap);
       setResults(data.results || []);
       setMsg("Pick saved!");
@@ -64,7 +87,7 @@ function Players({ currentUser, poolId, mockDate }) {
     return (
       <div className="page">
         <h2>Player Awards</h2>
-        <AwardRules />
+        <AwardRules isEPL={isEPL} />
         <p className="notice">Join the pool to make your player award picks.</p>
       </div>
     );
@@ -76,7 +99,7 @@ function Players({ currentUser, poolId, mockDate }) {
   return (
     <div className="page">
       <h2>Player Awards</h2>
-      <AwardRules />
+      <AwardRules isEPL={isEPL} />
 
       {loaded && !locked && missingCount > 0 && (
         <div className="notif-window-card win-urgent" style={{ marginBottom: 16 }}>
@@ -86,7 +109,7 @@ function Players({ currentUser, poolId, mockDate }) {
             <span className="win-badge win-badge-open">Open</span>
           </div>
           <div className="win-card-body">
-            {pickedCount}/5 awards picked
+            {pickedCount}/{AWARDS.length} awards picked
           </div>
           <div className="win-missed">
             ⚠️ {pickedCount === 0 ? "No award picks made" : `${missingCount} award${missingCount === 1 ? "" : "s"} remaining`}
@@ -124,8 +147,8 @@ function Players({ currentUser, poolId, mockDate }) {
                   <span className="award-pick-label">Your pick:</span>
                   <span className="award-pick-value">
                     {award.type === "team"
-                      ? <>{flag(pick.team_code)} {pick.team_name}</>
-                      : <>{flag(pick.team_code)} {pick.player_name}</>
+                      ? <>{crestFn(pick.team_code)} {pick.team_name}</>
+                      : <>{crestFn(pick.team_code)} {pick.player_name}</>
                     }
                   </span>
                   {isCorrect && <span className="award-correct-badge">+{award.pts} pts</span>}
@@ -135,7 +158,7 @@ function Players({ currentUser, poolId, mockDate }) {
               {result && !isCorrect && pick && (
                 <div className="award-result-info">
                   Winner: {award.type === "team"
-                    ? <>{flag(result.team_code)} {result.team_name}</>
+                    ? <>{crestFn(result.team_code)} {result.team_name}</>
                     : <>{result.player_name}</>
                   }
                 </div>
@@ -148,6 +171,8 @@ function Players({ currentUser, poolId, mockDate }) {
                       currentPick={pick}
                       onSelect={(teamId) => handleSave(award.key, null, teamId)}
                       saving={!!saving[award.key]}
+                      crestFn={crestFn}
+                      isEPL={isEPL}
                     />
                   : <PlayerPicker
                       players={players.filter((p) => {
@@ -158,6 +183,7 @@ function Players({ currentUser, poolId, mockDate }) {
                       currentPick={pick}
                       onSelect={(playerId) => handleSave(award.key, playerId, null)}
                       saving={!!saving[award.key]}
+                      crestFn={crestFn}
                     />
               )}
             </div>
@@ -170,7 +196,7 @@ function Players({ currentUser, poolId, mockDate }) {
   );
 }
 
-function PlayerPicker({ players, currentPick, onSelect, saving }) {
+function PlayerPicker({ players, currentPick, onSelect, saving, crestFn }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -184,16 +210,17 @@ function PlayerPicker({ players, currentPick, onSelect, saving }) {
   const filtered = search.length > 0
     ? players.filter((p) =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.team_name.toLowerCase().includes(search.toLowerCase()) ||
-        p.team_code.toLowerCase().includes(search.toLowerCase())
+        (p.team_name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.team_code || "").toLowerCase().includes(search.toLowerCase())
       )
     : players;
 
   // Group by team
   const grouped = {};
   for (const p of filtered) {
-    if (!grouped[p.team_name]) grouped[p.team_name] = { code: p.team_code, players: [] };
-    grouped[p.team_name].players.push(p);
+    const tName = p.team_name || p.team_short || "Unknown";
+    if (!grouped[tName]) grouped[tName] = { code: p.team_code, players: [] };
+    grouped[tName].players.push(p);
   }
 
   return (
@@ -214,7 +241,7 @@ function PlayerPicker({ players, currentPick, onSelect, saving }) {
           )}
           {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([teamName, data]) => (
             <div key={teamName} className="player-dropdown-group">
-              <div className="player-dropdown-team">{flag(data.code)} {teamName}</div>
+              <div className="player-dropdown-team">{crestFn(data.code)} {teamName}</div>
               {data.players.map((p) => (
                 <button
                   key={p.id}
@@ -233,7 +260,7 @@ function PlayerPicker({ players, currentPick, onSelect, saving }) {
   );
 }
 
-function TeamPicker({ teams, currentPick, onSelect, saving }) {
+function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isEPL }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -246,12 +273,47 @@ function TeamPicker({ teams, currentPick, onSelect, saving }) {
 
   const filtered = search.length > 0
     ? teams.filter((t) =>
-        t.name.toLowerCase().includes(search.toLowerCase()) ||
-        t.code.toLowerCase().includes(search.toLowerCase())
+        (t.name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (t.short_name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (t.code || "").toLowerCase().includes(search.toLowerCase())
       )
     : teams;
 
-  // Group by group letter
+  if (isEPL) {
+    // Flat list for EPL teams
+    return (
+      <div className="player-picker" ref={ref}>
+        <input
+          type="text"
+          className="player-search"
+          placeholder="Search team..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          disabled={saving}
+        />
+        {open && (
+          <div className="player-dropdown">
+            {filtered.length === 0 && (
+              <div className="player-dropdown-empty">No teams found</div>
+            )}
+            {filtered.sort((a, b) => (a.short_name || a.name).localeCompare(b.short_name || b.name)).map((t) => (
+              <button
+                key={t.id}
+                className={`player-dropdown-item ${currentPick?.team_id === t.id ? "current" : ""}`}
+                onClick={() => { onSelect(t.id); setOpen(false); setSearch(""); }}
+                disabled={saving}
+              >
+                {crestFn(t.code)} {t.short_name || t.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Group by group letter for WC
   const grouped = {};
   for (const t of filtered) {
     const gKey = `Group ${t.groupName}`;
@@ -285,7 +347,7 @@ function TeamPicker({ teams, currentPick, onSelect, saving }) {
                   onClick={() => { onSelect(t.id); setOpen(false); setSearch(""); }}
                   disabled={saving}
                 >
-                  {flag(t.code)} {t.name}
+                  {crestFn(t.code)} {t.name}
                 </button>
               ))}
             </div>
@@ -296,7 +358,21 @@ function TeamPicker({ teams, currentPick, onSelect, saving }) {
   );
 }
 
-function AwardRules() {
+function AwardRules({ isEPL }) {
+  if (isEPL) {
+    return (
+      <div className="ko-rules">
+        <p className="ko-rules-title">How player award picks work</p>
+        <ul>
+          <li>Predict the winners of five individual/team awards given at the end of the season.</li>
+          <li>Each correct pick earns <strong>2 pts</strong>.</li>
+          <li>The <strong>Manager of the Season</strong> is awarded to a team&apos;s manager — pick the club.</li>
+          <li>Picks can be changed freely until locked by the pool admin.</li>
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="ko-rules">
       <p className="ko-rules-title">How player award picks work</p>

@@ -2626,6 +2626,311 @@ app.get("/api/stats/award-picks", (req, res) => {
   res.json(awards);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Premier League 26/27 API
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get("/api/epl2627/teams", (req, res) => {
+  res.json(db.prepare("SELECT * FROM pl2627_teams ORDER BY name").all());
+});
+
+app.get("/api/epl2627/matches", (req, res) => {
+  const { matchday } = req.query;
+  let query = `SELECT m.*, ht.name as home_team, ht.code as home_code, ht.short_name as home_short,
+    at.name as away_team, at.code as away_code, at.short_name as away_short
+    FROM pl2627_matches m
+    JOIN pl2627_teams ht ON m.home_team_id = ht.id
+    JOIN pl2627_teams at ON m.away_team_id = at.id`;
+  const params = [];
+  if (matchday) { query += " WHERE m.matchday = ?"; params.push(Number(matchday)); }
+  query += " ORDER BY m.matchday, m.match_date, m.id";
+  res.json(db.prepare(query).all(...params));
+});
+
+app.get("/api/epl2627/standings", (req, res) => {
+  const teams = db.prepare("SELECT * FROM pl2627_teams").all();
+  const matches = db.prepare("SELECT * FROM pl2627_matches WHERE status IN ('finished', 'live')").all();
+  const stats = {};
+  for (const t of teams) {
+    stats[t.id] = { team_id: t.id, name: t.name, code: t.code, short_name: t.short_name, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
+  }
+  for (const m of matches) {
+    const h = stats[m.home_team_id], a = stats[m.away_team_id];
+    if (!h || !a) continue;
+    h.played++; a.played++;
+    h.gf += m.home_score; h.ga += m.away_score;
+    a.gf += m.away_score; a.ga += m.home_score;
+    if (m.home_score > m.away_score) { h.won++; h.points += 3; a.lost++; }
+    else if (m.away_score > m.home_score) { a.won++; a.points += 3; h.lost++; }
+    else { h.drawn++; h.points++; a.drawn++; a.points++; }
+  }
+  const table = Object.values(stats).sort((a, b) =>
+    b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.name.localeCompare(b.name)
+  );
+  res.json(table);
+});
+
+app.get("/api/epl2627/matchday-deadline", (req, res) => {
+  const { matchday } = req.query;
+  if (!matchday) return res.json({ deadline: null });
+  const row = db.prepare("SELECT MIN(match_date) as deadline FROM pl2627_matches WHERE matchday = ? AND match_date IS NOT NULL").get(Number(matchday));
+  res.json({ deadline: row?.deadline || null });
+});
+
+app.get("/api/epl2627/season-deadline", (req, res) => {
+  const row = db.prepare("SELECT MIN(match_date) as deadline FROM pl2627_matches WHERE matchday = 1 AND match_date IS NOT NULL").get();
+  res.json({ deadline: row?.deadline || null });
+});
+
+// Match predictions
+app.get("/api/epl2627/match-predictions/:participantId", (req, res) => {
+  const { participantId } = req.params;
+  const { matchday } = req.query;
+  let query = "SELECT * FROM pl2627_match_predictions WHERE participant_id = ?";
+  const params = [participantId];
+  if (matchday) {
+    query += " AND match_id IN (SELECT id FROM pl2627_matches WHERE matchday = ?)";
+    params.push(Number(matchday));
+  }
+  res.json(db.prepare(query).all(...params));
+});
+
+app.post("/api/epl2627/match-predictions", authenticateToken, (req, res) => {
+  const { participant_id, predictions } = req.body;
+  if (!participant_id || !Array.isArray(predictions)) return res.status(400).json({ error: "participant_id and predictions array required" });
+
+  const now = new Date();
+  const upsert = db.prepare(`INSERT INTO pl2627_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score)
+    VALUES (?, ?, ?, ?, ?) ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_outcome = excluded.predicted_outcome,
+    predicted_home_score = excluded.predicted_home_score, predicted_away_score = excluded.predicted_away_score`);
+
+  let saved = 0;
+  const errors = [];
+  for (const p of predictions) {
+    const match = db.prepare("SELECT matchday, match_date FROM pl2627_matches WHERE id = ?").get(p.match_id);
+    if (!match) { errors.push(`Match ${p.match_id} not found`); continue; }
+    // Check matchday lock: earliest match_date in this matchday
+    const deadline = db.prepare("SELECT MIN(match_date) as d FROM pl2627_matches WHERE matchday = ? AND match_date IS NOT NULL").get(match.matchday);
+    if (deadline?.d && now >= new Date(deadline.d.replace(" ", "T") + "Z")) {
+      errors.push(`Matchday ${match.matchday} is locked`);
+      continue;
+    }
+    upsert.run(participant_id, p.match_id, p.predicted_outcome, p.predicted_home_score ?? null, p.predicted_away_score ?? null);
+    saved++;
+  }
+  if (errors.length > 0 && saved === 0) return res.status(400).json({ error: errors.join("; ") });
+  res.json({ success: true, saved, errors });
+});
+
+// Season predictions
+app.get("/api/epl2627/season-predictions/:participantId", (req, res) => {
+  const preds = db.prepare(`SELECT sp.*, t.name as team_name, t.code as team_code, t.short_name
+    FROM pl2627_season_predictions sp JOIN pl2627_teams t ON sp.team_id = t.id
+    WHERE sp.participant_id = ? ORDER BY sp.position`).all(req.params.participantId);
+  res.json(preds);
+});
+
+app.post("/api/epl2627/season-predictions", authenticateToken, (req, res) => {
+  const { participant_id, predictions } = req.body;
+  if (!participant_id || !Array.isArray(predictions) || predictions.length !== 20) {
+    return res.status(400).json({ error: "Must predict all 20 positions" });
+  }
+  // Check lock: matchday 1 started?
+  const deadline = db.prepare("SELECT MIN(match_date) as d FROM pl2627_matches WHERE matchday = 1 AND match_date IS NOT NULL").get();
+  if (deadline?.d && new Date() >= new Date(deadline.d.replace(" ", "T") + "Z")) {
+    return res.status(400).json({ error: "Season predictions are locked — the season has started" });
+  }
+  const upsert = db.prepare(`INSERT INTO pl2627_season_predictions (participant_id, position, team_id)
+    VALUES (?, ?, ?) ON CONFLICT(participant_id, position) DO UPDATE SET team_id = excluded.team_id`);
+  for (const p of predictions) {
+    upsert.run(participant_id, p.position, p.team_id);
+  }
+  res.json({ success: true });
+});
+
+// PL Leaderboard
+app.get("/api/epl2627/leaderboard", (req, res) => {
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.status(400).json({ error: "pool_id required" });
+
+  const participants = db.prepare("SELECT p.* FROM participants p JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND u.is_admin = 0 ORDER BY p.name").all(poolId);
+  const finishedMatches = db.prepare("SELECT * FROM pl2627_matches WHERE status = 'finished'").all();
+  const allMatchPreds = db.prepare("SELECT * FROM pl2627_match_predictions").all();
+
+  // Build actual standings for season scoring
+  const teams = db.prepare("SELECT * FROM pl2627_teams").all();
+  const totalMatches = db.prepare("SELECT COUNT(*) as c FROM pl2627_matches").get().c;
+  const finishedCount = finishedMatches.length;
+  const seasonComplete = totalMatches > 0 && finishedCount === totalMatches;
+
+  const standings = {};
+  for (const t of teams) standings[t.id] = { team_id: t.id, points: 0, gf: 0, ga: 0 };
+  for (const m of finishedMatches) {
+    const h = standings[m.home_team_id], a = standings[m.away_team_id];
+    if (!h || !a) continue;
+    h.gf += m.home_score; h.ga += m.away_score;
+    a.gf += m.away_score; a.ga += m.home_score;
+    if (m.home_score > m.away_score) h.points += 3;
+    else if (m.away_score > m.home_score) a.points += 3;
+    else { h.points++; a.points++; }
+  }
+  const actualTable = Object.values(standings).sort((a, b) =>
+    b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf
+  );
+  const actualPositions = {};
+  actualTable.forEach((t, i) => { actualPositions[t.team_id] = i + 1; });
+
+  // Match results lookup
+  const matchResults = {};
+  for (const m of finishedMatches) {
+    if (m.home_score > m.away_score) matchResults[m.id] = "home";
+    else if (m.away_score > m.home_score) matchResults[m.id] = "away";
+    else matchResults[m.id] = "draw";
+  }
+  const matchScores = {};
+  for (const m of finishedMatches) matchScores[m.id] = { home: m.home_score, away: m.away_score };
+
+  // Per-participant predictions
+  const predsByParticipant = {};
+  for (const p of allMatchPreds) {
+    if (!predsByParticipant[p.participant_id]) predsByParticipant[p.participant_id] = [];
+    predsByParticipant[p.participant_id].push(p);
+  }
+
+  const allSeasonPreds = db.prepare("SELECT * FROM pl2627_season_predictions").all();
+  const seasonByParticipant = {};
+  for (const sp of allSeasonPreds) {
+    if (!seasonByParticipant[sp.participant_id]) seasonByParticipant[sp.participant_id] = [];
+    seasonByParticipant[sp.participant_id].push(sp);
+  }
+
+  const result = participants.map((part) => {
+    let matchPoints = 0, matchCorrect = 0, matchExact = 0;
+    const preds = predsByParticipant[part.id] || [];
+    for (const p of preds) {
+      const actual = matchResults[p.match_id];
+      if (!actual) continue;
+      if (p.predicted_outcome === actual) {
+        const score = matchScores[p.match_id];
+        if (p.predicted_home_score != null && p.predicted_away_score != null &&
+            p.predicted_home_score === score.home && p.predicted_away_score === score.away) {
+          matchPoints += 4;
+          matchExact++;
+        } else {
+          matchPoints += 2;
+        }
+        matchCorrect++;
+      }
+    }
+
+    let seasonPoints = 0;
+    if (seasonComplete) {
+      const sp = seasonByParticipant[part.id] || [];
+      const predictedTeams = {};
+      for (const s of sp) predictedTeams[s.position] = s.team_id;
+
+      // Champion (pos 1): 25 pts
+      if (predictedTeams[1] && actualPositions[predictedTeams[1]] === 1) seasonPoints += 25;
+
+      // CL top 4: 5 pts each
+      const predTop4 = [1, 2, 3, 4].map((p) => predictedTeams[p]).filter(Boolean);
+      for (const tid of predTop4) {
+        if (actualPositions[tid] && actualPositions[tid] <= 4) seasonPoints += 5;
+      }
+
+      // Europa (pos 5): 2 pts
+      if (predictedTeams[5] && actualPositions[predictedTeams[5]] === 5) seasonPoints += 2;
+
+      // Conference (pos 6): 2 pts
+      if (predictedTeams[6] && actualPositions[predictedTeams[6]] === 6) seasonPoints += 2;
+
+      // Relegation (bottom 3): 5 pts each
+      const predBottom3 = [18, 19, 20].map((p) => predictedTeams[p]).filter(Boolean);
+      for (const tid of predBottom3) {
+        if (actualPositions[tid] && actualPositions[tid] >= 18) seasonPoints += 5;
+      }
+
+      // Exact positions: 1 pt each
+      for (let pos = 1; pos <= 20; pos++) {
+        if (predictedTeams[pos] && actualPositions[predictedTeams[pos]] === pos) seasonPoints += 1;
+      }
+    }
+
+    const totalPoints = matchPoints + seasonPoints;
+    return {
+      id: part.id,
+      name: part.name,
+      points: totalPoints,
+      match_points: matchPoints,
+      match_correct: matchCorrect,
+      match_exact: matchExact,
+      season_points: seasonPoints,
+    };
+  });
+
+  result.sort((a, b) => b.points - a.points || b.match_correct - a.match_correct || a.name.localeCompare(b.name));
+  res.json(result);
+});
+
+// PL Players
+app.get("/api/epl2627/players", (req, res) => {
+  const players = db.prepare(`SELECT p.*, t.name as team_name, t.code as team_code, t.short_name as team_short
+    FROM pl2627_players p JOIN pl2627_teams t ON p.team_id = t.id ORDER BY t.name, p.position, p.name`).all();
+  res.json(players);
+});
+
+// PL Player Award Picks
+app.get("/api/epl2627/player-award-picks/:participantId", (req, res) => {
+  const { pool_id } = req.query;
+  const pool = pool_id ? db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(pool_id) : null;
+  const locked = !!(pool && pool.player_awards_locked);
+
+  const picks = db.prepare(`SELECT pap.*, p.name as player_name,
+    COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code
+    FROM pl2627_player_award_picks pap
+    LEFT JOIN pl2627_players p ON pap.player_id = p.id
+    LEFT JOIN pl2627_teams t ON p.team_id = t.id
+    LEFT JOIN pl2627_teams t2 ON pap.team_id = t2.id
+    WHERE pap.participant_id = ?`).all(req.params.participantId);
+
+  const results = db.prepare(`SELECT par.*, p.name as player_name,
+    COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code
+    FROM pl2627_player_award_results par
+    LEFT JOIN pl2627_players p ON par.player_id = p.id
+    LEFT JOIN pl2627_teams t ON p.team_id = t.id
+    LEFT JOIN pl2627_teams t2 ON par.team_id = t2.id`).all();
+
+  res.json({ picks, results, locked });
+});
+
+app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
+  const { participant_id, award_category, player_id, team_id } = req.body;
+  if (!participant_id || !award_category) return res.status(400).json({ error: "participant_id and award_category required" });
+
+  const validCategories = ["golden_boot", "golden_glove", "pots", "ypots", "mots"];
+  if (!validCategories.includes(award_category)) return res.status(400).json({ error: "Invalid award category" });
+
+  const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+  if (participant) {
+    const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(participant.pool_id);
+    if (pool && pool.player_awards_locked) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
+  }
+
+  if (award_category === "mots") {
+    if (!team_id) return res.status(400).json({ error: "team_id required for Manager of the Season" });
+    db.prepare(`INSERT INTO pl2627_player_award_picks (participant_id, award_category, team_id, player_id)
+      VALUES (?, ?, ?, NULL) ON CONFLICT(participant_id, award_category) DO UPDATE SET team_id=excluded.team_id, player_id=NULL, updated_at=datetime('now')`)
+      .run(participant_id, award_category, team_id);
+  } else {
+    if (!player_id) return res.status(400).json({ error: "player_id required" });
+    const player = db.prepare("SELECT team_id FROM pl2627_players WHERE id = ?").get(player_id);
+    db.prepare(`INSERT INTO pl2627_player_award_picks (participant_id, award_category, player_id, team_id)
+      VALUES (?, ?, ?, ?) ON CONFLICT(participant_id, award_category) DO UPDATE SET player_id=excluded.player_id, team_id=excluded.team_id, updated_at=datetime('now')`)
+      .run(participant_id, award_category, player_id, player?.team_id || null);
+  }
+  res.json({ success: true });
+});
+
 // Client-side routing fallback
 app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));

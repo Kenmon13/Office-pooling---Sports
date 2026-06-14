@@ -2120,6 +2120,14 @@ nav a.active {
   height: 15px;
   vertical-align: middle;
   margin-right: 4px;
+}
+
+.team-crest {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  margin-right: 4px;
+  object-fit: contain;
   border-radius: 2px;
 }
 
@@ -4705,6 +4713,402 @@ nav a.active {
   margin-bottom: 12px;
   padding-bottom: 6px;
   border-bottom: 1px solid #1e3a1e;
+}
+
+/* ── PL Matchday ── */
+.matchday-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.matchday-arrow {
+  background: #1a3a1a;
+  border: 1px solid #2e5d2e;
+  color: #c8f0c8;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+
+.matchday-arrow:hover:not(:disabled) {
+  background: #2e5d2e;
+}
+
+.matchday-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.matchday-label {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e0ffe0;
+  min-width: 130px;
+  text-align: center;
+}
+
+.pl-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.pl-match-card {
+  background: #0e1e0e;
+  border: 1px solid #1e3a1e;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.pl-match-card.live {
+  border-color: #e74c3c;
+  box-shadow: 0 0 8px rgba(231, 76, 60, 0.25);
+}
+
+.pl-match-card.finished {
+  opacity: 0.85;
+}
+
+.pl-match-date {
+  font-size: 12px;
+  color: #7cba7c;
+}
+
+.pl-match-teams {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+.pl-team {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e0ffe0;
+  min-width: 100px;
+}
+
+.pl-team.home {
+  text-align: right;
+}
+
+.pl-team.away {
+  text-align: left;
+}
+
+.pl-score {
+  font-size: 16px;
+  font-weight: 700;
+  color: #a0d8a0;
+  min-width: 50px;
+  text-align: center;
+}
+
+.pl-score.live {
+  color: #e74c3c;
+}
+
+.pl-result-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.pl-result-badge.correct {
+  background: #1b4332;
+  color: #52b788;
+}
+
+.pl-result-badge.half {
+  background: #3a3a10;
+  color: #d4c84a;
+}
+
+.pl-result-badge.wrong {
+  background: #3a1010;
+  color: #e07070;
+}
+
+.pl-outcome-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.pl-outcome-btns.locked {
+  opacity: 0.6;
+}
+
+.outcome-btn {
+  background: #1a3a1a;
+  border: 1px solid #2e5d2e;
+  color: #a0d8a0;
+  padding: 6px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.outcome-btn:hover {
+  background: #2e5d2e;
+}
+
+.outcome-btn.selected {
+  background: #2e8b57;
+  color: #fff;
+  border-color: #3cb371;
+}
+
+.pl-score-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pl-score-inputs input {
+  width: 48px;
+  padding: 5px;
+  border-radius: 6px;
+  border: 1px solid #2e5d2e;
+  background: #0a160a;
+  color: #e0ffe0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.pl-score-inputs input:focus {
+  outline: none;
+  border-color: #3cb371;
+}
+
+.pl-score-inputs .score-dash {
+  color: #7cba7c;
+  font-weight: 700;
+}
+
+.pl-score-inputs .score-label {
+  font-size: 11px;
+  color: #5a8a5a;
+  margin-left: 6px;
+}
+
+.pl-score-inputs.locked {
+  opacity: 0.6;
+}
+
+.pl-score-inputs .locked-score {
+  font-weight: 700;
+  color: #a0d8a0;
+}
+
+/* ── Season Predictions ── */
+.season-table {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.zone-divider {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 6px 12px;
+  margin-top: 8px;
+  border-radius: 6px 6px 0 0;
+}
+
+.zone-divider.cl {
+  background: #0a2a4a;
+  color: #5dade2;
+}
+
+.zone-divider.europa {
+  background: #3a3a10;
+  color: #d4c84a;
+}
+
+.zone-divider.conference {
+  background: #2a1a3a;
+  color: #bb8fce;
+}
+
+.zone-divider.relegation {
+  background: #3a1010;
+  color: #e07070;
+}
+
+.season-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #0e1e0e;
+  border: 1px solid #1e3a1e;
+  border-top: none;
+  cursor: grab;
+  transition: background 0.15s;
+}
+
+.season-row:first-child,
+.zone-divider + .season-row {
+  border-top: 1px solid #1e3a1e;
+}
+
+.season-row:last-child {
+  border-radius: 0 0 6px 6px;
+}
+
+.season-row:hover:not(.locked) {
+  background: #142e14;
+}
+
+.season-row.dragging {
+  background: #1a4a1a;
+  opacity: 0.7;
+}
+
+.season-row.locked {
+  cursor: default;
+}
+
+.season-row.cl {
+  border-left: 3px solid #5dade2;
+}
+
+.season-row.europa {
+  border-left: 3px solid #d4c84a;
+}
+
+.season-row.conference {
+  border-left: 3px solid #bb8fce;
+}
+
+.season-row.relegation {
+  border-left: 3px solid #e07070;
+}
+
+.season-pos {
+  font-weight: 700;
+  color: #7cba7c;
+  min-width: 24px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.season-team-code {
+  font-weight: 700;
+  color: #a0d8a0;
+  min-width: 36px;
+  font-size: 13px;
+}
+
+.season-team-name {
+  color: #e0ffe0;
+  flex: 1;
+  font-size: 14px;
+}
+
+.season-arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arrow-btn {
+  background: none;
+  border: none;
+  color: #5a8a5a;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.arrow-btn:hover:not(:disabled) {
+  color: #a0d8a0;
+}
+
+.arrow-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.season-row.selecting {
+  background: #1a4a1a;
+  border-color: #3cb371;
+}
+
+.season-team-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 8px;
+  background: #0a160a;
+  border: 1px solid #2e5d2e;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.picker-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #0e1e0e;
+  border: 1px solid #1e3a1e;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #e0ffe0;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.picker-team:hover {
+  background: #1a3a1a;
+}
+
+.picker-team.current {
+  background: #1a4a1a;
+  border-color: #3cb371;
+}
+
+.picker-code {
+  font-weight: 700;
+  color: #a0d8a0;
+  min-width: 32px;
+}
+
+.picker-name {
+  flex: 1;
+}
+
+.picker-current {
+  font-size: 10px;
+  color: #5a8a5a;
+  text-transform: uppercase;
+}
+
+@media (max-width: 600px) {
+  .season-team-picker {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 600px) {
