@@ -2967,6 +2967,34 @@ app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
   }
 });
 
+// Manual score sync + diagnostics
+app.post("/api/admin/sync-scores", requireAdminToken, async (req, res) => {
+  const apiKey = process.env.FOOTBALL_API_KEY;
+  if (!apiKey) return res.json({ error: "FOOTBALL_API_KEY not set" });
+
+  try {
+    const apiRes = await fetch("https://api.football-data.org/v4/competitions/WC/matches?status=IN_PLAY,PAUSED,FINISHED", {
+      headers: { "X-Auth-Token": apiKey },
+    });
+    if (!apiRes.ok) return res.json({ error: `API responded ${apiRes.status}` });
+
+    const data = await apiRes.json();
+    const apiMatches = (data.matches || []).map((m) => ({
+      home: m.homeTeam?.tla, away: m.awayTeam?.tla,
+      status: m.status, score: `${m.score?.fullTime?.home ?? "?"}-${m.score?.fullTime?.away ?? "?"}`,
+    }));
+
+    // Run the sync
+    const { fetchLiveScores } = require("./scores");
+    await fetchLiveScores();
+
+    const dbStats = db.prepare("SELECT status, COUNT(*) as c FROM matches GROUP BY status").all();
+    res.json({ api_matches: apiMatches.length, api_sample: apiMatches.slice(0, 10), db_stats: dbStats });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 // Client-side routing fallback
 app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));

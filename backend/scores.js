@@ -24,6 +24,7 @@ async function fetchLiveScores() {
     const data = await res.json();
     const matches = data.matches || [];
 
+    // Try both home/away orderings — the API's home/away may differ from our seed data
     const updateFinished = db.prepare(
       "UPDATE matches SET home_score = ?, away_score = ?, status = 'finished' WHERE home_team_id = (SELECT id FROM teams WHERE code = ?) AND away_team_id = (SELECT id FROM teams WHERE code = ?) AND status IN ('upcoming', 'live')"
     );
@@ -43,14 +44,22 @@ async function fetchLiveScores() {
         const homeScore = m.score?.fullTime?.home;
         const awayScore = m.score?.fullTime?.away;
         if (homeScore != null && awayScore != null) {
-          const result = updateFinished.run(homeScore, awayScore, homeCode, awayCode);
+          // Try matching as-is first
+          let result = updateFinished.run(homeScore, awayScore, homeCode, awayCode);
+          if (result.changes === 0) {
+            // Try reversed — our DB may have home/away swapped vs the API
+            result = updateFinished.run(awayScore, homeScore, awayCode, homeCode);
+          }
           if (result.changes > 0) finished++;
         }
       } else {
         // IN_PLAY or PAUSED — use current score
         const homeScore = m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? 0;
         const awayScore = m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? 0;
-        const result = updateLive.run(homeScore, awayScore, homeCode, awayCode);
+        let result = updateLive.run(homeScore, awayScore, homeCode, awayCode);
+        if (result.changes === 0) {
+          result = updateLive.run(awayScore, homeScore, awayCode, homeCode);
+        }
         if (result.changes > 0) live++;
       }
     }
@@ -59,7 +68,9 @@ async function fetchLiveScores() {
       const parts = [];
       if (finished > 0) parts.push(`${finished} finished`);
       if (live > 0) parts.push(`${live} live`);
-      console.log(`Score update: ${parts.join(", ")}.`);
+      console.log(`Score update: ${parts.join(", ")} (${matches.length} from API).`);
+    } else if (matches.length > 0) {
+      console.log(`Score check: ${matches.length} matches from API, 0 new updates.`);
     }
   } catch (err) {
     console.log("Score fetch error:", err.message);
