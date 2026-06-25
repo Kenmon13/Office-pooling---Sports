@@ -1201,16 +1201,28 @@ app.get("/api/leaderboard", (req, res) => {
       const q = qualified[pred.group_id];
       if (!q) continue;
 
-      // 3-pick group with all groups done: combined 10/5/2/0 scoring
-      if (pred.team3_id && allGroupsDone) {
+      // Once all groups are done, score every prediction against the qualifying set
+      // (top-2 + qualified-3rd) regardless of whether the user filled in team3_id.
+      // Tier: 3 right → 10pts, 2 right → 5pts, 1 right → 2pts. "Correct" = max for the
+      // user's pick count (3/3 for 3-pick users, 2/2 for 2-pick users).
+      if (allGroupsDone) {
         const qualSet = qualifyingByGroup[pred.group_id] || [];
-        const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
+        const picked = pred.team3_id
+          ? [pred.team1_id, pred.team2_id, pred.team3_id]
+          : [pred.team1_id, pred.team2_id];
         const correctCount = picked.filter((t) => qualSet.includes(t)).length;
-        if (correctCount === 3) { points += 10; groups_correct++; }
-        else if (correctCount === 2) { points += 5; groups_half++; }
-        else if (correctCount === 1) { points += 2; }
+        if (correctCount === picked.length) {
+          points += (picked.length === 3) ? 10 : 5;
+          groups_correct++;
+        } else if (correctCount === 2) {
+          points += 5;
+          groups_half++;
+        } else if (correctCount === 1) {
+          points += 2;
+          groups_half++;
+        }
       } else {
-        // 2-pick scoring (or 3rd-place qualifiers not yet determined)
+        // Group stage in progress — score against top-2 only.
         const picked = [pred.team1_id, pred.team2_id];
         const correctCount = picked.filter((t) => q.includes(t)).length;
         if (correctCount === 2) { points += 5; groups_correct++; }
