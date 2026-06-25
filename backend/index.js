@@ -1,4 +1,5 @@
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
@@ -2258,6 +2259,46 @@ app.put("/api/admin/knockout-matches/:id", requireAdminToken, (req, res) => {
   const { match_date } = req.body;
   db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ?").run(match_date || null, req.params.id);
   res.json({ success: true });
+});
+
+// Admin override for KO match teams/scores/winner. Pass null to clear a field, number/string to set.
+// Touching home_team_id, away_team_id or winner_team_id also flips the matching _admin_set flag
+// to 1, which tells the API auto-correct sync and the resolver to leave that field alone.
+// To re-enable auto-sync on a field, pass clear_admin_lock: ["home_team_id", ...].
+app.patch("/api/admin/knockout-matches/:id", requireAdminToken, (req, res) => {
+  const ALLOWED = ["home_team_id", "away_team_id", "winner_team_id", "home_score", "away_score", "status", "match_date"];
+  const TEAM_FIELDS = { home_team_id: "home_admin_set", away_team_id: "away_admin_set", winner_team_id: "winner_admin_set" };
+  const STATUSES = ["upcoming", "live", "finished"];
+  const updates = [];
+  const values = [];
+  for (const k of ALLOWED) {
+    if (!Object.prototype.hasOwnProperty.call(req.body, k)) continue;
+    const v = req.body[k];
+    if (k === "status" && v !== null && !STATUSES.includes(v)) {
+      return res.status(400).json({ error: `status must be one of ${STATUSES.join("/")} or null` });
+    }
+    updates.push(`${k} = ?`);
+    values.push(v);
+    // Mark this team-field as admin-locked
+    if (TEAM_FIELDS[k]) {
+      updates.push(`${TEAM_FIELDS[k]} = 1`);
+    }
+  }
+  // Optional unlock: ["home_team_id"] → home_admin_set = 0
+  if (Array.isArray(req.body.clear_admin_lock)) {
+    for (const f of req.body.clear_admin_lock) {
+      if (TEAM_FIELDS[f]) updates.push(`${TEAM_FIELDS[f]} = 0`);
+    }
+  }
+  if (updates.length === 0) return res.status(400).json({ error: "No updatable fields provided" });
+  values.push(req.params.id);
+  try {
+    const r = db.prepare(`UPDATE knockout_matches SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+    if (r.changes === 0) return res.status(404).json({ error: "Match not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Pool Chat ---

@@ -1,4 +1,5 @@
 const db = require("./db");
+const { runResolver, syncWCKnockouts } = require("./koResolver");
 
 const API_BASE = "https://api.football-data.org/v4";
 const COMPETITION = "WC"; // FIFA World Cup
@@ -72,6 +73,9 @@ async function fetchLiveScores() {
     } else if (matches.length > 0) {
       console.log(`Score check: ${matches.length} matches from API, 0 new updates.`);
     }
+
+    // After group scores update, check if any group is now fully done -> promote teams to KO slots.
+    runResolver();
   } catch (err) {
     console.log("Score fetch error:", err.message);
   }
@@ -238,6 +242,11 @@ function startScoreRefresh() {
   console.log("Auto score refresh enabled (every 5 minutes).");
   fetchLiveScores();
   setInterval(fetchLiveScores, 5 * 60 * 1000);
+
+  // WC knockout sync (teams + scores from football-data.org for R32 onward).
+  // Runs every 30 min — bracket changes far less often than live scores.
+  syncWCKnockouts();
+  setInterval(syncWCKnockouts, 30 * 60 * 1000);
 
   // PL score refresh (every 5 minutes)
   syncPLScores();

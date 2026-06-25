@@ -195,6 +195,12 @@ try { db.exec("ALTER TABLE pools ADD COLUMN chat_closed INTEGER NOT NULL DEFAULT
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_score INTEGER"); } catch (_) {}
 try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_score INTEGER"); } catch (_) {}
 
+// Admin-override flags for knockout slot/winner assignments. When set, the football-data.org
+// auto-correct sync and the resolver both leave that field alone.
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_admin_set INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_admin_set INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN winner_admin_set INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
 // Add predicted score columns to KO prediction tables
 try { db.exec("ALTER TABLE knockout_predictions ADD COLUMN predicted_home_score INTEGER"); } catch (_) {}
 try { db.exec("ALTER TABLE knockout_predictions ADD COLUMN predicted_away_score INTEGER"); } catch (_) {}
