@@ -3,3 +3,5 @@ backend/public/
 *.db
 *.db-shm
 *.db-wal
+.env
+backend/.env
