@@ -1317,6 +1317,9 @@ app.get("/api/knockout-deadline", (req, res) => {
     return new Date(ms).toISOString().replace("T", " ").slice(0, 16);
   };
 
+  // Open as soon as both teams are confirmed (via group-stage resolver, KO winner cascade,
+  // football-data.org sync, or admin override). Don't gate on whether other unrelated groups
+  // have finished — e.g. R32 Canada-v-South-Africa shouldn't wait for Groups F/G/H/etc.
   const isMatchOpen = (matchId) => {
     const match = koById[matchId];
     if (!match) return false;
@@ -1325,9 +1328,7 @@ app.get("/api/knockout-deadline", (req, res) => {
       const kickoff = new Date(match.match_date.replace(" ", "T") + "Z").getTime();
       if (now >= kickoff - TWELVE_HOURS_MS) return false;
     }
-    const prereqs = KO_PREREQUISITES[matchId];
-    if (!prereqs) return groupStageComplete;
-    return prereqs.every((pid) => koById[pid]?.winner_team_id);
+    return match.home_team_id != null && match.away_team_id != null;
   };
 
   const openMatchIds = koMatches.filter((m) => isMatchOpen(m.id)).map((m) => m.id);

@@ -177,8 +177,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
       <div className="ko-rules">
         <p className="ko-rules-title">How predictions work</p>
         <ul>
-          <li>Round of 32 opens once all group stage matches are complete.</li>
-          <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
+          <li>Each match unlocks as soon as both teams are confirmed — Round of 32 matches open per matchup as their qualifying groups finish, and later rounds open as feeder matches end.</li>
           <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
           {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>. <em>Pool admins can disable this in Pool Settings.</em></li>}
           {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
@@ -201,9 +200,9 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
           <span className="deadline-locked-text">Knockout stage complete</span>
         </div>
       )}
-      {!groupStageComplete && !koStageComplete && (
+      {openMatchIds.size === 0 && !koStageComplete && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
-          <span className="deadline-locked-text">Knockout predictions open once the group stage is complete</span>
+          <span className="deadline-locked-text">Knockout matches open one by one as their qualifying groups finish</span>
         </div>
       )}
       {!currentUser && (
