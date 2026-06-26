@@ -189,6 +189,28 @@ export async function adminFetchPools() {
   return res.json();
 }
 
+export async function adminFetchKoMismatches() {
+  const res = await fetch(`${API}/admin/ko-mismatches`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function adminPatchKnockoutMatch(matchId, body) {
+  const res = await fetch(`${API}/admin/knockout-matches/${matchId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function adminSwapKnockoutSides(matchId) {
+  const res = await fetch(`${API}/admin/knockout-matches/${matchId}/swap-sides`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
 export async function adminDeletePool(poolId) {
   const res = await fetch(`${API}/admin/pools/${poolId}`, {
     method: "DELETE",
