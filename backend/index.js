@@ -2147,26 +2147,26 @@ app.get("/api/history/:participantId", (req, res) => {
     const pred = db.prepare("SELECT * FROM group_predictions WHERE participant_id = ? AND group_id = ?").get(participantId, g.id);
     if (!pred) continue;
 
-    if (pred.team3_id && allGroupsDoneH) {
-      // 3-pick combined scoring
-      const qualSet = [gt[0]?.team_id, gt[1]?.team_id];
-      if (gt.length >= 3 && thirdQualifiersH.has(gt[2].team_id)) qualSet.push(gt[2].team_id);
-      const picked = [pred.team1_id, pred.team2_id, pred.team3_id];
-      const correct = picked.filter((t) => qualSet.includes(t)).length;
-      const pts = correct === 3 ? 10 : correct === 2 ? 5 : correct === 1 ? 2 : 0;
-      const names = picked.map((t) => teamById[t]?.name || "?").join(", ");
-      const label = correct === 3 ? "All 3 correct" : `${correct} correct`;
-      events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${names} — ${label}`, pts_change: pts });
-    } else {
-      // 2-pick scoring
-      const qualified = [gt[0]?.team_id, gt[1]?.team_id];
-      const correct = [pred.team1_id, pred.team2_id].filter((t) => qualified.includes(t)).length;
-      const pts = correct === 2 ? 5 : correct === 1 ? 2 : 0;
-      const t1 = teamById[pred.team1_id]?.name || "?";
-      const t2 = teamById[pred.team2_id]?.name || "?";
-      const label = correct === 2 ? "Both correct" : correct === 1 ? "1 correct" : "None correct";
-      events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${t1} & ${t2} — ${label}`, pts_change: pts });
+    // Unified scoring: count how many picks are in the qualifying set for this group.
+    // qualSet = top-2 always; +qualified-3rd once all groups are done.
+    // Mirrors /api/leaderboard (see backend/index.js ~line 1200).
+    const qualSet = [gt[0]?.team_id, gt[1]?.team_id];
+    if (allGroupsDoneH && gt.length >= 3 && thirdQualifiersH.has(gt[2].team_id)) {
+      qualSet.push(gt[2].team_id);
     }
+    const picked = pred.team3_id
+      ? [pred.team1_id, pred.team2_id, pred.team3_id]
+      : [pred.team1_id, pred.team2_id];
+    const correct = picked.filter((t) => qualSet.includes(t)).length;
+    let pts, label;
+    if (correct === picked.length) {
+      pts = picked.length === 3 ? 10 : 5;
+      label = picked.length === 3 ? "All 3 correct" : "Both correct";
+    } else if (correct === 2) { pts = 5; label = "2 correct"; }
+    else if (correct === 1) { pts = 2; label = "1 correct"; }
+    else { pts = 0; label = "None correct"; }
+    const names = picked.map((t) => teamById[t]?.name || "?").join(" & ");
+    events.push({ event_date: lastDate, type: "group", description: `Group ${g.name}: ${names} — ${label}`, pts_change: pts });
   }
 
   const koMatches = db.prepare("SELECT * FROM knockout_matches WHERE status='finished'").all();
