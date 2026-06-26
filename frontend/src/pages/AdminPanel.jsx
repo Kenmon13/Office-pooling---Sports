@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -36,7 +36,35 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [userPools, setUserPools] = useState({});
   const [issueProfileUserId, setIssueProfileUserId] = useState(null);
   const [issueProfilePools, setIssueProfilePools] = useState(null);
+  const [koMismatches, setKoMismatches] = useState([]);
+  const [koMismatchSaving, setKoMismatchSaving] = useState(null);
   const fileInputRef = useRef(null);
+
+  const refreshKoMismatches = () =>
+    adminFetchKoMismatches().then((d) => { if (Array.isArray(d)) setKoMismatches(d); });
+
+  const resolveMismatch = async (m, choice) => {
+    const key = `${m.match_id}:${m.field}`;
+    const newTeamId = choice === "official" ? m.api_team_id : m.local_team_id;
+    setKoMismatchSaving(key);
+    try {
+      await adminPatchKnockoutMatch(m.match_id, { [m.field]: newTeamId });
+      await refreshKoMismatches();
+    } finally {
+      setKoMismatchSaving(null);
+    }
+  };
+
+  const swapSides = async (matchId) => {
+    const key = `${matchId}:swap`;
+    setKoMismatchSaving(key);
+    try {
+      await adminSwapKnockoutSides(matchId);
+      await refreshKoMismatches();
+    } finally {
+      setKoMismatchSaving(null);
+    }
+  };
 
   const loadBackups = () => adminListBackups().then((d) => { if (!d.error) setBackups(d); });
   const loadIssues = () => adminFetchIssues().then((d) => { if (!d.error) setIssues(d); });
@@ -84,6 +112,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
     adminFetchPools().then((data) => { if (!data.error) setPools(data); });
     adminFetchUsers().then((data) => { if (!data.error) setUsers(data); });
     adminFetchTestPools().then((d) => { if (!d.error) setTestPools(d); });
+    adminFetchKoMismatches().then((d) => { if (Array.isArray(d)) setKoMismatches(d); });
     loadBackups();
     loadIssues();
   }, [user.id]);
@@ -252,6 +281,12 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
         </button>
         <button className={`admin-tab ${tab === "issues" ? "active" : ""}`} onClick={() => { setTab("issues"); loadIssues(); }}>
           Issues {issues.filter((i) => i.status === "open").length > 0 ? `(${issues.filter((i) => i.status === "open").length})` : ""}
+        </button>
+        <button
+          className={`admin-tab ${tab === "sync" ? "active" : ""} ${koMismatches.length > 0 ? "admin-tab-alert" : ""}`}
+          onClick={() => { setTab("sync"); refreshKoMismatches(); }}
+        >
+          Sync {koMismatches.length > 0 ? `(${koMismatches.length})` : ""}
         </button>
       </div>
 
@@ -681,6 +716,154 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
               {replySending ? "..." : "Send"}
             </button>
           </div>
+        </div>
+      )}
+
+      {tab === "sync" && (
+        <div className="admin-sync-tab">
+          <p className="select-subtitle">
+            World Cup knockout bracket — disagreements between our database and the football-data.org feed.
+          </p>
+          {koMismatches.length === 0 ? (
+            <div className="admin-sync-empty">
+              <p><strong>All clear.</strong> No knockout matchups currently disagree with the official feed.</p>
+              <p className="admin-sync-hint">
+                The 30-min sync compares our locally-stored teams against football-data.org. When they disagree, the row stays here until you pick which team to trust — we never overwrite silently because user picks are stored as <em>home / away</em> slots, not team ids.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="admin-sync-intro">
+                <p>
+                  {koMismatches.length} knockout {koMismatches.length === 1 ? "matchup needs" : "matchups need"} your decision. Our 30-min sync found {koMismatches.length === 1 ? "a team" : "teams"} on the official feed (football-data.org) that {koMismatches.length === 1 ? "doesn't" : "don't"} match what we have stored.
+                </p>
+                <p className="admin-sync-why">
+                  <strong>Why this matters:</strong> user predictions are stored as <em>home / away</em> slots, not team ids. If we auto-swapped the team behind a slot, every pick on that match would silently start predicting a different team. So we&apos;ve frozen the team assignments and are waiting on you. <strong>Score, status (live / finished), and winner sync are also paused</strong> for these matches until you resolve — but users can still pick them; they see and predict our locally-stored team.
+                </p>
+              </div>
+              <ul className="admin-sync-list">
+                {(() => {
+                  // Group side-swap rows by match_id into one combined card so the admin
+                  // sees a single "Swap sides" action rather than two confusingly-linked rows.
+                  const items = [];
+                  const seenSwapMatch = new Set();
+                  for (const m of koMismatches) {
+                    if (m.is_side_swap) {
+                      if (seenSwapMatch.has(m.match_id)) continue;
+                      seenSwapMatch.add(m.match_id);
+                      const pair = koMismatches.filter((x) => x.match_id === m.match_id);
+                      items.push({ kind: "swap", match_id: m.match_id, round: m.round, rows: pair, detected_at: m.detected_at });
+                    } else {
+                      items.push({ kind: "single", ...m });
+                    }
+                  }
+                  return items.map((item) => {
+                    if (item.kind === "swap") {
+                      const homeRow = item.rows.find((r) => r.field === "home_team_id") || item.rows[0];
+                      const awayRow = item.rows.find((r) => r.field === "away_team_id") || item.rows[0];
+                      const totalPicks = (homeRow.home_pick_count || 0) + (homeRow.away_pick_count || 0);
+                      const swapKey = `${item.match_id}:swap`;
+                      const saving = koMismatchSaving === swapKey;
+                      return (
+                        <li key={swapKey} className="admin-sync-card admin-sync-card-swap">
+                          <div className="admin-sync-card-header">
+                            <span className="admin-sync-round">{item.round || "Knockout"}</span>
+                            <span className="admin-sync-match">{item.match_id}</span>
+                            <span className="admin-sync-side">Home / away sides swapped</span>
+                            <span className="admin-sync-when">detected {item.detected_at}</span>
+                          </div>
+                          <p className="admin-sync-side-swap">
+                            Both teams in this matchup match the official feed &mdash; just the home / away assignment is flipped. Use <strong>Swap sides</strong> to flip our home/away labels and atomically flip every pick&apos;s home/away slot so user intent (which team they picked) is preserved.
+                          </p>
+                          <div className="admin-sync-card-body">
+                            <div className="admin-sync-team">
+                              <div className="admin-sync-label">Our home</div>
+                              <div className="admin-sync-value"><strong>{homeRow.local_code}</strong> {homeRow.local_name}</div>
+                              <div className="admin-sync-label" style={{ marginTop: 8 }}>Our away</div>
+                              <div className="admin-sync-value"><strong>{awayRow.local_code}</strong> {awayRow.local_name}</div>
+                            </div>
+                            <div className="admin-sync-vs">⇄</div>
+                            <div className="admin-sync-team">
+                              <div className="admin-sync-label">Feed home</div>
+                              <div className="admin-sync-value"><strong>{homeRow.api_code}</strong> {homeRow.api_name}</div>
+                              <div className="admin-sync-label" style={{ marginTop: 8 }}>Feed away</div>
+                              <div className="admin-sync-value"><strong>{awayRow.api_code}</strong> {awayRow.api_name}</div>
+                            </div>
+                          </div>
+                          <p className="admin-sync-impact">
+                            <strong>{totalPicks}</strong> user pick{totalPicks === 1 ? "" : "s"} on this match. Swap sides flips each pick&apos;s slot (home ↔ away) and exact-score values so each user still predicts the same team they originally chose.
+                          </p>
+                          <div className="admin-sync-card-actions">
+                            <button
+                              className="btn-primary"
+                              disabled={saving}
+                              onClick={() => swapSides(item.match_id)}
+                              title="Swap home/away and flip all predictions on this match in a single transaction."
+                            >
+                              {saving ? "Saving…" : "Swap sides (preserve picks)"}
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    }
+
+                    const m = item;
+                    const key = `${m.match_id}:${m.field}`;
+                    const side = m.field === "home_team_id" ? "Home team" : "Away team";
+                    const saving = koMismatchSaving === key;
+                    const sidePickCount = m.field === "home_team_id" ? m.home_pick_count : m.away_pick_count;
+                    const affected = sidePickCount || 0;
+                    return (
+                      <li key={key} className="admin-sync-card">
+                        <div className="admin-sync-card-header">
+                          <span className="admin-sync-round">{m.round || "Knockout"}</span>
+                          <span className="admin-sync-match">{m.match_id}</span>
+                          <span className="admin-sync-side">{side}</span>
+                          <span className="admin-sync-when">detected {m.detected_at}</span>
+                        </div>
+                        <div className="admin-sync-card-body">
+                          <div className="admin-sync-team">
+                            <div className="admin-sync-label">Currently stored</div>
+                            <div className="admin-sync-value">
+                              <strong>{m.local_code || "?"}</strong> {m.local_name || `id ${m.local_team_id ?? "null"}`}
+                            </div>
+                          </div>
+                          <div className="admin-sync-vs">vs.</div>
+                          <div className="admin-sync-team">
+                            <div className="admin-sync-label">Official feed says</div>
+                            <div className="admin-sync-value">
+                              <strong>{m.api_code || "?"}</strong> {m.api_name || `id ${m.api_team_id ?? "null"}`}
+                            </div>
+                          </div>
+                        </div>
+                        <p className="admin-sync-impact">
+                          <strong>{affected}</strong> user pick{affected === 1 ? "" : "s"} currently on the {side.toLowerCase()} slot of this match. Resolving will reinterpret {affected === 1 ? "that pick" : "those picks"} as the team you choose.
+                        </p>
+                        <div className="admin-sync-card-actions">
+                          <button
+                            className="btn-secondary"
+                            disabled={saving}
+                            onClick={() => resolveMismatch(m, "local")}
+                            title="Lock the stored team. Future syncs will not change it."
+                          >
+                            {saving ? "Saving…" : `Keep ${m.local_code || "ours"}`}
+                          </button>
+                          <button
+                            className="btn-primary"
+                            disabled={saving}
+                            onClick={() => resolveMismatch(m, "official")}
+                            title="Replace the stored team with the official feed's team and lock it."
+                          >
+                            {saving ? "Saving…" : `Use ${m.api_code || "official"}`}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  });
+                })()}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1317,6 +1317,9 @@ app.get("/api/knockout-deadline", (req, res) => {
     return new Date(ms).toISOString().replace("T", " ").slice(0, 16);
   };
 
+  // Open as soon as both teams are confirmed (via group-stage resolver, KO winner cascade,
+  // football-data.org sync, or admin override). Don't gate on whether other unrelated groups
+  // have finished — e.g. R32 Canada-v-South-Africa shouldn't wait for Groups F/G/H/etc.
   const isMatchOpen = (matchId) => {
     const match = koById[matchId];
     if (!match) return false;
@@ -1325,9 +1328,7 @@ app.get("/api/knockout-deadline", (req, res) => {
       const kickoff = new Date(match.match_date.replace(" ", "T") + "Z").getTime();
       if (now >= kickoff - TWELVE_HOURS_MS) return false;
     }
-    const prereqs = KO_PREREQUISITES[matchId];
-    if (!prereqs) return groupStageComplete;
-    return prereqs.every((pid) => koById[pid]?.winner_team_id);
+    return match.home_team_id != null && match.away_team_id != null;
   };
 
   const openMatchIds = koMatches.filter((m) => isMatchOpen(m.id)).map((m) => m.id);
@@ -2299,10 +2300,93 @@ app.patch("/api/admin/knockout-matches/:id", requireAdminToken, (req, res) => {
   try {
     const r = db.prepare(`UPDATE knockout_matches SET ${updates.join(", ")} WHERE id = ?`).run(...values);
     if (r.changes === 0) return res.status(404).json({ error: "Match not found" });
+    // Admin's explicit choice resolves any prior mismatch for fields they touched, so the
+    // banner clears immediately rather than waiting for the next 30-min sync.
+    for (const f of ["home_team_id", "away_team_id"]) {
+      if (Object.prototype.hasOwnProperty.call(req.body, f)) {
+        db.prepare("DELETE FROM ko_mismatches WHERE match_id = ? AND field = ?").run(req.params.id, f);
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Swap home/away sides for a KO match AND atomically flip every existing prediction's
+// predicted_winner (and predicted_home_score / predicted_away_score) so user intent
+// is preserved. Used when football-data.org and our DB agree on the two teams but
+// disagree on which side is home — e.g., neutral-venue conventions differ.
+app.post("/api/admin/knockout-matches/:id/swap-sides", requireAdminToken, (req, res) => {
+  const id = req.params.id;
+  const match = db.prepare(
+    "SELECT home_team_id, away_team_id FROM knockout_matches WHERE id = ?"
+  ).get(id);
+  if (!match) return res.status(404).json({ error: "Match not found" });
+  if (match.home_team_id == null || match.away_team_id == null) {
+    return res.status(400).json({ error: "Both teams must be set before swapping sides" });
+  }
+
+  const txn = db.transaction(() => {
+    // Also swaps home_score / away_score on the match row so live or finished
+    // matches stay coherent — otherwise the new home team would be credited with
+    // the old away team's score and scoring would break. SQLite SET expressions
+    // read the pre-update row, so `home_score = away_score` + `away_score = home_score`
+    // is a proper swap.
+    db.prepare(`
+      UPDATE knockout_matches
+      SET home_team_id = ?, away_team_id = ?,
+          home_score = away_score, away_score = home_score,
+          home_admin_set = 1, away_admin_set = 1
+      WHERE id = ?
+    `).run(match.away_team_id, match.home_team_id, id);
+    db.prepare(`
+      UPDATE knockout_predictions
+      SET predicted_winner = CASE predicted_winner WHEN 'home' THEN 'away' WHEN 'away' THEN 'home' ELSE predicted_winner END,
+          predicted_home_score = predicted_away_score,
+          predicted_away_score = predicted_home_score
+      WHERE match_id = ?
+    `).run(id);
+    db.prepare("DELETE FROM ko_mismatches WHERE match_id = ?").run(id);
+  });
+
+  try {
+    txn();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/ko-mismatches", requireAdminToken, (req, res) => {
+  const rows = db.prepare(`
+    SELECT m.match_id, m.field, m.local_team_id, m.api_team_id, m.detected_at,
+      km.round, km.match_date, km.home_team_id, km.away_team_id,
+      lt.code AS local_code, lt.name AS local_name,
+      at.code AS api_code, at.name AS api_name,
+      (SELECT COUNT(*) FROM knockout_predictions kp
+        WHERE kp.match_id = m.match_id AND kp.predicted_winner = 'home') AS home_pick_count,
+      (SELECT COUNT(*) FROM knockout_predictions kp
+        WHERE kp.match_id = m.match_id AND kp.predicted_winner = 'away') AS away_pick_count
+    FROM ko_mismatches m
+    LEFT JOIN knockout_matches km ON km.id = m.match_id
+    LEFT JOIN teams lt ON lt.id = m.local_team_id
+    LEFT JOIN teams at ON at.id = m.api_team_id
+    ORDER BY m.detected_at DESC
+  `).all();
+  // For each row, also report whether the API rows for this match are a pure
+  // home/away swap (same two teams, sides flipped). The frontend uses this to show
+  // a calmer "this is just a label swap" hint instead of the silent-reinterpretation warning.
+  for (const r of rows) {
+    const other = rows.find((x) => x.match_id === r.match_id && x.field !== r.field);
+    r.is_side_swap = !!(
+      other &&
+      r.local_team_id != null && r.api_team_id != null &&
+      other.local_team_id != null && other.api_team_id != null &&
+      r.api_team_id === other.local_team_id && r.local_team_id === other.api_team_id
+    );
+  }
+  res.json(rows);
 });
 
 // --- Pool Chat ---

@@ -181,15 +181,36 @@ async function syncWCKnockouts() {
       apiByRound[r].sort((a, b) => (a.utcDate || "").localeCompare(b.utcDate || ""));
     }
 
-    // Per-field statements so we can auto-correct team assignments while preserving
-    // admin overrides and not nuking already-entered scores.
-    const setHome   = db.prepare("UPDATE knockout_matches SET home_team_id = ? WHERE id = ? AND home_admin_set = 0");
-    const setAway   = db.prepare("UPDATE knockout_matches SET away_team_id = ? WHERE id = ? AND away_admin_set = 0");
+    // Per-field statements. Team-id writes are guarded with `IS NULL` so they only ever fill
+    // an empty slot — never overwrite. This protects user picks (stored as home/away slots,
+    // not team_ids) from being silently reinterpreted under them when API and local disagree.
+    // For mismatches, we log loudly and defer to admin PATCH instead of auto-correcting.
+    const setHome   = db.prepare("UPDATE knockout_matches SET home_team_id = ? WHERE id = ? AND home_team_id IS NULL AND home_admin_set = 0");
+    const setAway   = db.prepare("UPDATE knockout_matches SET away_team_id = ? WHERE id = ? AND away_team_id IS NULL AND away_admin_set = 0");
     const setWinner = db.prepare("UPDATE knockout_matches SET winner_team_id = ? WHERE id = ? AND winner_admin_set = 0");
     const setDate   = db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ?");
     const setScores = db.prepare("UPDATE knockout_matches SET home_score = COALESCE(?, home_score), away_score = COALESCE(?, away_score), status = COALESCE(?, status) WHERE id = ?");
 
-    let touched = 0, corrected = 0;
+    // Mismatch tracking — surfaces in the admin dashboard. Upsert on detection,
+    // clear when teams come back into agreement (or admin lock takes effect).
+    // detected_at only advances when the local or API value actually changes;
+    // a mismatch that's been sitting unchanged for days keeps its original timestamp
+    // instead of showing "detected 2 minutes ago" after every 30-min sync run.
+    const upsertMismatch = db.prepare(`
+      INSERT INTO ko_mismatches (match_id, field, local_team_id, api_team_id, detected_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(match_id, field) DO UPDATE SET
+        local_team_id = excluded.local_team_id,
+        api_team_id = excluded.api_team_id,
+        detected_at = CASE
+          WHEN local_team_id = excluded.local_team_id AND api_team_id = excluded.api_team_id
+          THEN detected_at
+          ELSE excluded.detected_at
+        END
+    `);
+    const clearMismatch = db.prepare("DELETE FROM ko_mismatches WHERE match_id = ? AND field = ?");
+
+    let touched = 0, mismatches = 0;
     for (const round of Object.keys(apiByRound)) {
       const apis = apiByRound[round];
       const locals = localByRound[round] || [];
@@ -220,42 +241,53 @@ async function syncWCKnockouts() {
           awayScore = (ft && ft.away != null) ? ft.away : (ht && ht.away != null ? ht.away : 0);
         }
 
-        // match_date always refreshes from API
+        // match_date always refreshes — schedule shifts are benign and don't reinterpret picks.
         const matchDate = apiToDbDate(api.utcDate);
         if (matchDate && matchDate !== local.match_date) setDate.run(matchDate, local.id);
+
+        // If API teams disagree with locally-set teams, halt all further sync for this match.
+        // Otherwise we'd mark it finished / set a winner against the wrong matchup. Admin
+        // must resolve via PATCH /api/admin/knockout-matches/:id.
+        const homeMismatch = homeId != null && local.home_team_id != null && homeId !== local.home_team_id;
+        const awayMismatch = awayId != null && local.away_team_id != null && awayId !== local.away_team_id;
+        if (homeMismatch) {
+          mismatches++;
+          upsertMismatch.run(local.id, "home_team_id", local.home_team_id, homeId);
+          console.log(`WC KO API mismatch (manual review): ${local.id} home local=${teamById[local.home_team_id] || local.home_team_id} api=${api.homeTeam.tla}; keeping local.`);
+        } else {
+          clearMismatch.run(local.id, "home_team_id");
+        }
+        if (awayMismatch) {
+          mismatches++;
+          upsertMismatch.run(local.id, "away_team_id", local.away_team_id, awayId);
+          console.log(`WC KO API mismatch (manual review): ${local.id} away local=${teamById[local.away_team_id] || local.away_team_id} api=${api.awayTeam.tla}; keeping local.`);
+        } else {
+          clearMismatch.run(local.id, "away_team_id");
+        }
+        if (homeMismatch || awayMismatch) continue;
 
         // scores/status: COALESCE — never overwrite once entered
         setScores.run(homeScore, awayScore, dbStatus, local.id);
 
-        // home_team_id: write if API differs and admin hasn't locked. Logs auto-correct.
-        if (homeId != null && homeId !== local.home_team_id && local.home_admin_set === 0) {
+        // home_team_id: fill only when locally null. WHERE clause + this guard are belt-and-braces.
+        if (homeId != null && local.home_team_id == null && local.home_admin_set === 0) {
           const r = setHome.run(homeId, local.id);
           if (r.changes > 0) {
             touched++;
-            if (local.home_team_id == null) {
-              console.log(`WC KO API: ${local.id} home_team_id <- ${api.homeTeam.tla} (id ${homeId})`);
-            } else {
-              corrected++;
-              console.log(`WC KO API auto-correct: ${local.id} home_team_id ${teamById[local.home_team_id] || local.home_team_id} -> ${api.homeTeam.tla} (id ${homeId})`);
-            }
+            console.log(`WC KO API: ${local.id} home_team_id <- ${api.homeTeam.tla} (id ${homeId})`);
           }
         }
 
         // away_team_id: same treatment
-        if (awayId != null && awayId !== local.away_team_id && local.away_admin_set === 0) {
+        if (awayId != null && local.away_team_id == null && local.away_admin_set === 0) {
           const r = setAway.run(awayId, local.id);
           if (r.changes > 0) {
             touched++;
-            if (local.away_team_id == null) {
-              console.log(`WC KO API: ${local.id} away_team_id <- ${api.awayTeam.tla} (id ${awayId})`);
-            } else {
-              corrected++;
-              console.log(`WC KO API auto-correct: ${local.id} away_team_id ${teamById[local.away_team_id] || local.away_team_id} -> ${api.awayTeam.tla} (id ${awayId})`);
-            }
+            console.log(`WC KO API: ${local.id} away_team_id <- ${api.awayTeam.tla} (id ${awayId})`);
           }
         }
 
-        // winner_team_id: same treatment
+        // winner_team_id: still auto-corrects (objective fact from scores; gated on no team mismatch above).
         if (winnerId != null && winnerId !== local.winner_team_id && local.winner_admin_set === 0) {
           const r = setWinner.run(winnerId, local.id);
           if (r.changes > 0) {
@@ -263,14 +295,15 @@ async function syncWCKnockouts() {
             if (local.winner_team_id == null) {
               console.log(`WC KO API: ${local.id} winner <- team id ${winnerId} (${homeScore}-${awayScore})`);
             } else {
-              corrected++;
-              console.log(`WC KO API auto-correct: ${local.id} winner ${teamById[local.winner_team_id] || local.winner_team_id} -> ${teamById[winnerId] || winnerId}`);
+              console.log(`WC KO API winner correction: ${local.id} ${teamById[local.winner_team_id] || local.winner_team_id} -> ${teamById[winnerId] || winnerId}`);
             }
           }
         }
       }
     }
-    if (touched > 0) console.log(`WC KO sync: ${touched} team-field updates (${corrected} auto-corrections).`);
+    if (touched > 0 || mismatches > 0) {
+      console.log(`WC KO sync: ${touched} field updates, ${mismatches} mismatches deferred to admin review.`);
+    }
   } catch (err) {
     console.log("WC KO sync error:", err.message);
   }

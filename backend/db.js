@@ -100,6 +100,15 @@ db.exec(`
     UNIQUE(participant_id, match_id)
   );
 
+  CREATE TABLE IF NOT EXISTS ko_mismatches (
+    match_id TEXT NOT NULL REFERENCES knockout_matches(id),
+    field TEXT NOT NULL CHECK (field IN ('home_team_id', 'away_team_id')),
+    local_team_id INTEGER REFERENCES teams(id),
+    api_team_id INTEGER REFERENCES teams(id),
+    detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (match_id, field)
+  );
+
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pool_id INTEGER NOT NULL REFERENCES pools(id),
