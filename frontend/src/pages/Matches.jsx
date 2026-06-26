@@ -72,6 +72,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
   const [predictions, setPredictions] = useState({});
   const [selections, setSelections] = useState({});
   const [standings, setStandings] = useState({});
+  const [thirdQualifiers, setThirdQualifiers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [deadline, setDeadline] = useState(null);
@@ -124,6 +125,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         const map = {};
         (data.groups || data).forEach((g) => { map[g.id] = g; });
         setStandings(map);
+        if (data.thirdQualifiers) setThirdQualifiers(data.thirdQualifiers);
       });
       fetchPredictionDeadline().then((data) => {
         if (data.deadline) {
@@ -288,9 +290,20 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
     const pred = predictions[groupId];
     const standing = standings[groupId];
     if (!pred || !standing || standing.qualified.length === 0) return null;
-    const picked = [pred.team1_id, pred.team2_id];
-    const correct = picked.filter((t) => standing.qualified.includes(t)).length;
-    if (correct === 2) return { points: 5, label: "Both correct", cls: "correct" };
+    const qualSet = [...standing.qualified];
+    if (thirdQualifiers.length > 0 && standing.teams && standing.teams.length >= 3) {
+      const thirdTeamId = standing.teams[2].team_id;
+      if (thirdQualifiers.includes(thirdTeamId)) qualSet.push(thirdTeamId);
+    }
+    const picked = pred.team3_id
+      ? [pred.team1_id, pred.team2_id, pred.team3_id]
+      : [pred.team1_id, pred.team2_id];
+    const correct = picked.filter((t) => qualSet.includes(t)).length;
+    if (correct === picked.length) {
+      if (picked.length === 3) return { points: 10, label: "All 3 correct", cls: "correct" };
+      return { points: 5, label: "Both correct", cls: "correct" };
+    }
+    if (correct === 2) return { points: 5, label: "2 correct", cls: "half" };
     if (correct === 1) return { points: 2, label: "1 correct", cls: "half" };
     return { points: 0, label: "0 correct", cls: "wrong" };
   };
