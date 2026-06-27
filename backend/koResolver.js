@@ -125,44 +125,6 @@ function promoteFinishedGroups() {
   return promotions;
 }
 
-// Corrective sweep: clear any top-2 KO slot whose stored team contradicts what
-// local group standings project. Runs each resolver tick; counterpart to the
-// defensive guard in syncWCKnockouts, which prevents new wrong writes.
-// Existing wrong writes (e.g. from a transient API misfire before the guard
-// shipped) are healed by this sweep on the next sync cycle.
-// Conservative: only acts when the group is fully finished AND admin hasn't
-// locked the slot. After clearing, promoteFinishedGroups refills correctly.
-function selfHealKoSlots() {
-  const byGroup = computeGroupStandings();
-  const koMatches = db.prepare(`
-    SELECT id, home_slot, away_slot, home_team_id, away_team_id,
-           home_admin_set, away_admin_set
-    FROM knockout_matches
-  `).all();
-  const clearHome = db.prepare("UPDATE knockout_matches SET home_team_id = NULL WHERE id = ? AND home_admin_set = 0");
-  const clearAway = db.prepare("UPDATE knockout_matches SET away_team_id = NULL WHERE id = ? AND away_admin_set = 0");
-
-  let cleared = 0;
-  for (const ko of koMatches) {
-    for (const side of ["home", "away"]) {
-      const teamId = ko[`${side}_team_id`];
-      if (teamId == null) continue;
-      if (ko[`${side}_admin_set`] !== 0) continue;
-      const slot = ko[`${side}_slot`];
-      const expected = expectedTeamForSlot(slot, byGroup);
-      if (expected.kind !== "expected") continue;
-      if (expected.teamId === teamId) continue;
-      const fn = side === "home" ? clearHome : clearAway;
-      const r = fn.run(ko.id);
-      if (r.changes > 0) {
-        cleared++;
-        console.log(`KO self-heal: cleared ${ko.id} ${side}_slot ${slot} — stored team id ${teamId} disagrees with local standings (expected ${expected.teamId}).`);
-      }
-    }
-  }
-  return cleared;
-}
-
 function cascadeKoWinners() {
   const koMatches = db.prepare("SELECT id, home_slot, away_slot, home_team_id, away_team_id, winner_team_id, home_admin_set, away_admin_set FROM knockout_matches").all();
   const koById = Object.fromEntries(koMatches.map((m) => [m.id, m]));
@@ -407,10 +369,9 @@ async function syncWCKnockouts() {
 
 function runResolver() {
   try {
-    const h = selfHealKoSlots();
     const p = promoteFinishedGroups();
     const c = cascadeKoWinners();
-    if (h > 0 || p > 0 || c > 0) console.log(`KO resolver: ${h} self-heal clears, ${p} group->KO promotions, ${c} winner cascades.`);
+    if (p > 0 || c > 0) console.log(`KO resolver: ${p} group->KO promotions, ${c} winner cascades.`);
   } catch (err) {
     console.log("KO resolver error:", err.message);
   }
