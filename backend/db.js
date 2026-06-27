@@ -461,6 +461,16 @@ try { db.exec("ALTER TABLE wc2022_knockout_matches ADD COLUMN away_score INTEGER
 try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_home_score INTEGER"); } catch (_) {}
 try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_away_score INTEGER"); } catch (_) {}
 
+// v1.31: extra-time and penalty shootout fields for WC2026 KO matches.
+// duration mirrors football-data.org v4 score.duration: REGULAR / EXTRA_TIME / PENALTY_SHOOTOUT.
+// home_et / away_et = goals scored in extra time (delta only, not cumulative).
+// home_pens / away_pens = penalty shootout score.
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN duration TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_et INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_et INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_pens INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_pens INTEGER"); } catch (_) {}
+
 // Add change_cost to champion pick tables (for post-group window fee tracking)
 try { db.exec("ALTER TABLE champion_picks ADD COLUMN change_cost INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE wc2022_champion_picks ADD COLUMN change_cost INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
@@ -502,6 +512,44 @@ try {
     WHERE id = 'R32-16'
       AND away_admin_set = 0
       AND away_team_id = (SELECT id FROM teams WHERE code = 'IRN')
+  `).run();
+} catch (_) {}
+
+// One-off production fix (2026-06-27): two group-stage matches got stuck with wrong
+// scores because scores.js's `WHERE status IN ('upcoming', 'live')` clause blocks
+// updates once a match flips to 'finished'. API briefly published wrong intermediate
+// values during live play, sync wrote them, then later corrections never applied.
+// Real scores per football-data.org: EGY-IRN 1-1, ESP-KSA 4-0. Patches cover both
+// possible home/away orderings (production might have seeded differently).
+// Idempotent: only fires when stored score differs from target.
+try {
+  // EGY-IRN should be 1-1 (draw, symmetric — order doesn't matter)
+  db.prepare(`
+    UPDATE matches
+    SET home_score = 1, away_score = 1
+    WHERE status = 'finished'
+      AND ((home_team_id = (SELECT id FROM teams WHERE code = 'EGY')
+            AND away_team_id = (SELECT id FROM teams WHERE code = 'IRN'))
+        OR (home_team_id = (SELECT id FROM teams WHERE code = 'IRN')
+            AND away_team_id = (SELECT id FROM teams WHERE code = 'EGY')))
+      AND (home_score != 1 OR away_score != 1)
+  `).run();
+  // ESP-KSA should be 4-0 (Spain home in API). Cover both local orderings.
+  db.prepare(`
+    UPDATE matches
+    SET home_score = 4, away_score = 0
+    WHERE status = 'finished'
+      AND home_team_id = (SELECT id FROM teams WHERE code = 'ESP')
+      AND away_team_id = (SELECT id FROM teams WHERE code = 'KSA')
+      AND (home_score != 4 OR away_score != 0)
+  `).run();
+  db.prepare(`
+    UPDATE matches
+    SET home_score = 0, away_score = 4
+    WHERE status = 'finished'
+      AND home_team_id = (SELECT id FROM teams WHERE code = 'KSA')
+      AND away_team_id = (SELECT id FROM teams WHERE code = 'ESP')
+      AND (home_score != 0 OR away_score != 4)
   `).run();
 } catch (_) {}
 

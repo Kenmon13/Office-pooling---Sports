@@ -2083,6 +2083,22 @@ nav a.active {
   text-align: center;
 }
 
+.score-suffix {
+  font-size: 10px;
+  font-weight: 600;
+  color: #88c688;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.ko-live-badge {
+  font-size: 10px;
+  font-style: italic;
+  color: #b8d8b8;
+  text-align: center;
+  padding: 2px 0;
+}
+
 .score-result {
   font-size: 9px;
   text-align: center;

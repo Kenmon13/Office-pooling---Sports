@@ -61,6 +61,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   };
 
   const matchFinished = ko?.status === "finished";
+  const matchLive = ko?.status === "live";
   const actualHome = ko?.home_score ?? null;
   const actualAway = ko?.away_score ?? null;
   const hasPred = !!pred && !!ko?.home_team_name;
@@ -71,6 +72,32 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
   const pAi = a === "" ? null : parseInt(a, 10);
   const scoreCorrect = !exactScoresDisabled && showActual && hasPred && pHi !== null && pAi !== null && pHi === actualHome && pAi === actualAway;
   const scoreWrong = !exactScoresDisabled && showActual && hasPred && pHi !== null && pAi !== null && !scoreCorrect;
+
+  // Single inline bracket per team row: (Pn) for shootouts (always shown when there was
+  // a shootout), or (En) for ET-decided matches (only when ET goals were actually scored).
+  // Pens take precedence — for matches that went to pens, the shootout is the decisive bit.
+  function scoreSuffix(side) {
+    if (!showActual) return null;
+    if (ko?.duration === "PENALTY_SHOOTOUT") {
+      const v = side === "home" ? ko?.home_pens : ko?.away_pens;
+      if (v == null) return null;
+      return `(P${v})`;
+    }
+    if (ko?.duration === "EXTRA_TIME") {
+      const hEt = ko?.home_et ?? 0;
+      const aEt = ko?.away_et ?? 0;
+      if (hEt === 0 && aEt === 0) return null;
+      return `(E${side === "home" ? hEt : aEt})`;
+    }
+    return null;
+  }
+
+  // Live-only badge text — shown below the cell when the match is mid-ET or mid-shootout.
+  const liveBadge = matchLive
+    ? (ko?.duration === "EXTRA_TIME" ? "in extra time"
+        : ko?.duration === "PENALTY_SHOOTOUT" ? "in penalties"
+        : null)
+    : null;
 
   const homeLabel = ko?.home_team_name ? <>{flag(ko.home_team_code)} {ko.home_team_name}</> : <SlotLabel />;
   const awayLabel = ko?.away_team_name ? <>{flag(ko.away_team_code)} {ko.away_team_name}</> : <SlotLabel />;
@@ -95,6 +122,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
               disabled={scoreDisabled} className="bracket-score-input" placeholder="?" />
           )}
           {showActual && <span className="score-actual">{actualHome}</span>}
+          {scoreSuffix("home") && <span className="score-suffix">{scoreSuffix("home")}</span>}
         </div>
       </div>
       <div className={`bracket-team bottom ${canPick ? "clickable" : ""} ${pred === "away" ? "picked" : ""}`}
@@ -108,12 +136,16 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
               disabled={scoreDisabled} className="bracket-score-input" placeholder="?" />
           )}
           {showActual && <span className="score-actual">{actualAway}</span>}
+          {scoreSuffix("away") && <span className="score-suffix">{scoreSuffix("away")}</span>}
         </div>
       </div>
       {!exactScoresDisabled && visibleError && <div className="score-error">{visibleError}</div>}
+      {liveBadge && (
+        <div className="ko-live-badge">· {liveBadge} ·</div>
+      )}
       {(scoreCorrect || scoreWrong) && (
         <div className={`score-result ${scoreCorrect ? "correct" : "wrong"}`}>
-          {scoreCorrect ? "✓ exact score" : `✗ was ${actualHome}–${actualAway}`}
+          {scoreCorrect ? "✓ exact score" : `✗ you picked ${pHi}-${pAi}`}
         </div>
       )}
       {timeLabel.text && (

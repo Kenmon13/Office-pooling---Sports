@@ -239,7 +239,18 @@ async function syncWCKnockouts() {
     const setAway   = db.prepare("UPDATE knockout_matches SET away_team_id = ? WHERE id = ? AND away_team_id IS NULL AND away_admin_set = 0");
     const setWinner = db.prepare("UPDATE knockout_matches SET winner_team_id = ? WHERE id = ? AND winner_admin_set = 0");
     const setDate   = db.prepare("UPDATE knockout_matches SET match_date = ? WHERE id = ?");
-    const setScores = db.prepare("UPDATE knockout_matches SET home_score = COALESCE(?, home_score), away_score = COALESCE(?, away_score), status = COALESCE(?, status) WHERE id = ?");
+    const setScores = db.prepare(`
+      UPDATE knockout_matches SET
+        home_score = COALESCE(?, home_score),
+        away_score = COALESCE(?, away_score),
+        status     = COALESCE(?, status),
+        duration   = COALESCE(?, duration),
+        home_et    = COALESCE(?, home_et),
+        away_et    = COALESCE(?, away_et),
+        home_pens  = COALESCE(?, home_pens),
+        away_pens  = COALESCE(?, away_pens)
+      WHERE id = ?
+    `);
 
     // Mismatch tracking — surfaces in the admin dashboard. Upsert on detection,
     // clear when teams come back into agreement (or admin lock takes effect).
@@ -275,18 +286,28 @@ async function syncWCKnockouts() {
         const awayId = api.awayTeam && api.awayTeam.tla ? teamByCode[api.awayTeam.tla] : null;
 
         let dbStatus = null, homeScore = null, awayScore = null, winnerId = null;
+        let duration = null, homeEt = null, awayEt = null, homePens = null, awayPens = null;
+        const dur = api.score && api.score.duration;
+        const wentBeyond90 = dur === "EXTRA_TIME" || dur === "PENALTY_SHOOTOUT";
         if (api.status === "FINISHED") {
           dbStatus = "finished";
+          duration = dur ?? null;
           // The exact-score bonus is judged on the 90' regulation score, so for matches
           // that went to extra time or penalties we use `regularTime` (90' + stoppage).
           // For REGULAR matches there is no `regularTime` field — `fullTime` IS the 90' score.
           // football-data.org v4 `fullTime` is the cumulative final including the shootout,
           // which would silently make exact-score bonuses unwinnable on any penalty match.
-          const dur = api.score && api.score.duration;
-          const wentBeyond90 = dur === "EXTRA_TIME" || dur === "PENALTY_SHOOTOUT";
           const src = wentBeyond90 ? api.score?.regularTime : api.score?.fullTime;
           homeScore = src?.home ?? null;
           awayScore = src?.away ?? null;
+          if (wentBeyond90) {
+            homeEt = api.score?.extraTime?.home ?? 0;
+            awayEt = api.score?.extraTime?.away ?? 0;
+          }
+          if (dur === "PENALTY_SHOOTOUT") {
+            homePens = api.score?.penalties?.home ?? null;
+            awayPens = api.score?.penalties?.away ?? null;
+          }
           // Winner: prefer `api.score.winner` (authoritative; correctly reflects shootout
           // result). Fall back to score comparison for older payloads or DRAW edge cases.
           const apiWinner = api.score && api.score.winner;
@@ -298,10 +319,26 @@ async function syncWCKnockouts() {
           }
         } else if (api.status === "IN_PLAY" || api.status === "PAUSED") {
           dbStatus = "live";
-          const ft = api.score && api.score.fullTime;
-          const ht = api.score && api.score.halfTime;
-          homeScore = (ft && ft.home != null) ? ft.home : (ht && ht.home != null ? ht.home : 0);
-          awayScore = (ft && ft.away != null) ? ft.away : (ht && ht.away != null ? ht.away : 0);
+          duration = dur ?? null;
+          if (wentBeyond90) {
+            // Regulation is locked once we're in ET/pens. Pull regularTime as the
+            // main score; et / pens fields are running until the phase ends.
+            const src = api.score?.regularTime;
+            homeScore = src?.home ?? null;
+            awayScore = src?.away ?? null;
+            homeEt = api.score?.extraTime?.home ?? 0;
+            awayEt = api.score?.extraTime?.away ?? 0;
+            if (dur === "PENALTY_SHOOTOUT") {
+              homePens = api.score?.penalties?.home ?? null;
+              awayPens = api.score?.penalties?.away ?? null;
+            }
+          } else {
+            // Live in regulation — running 90' score.
+            const ft = api.score && api.score.fullTime;
+            const ht = api.score && api.score.halfTime;
+            homeScore = (ft && ft.home != null) ? ft.home : (ht && ht.home != null ? ht.home : 0);
+            awayScore = (ft && ft.away != null) ? ft.away : (ht && ht.away != null ? ht.away : 0);
+          }
         }
 
         // match_date always refreshes — schedule shifts are benign and don't reinterpret picks.
@@ -330,7 +367,7 @@ async function syncWCKnockouts() {
         if (homeMismatch || awayMismatch) continue;
 
         // scores/status: COALESCE — never overwrite once entered
-        setScores.run(homeScore, awayScore, dbStatus, local.id);
+        setScores.run(homeScore, awayScore, dbStatus, duration, homeEt, awayEt, homePens, awayPens, local.id);
 
         // home_team_id / away_team_id: fill only when locally null AND the API team agrees
         // with what local standings project for the slot. Top-2 slots ("1G", "2G") only
