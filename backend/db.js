@@ -461,6 +461,16 @@ try { db.exec("ALTER TABLE wc2022_knockout_matches ADD COLUMN away_score INTEGER
 try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_home_score INTEGER"); } catch (_) {}
 try { db.exec("ALTER TABLE wc2022_knockout_predictions ADD COLUMN predicted_away_score INTEGER"); } catch (_) {}
 
+// v1.31: extra-time and penalty shootout fields for WC2026 KO matches.
+// duration mirrors football-data.org v4 score.duration: REGULAR / EXTRA_TIME / PENALTY_SHOOTOUT.
+// home_et / away_et = goals scored in extra time (delta only, not cumulative).
+// home_pens / away_pens = penalty shootout score.
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN duration TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_et INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_et INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN home_pens INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE knockout_matches ADD COLUMN away_pens INTEGER"); } catch (_) {}
+
 // Add change_cost to champion pick tables (for post-group window fee tracking)
 try { db.exec("ALTER TABLE champion_picks ADD COLUMN change_cost INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE wc2022_champion_picks ADD COLUMN change_cost INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
