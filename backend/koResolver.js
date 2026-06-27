@@ -16,6 +16,26 @@ function apiToDbDate(utc) {
   return utc.replace("T", " ").replace("Z", "").slice(0, 16);
 }
 
+// What team should fill a KO slot, judged from local standings only?
+// - Top-2 group slots (e.g. "1G", "2G"): returns { kind: "expected", teamId } once the group
+//   is fully finished locally. The API may only write here if its team matches.
+// - Third-place slots (e.g. "3A/E/H/I/J"): always { kind: "third-place" } — never accept API
+//   team IDs, because we don't encode FIFA's combination table. Admin PATCH only.
+// - Cascade slots (e.g. "W R32-5"): always { kind: "cascade" } — cascadeKoWinners handles
+//   these locally from feeder winner_team_id. Never accept API team IDs.
+function expectedTeamForSlot(slot, byGroup) {
+  const top2 = /^([12])([A-L])$/.exec(slot || "");
+  if (top2) {
+    const pos = parseInt(top2[1], 10);
+    const g = byGroup[top2[2]];
+    if (!g || !g.allFinished) return { kind: "unresolved" };
+    return { kind: "expected", teamId: g.teams[pos - 1]?.team_id ?? null };
+  }
+  if (/^3[A-L]\//.test(slot || "")) return { kind: "third-place" };
+  if (/^W\s/.test(slot || "")) return { kind: "cascade" };
+  return { kind: "unknown" };
+}
+
 function computeGroupStandings() {
   const matches = db.prepare("SELECT * FROM matches WHERE status = 'finished'").all();
   const teams = db.prepare("SELECT id, name, code, group_id FROM teams").all();
@@ -153,10 +173,15 @@ async function syncWCKnockouts() {
     }
 
     const koMatches = db.prepare(`SELECT id, round, match_date,
+        home_slot, away_slot,
         home_team_id, away_team_id, winner_team_id, status,
         home_score, away_score,
         home_admin_set, away_admin_set, winner_admin_set
       FROM knockout_matches`).all();
+    // Pre-compute local group standings. Used by the defensive guard below to refuse any
+    // API-supplied KO team ID that doesn't agree with our own standings projection
+    // (prevents the API publishing a wrong pre-bracket projection from polluting slots).
+    const byGroup = computeGroupStandings();
     const teamByCode = {};
     for (const t of db.prepare("SELECT id, code FROM teams").all()) teamByCode[t.code] = t.id;
     const teamById = {};
@@ -227,9 +252,22 @@ async function syncWCKnockouts() {
         let dbStatus = null, homeScore = null, awayScore = null, winnerId = null;
         if (api.status === "FINISHED") {
           dbStatus = "finished";
-          homeScore = api.score && api.score.fullTime ? api.score.fullTime.home : null;
-          awayScore = api.score && api.score.fullTime ? api.score.fullTime.away : null;
-          if (homeScore != null && awayScore != null) {
+          // The exact-score bonus is judged on the 90' regulation score, so for matches
+          // that went to extra time or penalties we use `regularTime` (90' + stoppage).
+          // For REGULAR matches there is no `regularTime` field — `fullTime` IS the 90' score.
+          // football-data.org v4 `fullTime` is the cumulative final including the shootout,
+          // which would silently make exact-score bonuses unwinnable on any penalty match.
+          const dur = api.score && api.score.duration;
+          const wentBeyond90 = dur === "EXTRA_TIME" || dur === "PENALTY_SHOOTOUT";
+          const src = wentBeyond90 ? api.score?.regularTime : api.score?.fullTime;
+          homeScore = src?.home ?? null;
+          awayScore = src?.away ?? null;
+          // Winner: prefer `api.score.winner` (authoritative; correctly reflects shootout
+          // result). Fall back to score comparison for older payloads or DRAW edge cases.
+          const apiWinner = api.score && api.score.winner;
+          if (apiWinner === "HOME_TEAM" && homeId) winnerId = homeId;
+          else if (apiWinner === "AWAY_TEAM" && awayId) winnerId = awayId;
+          else if (homeScore != null && awayScore != null) {
             if (homeScore > awayScore && homeId) winnerId = homeId;
             else if (awayScore > homeScore && awayId) winnerId = awayId;
           }
@@ -269,23 +307,43 @@ async function syncWCKnockouts() {
         // scores/status: COALESCE — never overwrite once entered
         setScores.run(homeScore, awayScore, dbStatus, local.id);
 
-        // home_team_id: fill only when locally null. WHERE clause + this guard are belt-and-braces.
-        if (homeId != null && local.home_team_id == null && local.home_admin_set === 0) {
-          const r = setHome.run(homeId, local.id);
+        // home_team_id / away_team_id: fill only when locally null AND the API team agrees
+        // with what local standings project for the slot. Top-2 slots ("1G", "2G") only
+        // accept the API team if it matches our own group-standings #1 / #2. Third-place
+        // and cascade slots never accept the API team (those are handled by the local
+        // resolver or admin PATCH). This prevents a wrong API projection from polluting
+        // a slot, which would then stick because of the IS NULL guard.
+        function tryFillSide(side, apiTeamId, apiTla) {
+          if (apiTeamId == null) return;
+          if (local[`${side}_team_id`] != null) return;
+          if (local[`${side}_admin_set`] !== 0) return;
+          const slot = local[`${side}_slot`];
+          const expected = expectedTeamForSlot(slot, byGroup);
+          if (expected.kind === "expected") {
+            if (expected.teamId !== apiTeamId) {
+              console.log(`WC KO API skip: ${local.id} ${side}_slot ${slot} — API says ${apiTla} (id ${apiTeamId}) but local standings expect id ${expected.teamId}; deferring.`);
+              return;
+            }
+          } else if (expected.kind === "third-place" || expected.kind === "cascade") {
+            // Never accept API fills for these slots — local resolver / admin PATCH only.
+            return;
+          } else if (expected.kind === "unresolved") {
+            // Group not yet fully finished locally. Wait — if we accept the API write now
+            // we have no way to validate it. Local sync usually catches up within a tick.
+            console.log(`WC KO API skip: ${local.id} ${side}_slot ${slot} — local group not yet finished, deferring.`);
+            return;
+          } else {
+            return;
+          }
+          const fn = side === "home" ? setHome : setAway;
+          const r = fn.run(apiTeamId, local.id);
           if (r.changes > 0) {
             touched++;
-            console.log(`WC KO API: ${local.id} home_team_id <- ${api.homeTeam.tla} (id ${homeId})`);
+            console.log(`WC KO API: ${local.id} ${side}_team_id <- ${apiTla} (id ${apiTeamId})`);
           }
         }
-
-        // away_team_id: same treatment
-        if (awayId != null && local.away_team_id == null && local.away_admin_set === 0) {
-          const r = setAway.run(awayId, local.id);
-          if (r.changes > 0) {
-            touched++;
-            console.log(`WC KO API: ${local.id} away_team_id <- ${api.awayTeam.tla} (id ${awayId})`);
-          }
-        }
+        tryFillSide("home", homeId, api.homeTeam?.tla);
+        tryFillSide("away", awayId, api.awayTeam?.tla);
 
         // winner_team_id: still auto-corrects (objective fact from scores; gated on no team mismatch above).
         if (winnerId != null && winnerId !== local.winner_team_id && local.winner_admin_set === 0) {
