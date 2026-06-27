@@ -515,6 +515,44 @@ try {
   `).run();
 } catch (_) {}
 
+// One-off production fix (2026-06-27): two group-stage matches got stuck with wrong
+// scores because scores.js's `WHERE status IN ('upcoming', 'live')` clause blocks
+// updates once a match flips to 'finished'. API briefly published wrong intermediate
+// values during live play, sync wrote them, then later corrections never applied.
+// Real scores per football-data.org: EGY-IRN 1-1, ESP-KSA 4-0. Patches cover both
+// possible home/away orderings (production might have seeded differently).
+// Idempotent: only fires when stored score differs from target.
+try {
+  // EGY-IRN should be 1-1 (draw, symmetric — order doesn't matter)
+  db.prepare(`
+    UPDATE matches
+    SET home_score = 1, away_score = 1
+    WHERE status = 'finished'
+      AND ((home_team_id = (SELECT id FROM teams WHERE code = 'EGY')
+            AND away_team_id = (SELECT id FROM teams WHERE code = 'IRN'))
+        OR (home_team_id = (SELECT id FROM teams WHERE code = 'IRN')
+            AND away_team_id = (SELECT id FROM teams WHERE code = 'EGY')))
+      AND (home_score != 1 OR away_score != 1)
+  `).run();
+  // ESP-KSA should be 4-0 (Spain home in API). Cover both local orderings.
+  db.prepare(`
+    UPDATE matches
+    SET home_score = 4, away_score = 0
+    WHERE status = 'finished'
+      AND home_team_id = (SELECT id FROM teams WHERE code = 'ESP')
+      AND away_team_id = (SELECT id FROM teams WHERE code = 'KSA')
+      AND (home_score != 4 OR away_score != 0)
+  `).run();
+  db.prepare(`
+    UPDATE matches
+    SET home_score = 0, away_score = 4
+    WHERE status = 'finished'
+      AND home_team_id = (SELECT id FROM teams WHERE code = 'KSA')
+      AND away_team_id = (SELECT id FROM teams WHERE code = 'ESP')
+      AND (home_score != 0 OR away_score != 4)
+  `).run();
+} catch (_) {}
+
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
