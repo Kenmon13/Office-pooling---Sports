@@ -73,8 +73,8 @@ function evalPickError2022(homePicked, awayPicked, h, a) {
   const hv = parseInt(h, 10);
   const av = parseInt(a, 10);
   if (isNaN(hv) || isNaN(av)) return "";
-  if ((homePicked && hv <= av) || (awayPicked && av <= hv))
-    return "Picked team's score must be higher";
+  if ((homePicked && hv < av) || (awayPicked && av < hv))
+    return "Picked team's score can't be lower";
   return "";
 }
 

@@ -24,8 +24,8 @@ function evalPickError(pred, h, a) {
   const hv = parseInt(h, 10);
   const av = parseInt(a, 10);
   if (isNaN(hv) || isNaN(av)) return "";
-  if ((pred === "home" && hv <= av) || (pred === "away" && av <= hv))
-    return "Picked team's score must be higher";
+  if ((pred === "home" && hv < av) || (pred === "away" && av < hv))
+    return "Picked team's score can't be lower";
   return "";
 }
 
