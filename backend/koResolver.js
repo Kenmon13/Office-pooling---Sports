@@ -19,8 +19,10 @@ function apiToDbDate(utc) {
 // What team should fill a KO slot, judged from local standings only?
 // - Top-2 group slots (e.g. "1G", "2G"): returns { kind: "expected", teamId } once the group
 //   is fully finished locally. The API may only write here if its team matches.
-// - Third-place slots (e.g. "3A/E/H/I/J"): always { kind: "third-place" } — never accept API
-//   team IDs, because we don't encode FIFA's combination table. Admin PATCH only.
+// - Third-place slots (e.g. "3A/E/H/I/J"): returns { kind: "third-place", eligibleGroups }.
+//   The API may write here only if (a) the team is in our local best-thirds set, and
+//   (b) the team is from one of eligibleGroups. We don't encode FIFA's full combination
+//   table (which group → which specific slot), so this is a loose check, not exact.
 // - Cascade slots (e.g. "W R32-5"): always { kind: "cascade" } — cascadeKoWinners handles
 //   these locally from feeder winner_team_id. Never accept API team IDs.
 function expectedTeamForSlot(slot, byGroup) {
@@ -31,9 +33,25 @@ function expectedTeamForSlot(slot, byGroup) {
     if (!g || !g.allFinished) return { kind: "unresolved" };
     return { kind: "expected", teamId: g.teams[pos - 1]?.team_id ?? null };
   }
-  if (/^3[A-L]\//.test(slot || "")) return { kind: "third-place" };
+  const third = /^3([A-L](?:\/[A-L])*)$/.exec(slot || "");
+  if (third) {
+    const eligibleGroups = new Set(third[1].split("/"));
+    return { kind: "third-place", eligibleGroups };
+  }
   if (/^W\s/.test(slot || "")) return { kind: "cascade" };
   return { kind: "unknown" };
+}
+
+// Returns a Set of the 8 best-third team_ids, OR null if not yet determined
+// (i.e. not all groups are fully finished). Mirrors the logic in
+// backend/index.js /api/standings best-third computation.
+function computeBestThirds(byGroup) {
+  const groups = Object.values(byGroup);
+  if (groups.length === 0) return null;
+  if (!groups.every((g) => g.allFinished)) return null;
+  const thirds = groups.map((g) => g.teams[2]).filter(Boolean);
+  thirds.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+  return new Set(thirds.slice(0, 8).map((t) => t.team_id));
 }
 
 function computeGroupStandings() {
@@ -182,6 +200,13 @@ async function syncWCKnockouts() {
     // API-supplied KO team ID that doesn't agree with our own standings projection
     // (prevents the API publishing a wrong pre-bracket projection from polluting slots).
     const byGroup = computeGroupStandings();
+    // Best-thirds set (null while group stage is in progress) + a team->group lookup,
+    // used by the loose third-place validation below.
+    const bestThirds = computeBestThirds(byGroup);
+    const groupByTeamId = {};
+    for (const [name, g] of Object.entries(byGroup)) {
+      for (const t of g.teams) groupByTeamId[t.team_id] = name;
+    }
     const teamByCode = {};
     for (const t of db.prepare("SELECT id, code FROM teams").all()) teamByCode[t.code] = t.id;
     const teamById = {};
@@ -324,8 +349,27 @@ async function syncWCKnockouts() {
               console.log(`WC KO API skip: ${local.id} ${side}_slot ${slot} — API says ${apiTla} (id ${apiTeamId}) but local standings expect id ${expected.teamId}; deferring.`);
               return;
             }
-          } else if (expected.kind === "third-place" || expected.kind === "cascade") {
-            // Never accept API fills for these slots — local resolver / admin PATCH only.
+          } else if (expected.kind === "third-place") {
+            // Loose check: accept the API team only if it's in our local best-thirds set
+            // AND from one of the eligible groups in the slot pattern. We don't encode
+            // FIFA's exact group->slot table, so a wrong team from an eligible group can
+            // still slip through — but a team from outside the eligible set never can.
+            if (!bestThirds) {
+              console.log(`WC KO API skip: ${local.id} ${side}_slot ${slot} — best-thirds undetermined (group stage in progress); deferring.`);
+              return;
+            }
+            if (!bestThirds.has(apiTeamId)) {
+              console.log(`WC KO API skip: ${local.id} ${side}_slot ${slot} — API team ${apiTla} (id ${apiTeamId}) not in local best-thirds set; deferring.`);
+              return;
+            }
+            const teamGroup = groupByTeamId[apiTeamId];
+            if (!expected.eligibleGroups.has(teamGroup)) {
+              console.log(`WC KO API skip: ${local.id} ${side}_slot ${slot} — API team ${apiTla} from group ${teamGroup}, eligible groups are ${[...expected.eligibleGroups].join("/")}; deferring.`);
+              return;
+            }
+          } else if (expected.kind === "cascade") {
+            // Never accept API fills for cascade slots — cascadeKoWinners handles these
+            // from feeder winner_team_id.
             return;
           } else if (expected.kind === "unresolved") {
             // Group not yet fully finished locally. Wait — if we accept the API write now
