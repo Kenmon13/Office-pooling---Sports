@@ -491,6 +491,20 @@ const WC2022_KO_SCORES = [
 const updateKo22Score = db.prepare("UPDATE wc2022_knockout_matches SET home_score = ?, away_score = ? WHERE id = ? AND home_score IS NULL");
 for (const s of WC2022_KO_SCORES) updateKo22Score.run(s.hs, s.as, s.id);
 
+// One-off production fix (2026-06-27): WC2026 R32-16's away slot got polluted with IRN
+// when football-data.org briefly published a wrong projection. Reset it to EGY (Group G
+// 2nd by standings). Idempotent: only fires when the current value is IRN and admin
+// hasn't locked it. No-op on subsequent deploys.
+try {
+  db.prepare(`
+    UPDATE knockout_matches
+    SET away_team_id = (SELECT id FROM teams WHERE code = 'EGY')
+    WHERE id = 'R32-16'
+      AND away_admin_set = 0
+      AND away_team_id = (SELECT id FROM teams WHERE code = 'IRN')
+  `).run();
+} catch (_) {}
+
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
