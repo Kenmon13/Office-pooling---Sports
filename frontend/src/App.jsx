@@ -495,16 +495,17 @@ function App() {
       {announcements.length > 0 && !editingAnnouncement && (() => {
         const seenAt = Number(localStorage.getItem(`seen_announcement_${currentTournamentId}_${user?.id ?? "guest"}`) || 0);
         const ordered = [...announcements].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        const renderItems = (prefix) => ordered.map((item, i) => (
-          <span key={`${prefix}-${i}`}>
-            {item.createdAt > seenAt && <span className="ticker-new-label">NEW</span>}
-            {item.text}
-            <span className="announcement-sep" />
-          </span>
-        ));
         return (
           <div className="announcement-text">
-            <span>{renderItems("a")}{renderItems("b")}</span>
+            <span>
+              {ordered.map((item, i) => (
+                <span key={i}>
+                  {item.createdAt > seenAt && <span className="ticker-new-label">NEW</span>}
+                  {item.text}
+                  <span className="announcement-sep" />
+                </span>
+              ))}
+            </span>
           </div>
         );
       })()}
