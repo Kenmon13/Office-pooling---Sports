@@ -553,6 +553,28 @@ try {
   `).run();
 } catch (_) {}
 
+// One-off production fix (2026-06-28): football-data.org hasn't published the seven
+// third-place R32 assignments yet (all 16 R32 teams still TBD upstream as of group-stage
+// end). koResolver only auto-fills 1st/2nd via local standings; 3rd-place slots wait for
+// the API, with a loose-validation check. Backfill from FIFA's official bracket so users
+// see the full R32 immediately. Idempotent — each UPDATE guards on `away_team_id IS NULL
+// AND away_admin_set = 0`, so no-ops once filled by API or admin. Each sets
+// away_admin_set = 1 to lock against any wrong API publish (matches admin PATCH behavior).
+try {
+  const fill = db.prepare(`
+    UPDATE knockout_matches
+    SET away_team_id = (SELECT id FROM teams WHERE code = ?), away_admin_set = 1
+    WHERE id = ? AND away_team_id IS NULL AND away_admin_set = 0
+  `);
+  fill.run("PAR", "R32-2");   // Paraguay (3D) — Germany vs Paraguay
+  fill.run("SWE", "R32-5");   // Sweden (3F) — France vs Sweden
+  fill.run("ECU", "R32-7");   // Ecuador (3E) — Mexico vs Ecuador
+  fill.run("COD", "R32-8");   // DR Congo (3K) — England vs DR Congo
+  fill.run("SEN", "R32-10");  // Senegal (3I) — Belgium vs Senegal
+  fill.run("ALG", "R32-13");  // Algeria (3J) — Switzerland vs Algeria
+  fill.run("GHA", "R32-15");  // Ghana (3L) — Colombia vs Ghana
+} catch (_) {}
+
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
