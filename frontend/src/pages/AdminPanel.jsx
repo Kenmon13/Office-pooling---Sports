@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -34,6 +34,9 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [issueFilter, setIssueFilter] = useState("all");
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [userPools, setUserPools] = useState({});
+  const [emailDrafts, setEmailDrafts] = useState({});
+  const [emailSaving, setEmailSaving] = useState(null);
+  const [emailMsg, setEmailMsg] = useState({});
   const [issueProfileUserId, setIssueProfileUserId] = useState(null);
   const [issueProfilePools, setIssueProfilePools] = useState(null);
   const [koMismatches, setKoMismatches] = useState([]);
@@ -236,6 +239,17 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
     setUsers((prev) => prev.filter((u) => u.id !== targetId));
   };
 
+  const handleSetEmail = async (userId) => {
+    const email = (emailDrafts[userId] ?? "").trim();
+    setEmailSaving(userId);
+    setEmailMsg((m) => ({ ...m, [userId]: "" }));
+    const result = await adminSetUserEmail(userId, email);
+    setEmailSaving(null);
+    if (result.error) { setEmailMsg((m) => ({ ...m, [userId]: result.error })); return; }
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, email: result.email } : u)));
+    setEmailMsg((m) => ({ ...m, [userId]: result.email ? "Saved ✓" : "Cleared ✓" }));
+  };
+
   const sortPools = (list) => {
     const sorted = [...list];
     if (poolSort === "alpha") sorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -394,6 +408,20 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                   </div>
                   {isExpanded && (
                     <div style={{ padding: "8px 12px 12px", borderTop: "1px solid #2a2a2a" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 10, flexWrap: "wrap" }}>
+                        <span style={{ color: "#888" }}>Email:</span>
+                        <input
+                          type="email"
+                          placeholder="none on file"
+                          value={emailDrafts[u.id] ?? (u.email || "")}
+                          onChange={(e) => setEmailDrafts((d) => ({ ...d, [u.id]: e.target.value }))}
+                          style={{ flex: 1, minWidth: 160, padding: "4px 8px", fontSize: 13, background: "#111", color: "#ddd", border: "1px solid #333", borderRadius: 4 }}
+                        />
+                        <button className="pool-list-btn" style={{ flex: "none", padding: "4px 10px", fontSize: 12 }} disabled={emailSaving === u.id} onClick={() => handleSetEmail(u.id)}>
+                          {emailSaving === u.id ? "Saving…" : "Save email"}
+                        </button>
+                        {emailMsg[u.id] ? <span style={{ color: emailMsg[u.id].includes("✓") ? "#6c6" : "#c66", fontSize: 12 }}>{emailMsg[u.id]}</span> : null}
+                      </div>
                       {!pools ? (
                         <p className="notice" style={{ margin: 0 }}>Loading…</p>
                       ) : pools.length === 0 ? (

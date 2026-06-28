@@ -184,6 +184,15 @@ export async function adminDeleteUser(targetId) {
   return res.json();
 }
 
+export async function adminSetUserEmail(userId, email) {
+  const res = await fetch(`${API}/admin/users/${userId}/email`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
 export async function adminFetchPools() {
   const res = await fetch(`${API}/admin/pools`, { headers: authHeaders() });
   return res.json();

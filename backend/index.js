@@ -356,8 +356,25 @@ function requireAdminToken(req, res, next) {
 // --- Admin ---
 
 app.get("/api/admin/users", requireAdminToken, (req, res) => {
-  const users = db.prepare("SELECT id, username, display_name, is_admin, created_at FROM users ORDER BY created_at DESC").all();
+  const users = db.prepare("SELECT id, username, display_name, email, is_admin, created_at FROM users ORDER BY created_at DESC").all();
   res.json(users);
+});
+
+// Admin set/correct/clear a user's email (mirrors the self-serve profile rules).
+app.patch("/api/admin/users/:id/email", requireAdminToken, (req, res) => {
+  const { email } = req.body;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Invalid email format" });
+  }
+  const user = db.prepare("SELECT id FROM users WHERE id = ?").get(req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const normalized = email ? email.trim().toLowerCase() : null;
+  if (normalized) {
+    const existing = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(normalized, user.id);
+    if (existing) return res.status(409).json({ error: "Email already linked to another account" });
+  }
+  db.prepare("UPDATE users SET email = ? WHERE id = ?").run(normalized, user.id);
+  res.json({ success: true, email: normalized });
 });
 
 app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
