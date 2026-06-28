@@ -575,6 +575,52 @@ try {
   fill.run("GHA", "R32-15");  // Ghana (3L) — Colombia vs Ghana
 } catch (_) {}
 
+// One-off goodwill fix (2026-06-28): user 'joshoreilly' moved with his friend
+// group from 'Aqua for All' to 'Football for All' and many of his group-stage
+// picks didn't carry across (picks are per-pool by design — no copy mechanism).
+// Fill the 5 groups (A, B, C, D, J) where Football has no pick from his Aqua
+// picks, verified visually against both pools 2026-06-28. Scoped to one user via
+// subquery on username + pool name — no other user is read or written.
+// Idempotent: INSERT OR IGNORE on UNIQUE(participant_id, group_id), so every row
+// no-ops on rerun. Fill-gaps semantics — never overwrites a pick already in
+// Football, even if that pick differs from Aqua (e.g. Group G NZ vs none).
+// Team3 cap check: Football already has team3 in 5 groups (E,F,G,H,I); this
+// adds 3 more (A,C,D) → exactly the 8-pool cap, no overflow.
+// Bypasses per-group deadline (group stage long over) — intentional: the picks
+// pre-existed in Aqua, so they are legitimate predictions just made in another
+// pool. No other user gets this treatment without explicit ask.
+try {
+  const fillRow3 = db.prepare(`
+    INSERT OR IGNORE INTO group_predictions (participant_id, group_id, team1_id, team2_id, team3_id)
+    VALUES (
+      (SELECT id FROM participants
+         WHERE pool_id = (SELECT id FROM pools WHERE name = 'Football for All')
+           AND user_id = (SELECT id FROM users WHERE username = 'joshoreilly')),
+      (SELECT id FROM groups WHERE name = ?),
+      (SELECT t.id FROM teams t JOIN groups g ON t.group_id = g.id WHERE g.name = ? AND t.name = ?),
+      (SELECT t.id FROM teams t JOIN groups g ON t.group_id = g.id WHERE g.name = ? AND t.name = ?),
+      (SELECT t.id FROM teams t JOIN groups g ON t.group_id = g.id WHERE g.name = ? AND t.name = ?)
+    )
+  `);
+  const fillRow2 = db.prepare(`
+    INSERT OR IGNORE INTO group_predictions (participant_id, group_id, team1_id, team2_id, team3_id)
+    VALUES (
+      (SELECT id FROM participants
+         WHERE pool_id = (SELECT id FROM pools WHERE name = 'Football for All')
+           AND user_id = (SELECT id FROM users WHERE username = 'joshoreilly')),
+      (SELECT id FROM groups WHERE name = ?),
+      (SELECT t.id FROM teams t JOIN groups g ON t.group_id = g.id WHERE g.name = ? AND t.name = ?),
+      (SELECT t.id FROM teams t JOIN groups g ON t.group_id = g.id WHERE g.name = ? AND t.name = ?),
+      NULL
+    )
+  `);
+  fillRow3.run("A", "A", "Mexico",    "A", "South Africa", "A", "South Korea");
+  fillRow2.run("B", "B", "Canada",    "B", "Switzerland");
+  fillRow3.run("C", "C", "Brazil",    "C", "Morocco",      "C", "Scotland");
+  fillRow3.run("D", "D", "Australia", "D", "Paraguay",     "D", "USA");
+  fillRow2.run("J", "J", "Argentina", "J", "Austria");
+} catch (_) {}
+
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
