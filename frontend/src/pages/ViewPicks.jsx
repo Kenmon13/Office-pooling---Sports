@@ -146,10 +146,11 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
     );
   }
 
-  const roundOrder = ["Round of 32", "Round of 16", "Quarter-Finals", "Semi-Finals", "Final"];
+  const roundOrder = ["R32", "R16", "QF", "SF", "F"];
+  const roundLabels = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-Finals", SF: "Semi-Finals", F: "Final" };
   const koByRound = {};
   koMatches.forEach((m) => {
-    const round = m.round || m.stage || "Unknown";
+    const round = m.round || "Unknown";
     if (!koByRound[round]) koByRound[round] = [];
     koByRound[round].push(m);
   });
@@ -231,7 +232,7 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
           <div className="view-picks-ko">
             {roundOrder.filter((r) => koByRound[r]).map((round) => (
               <div key={round} className="view-picks-ko-round">
-                <h4>{round}</h4>
+                <h4>{roundLabels[round] || round}</h4>
                 <div className="view-picks-ko-matches">
                   {koByRound[round].map((m) => {
                     const theirPick = koPreds[m.id];
@@ -239,20 +240,22 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
                     const theirScore = koScores[m.id];
                     const myScore = showCompare ? myKoScores[m.id] : undefined;
                     if (!theirPick && !myPickVal) return null;
-                    const homeWin = theirPick === m.home_team_id;
-                    const awayWin = theirPick === m.away_team_id;
-                    const myHomeWin = myPickVal === m.home_team_id;
-                    const myAwayWin = myPickVal === m.away_team_id;
+                    const homeName = m.home_team_name || m.home_slot || "TBD";
+                    const awayName = m.away_team_name || m.away_slot || "TBD";
+                    const homeWin = theirPick === "home";
+                    const awayWin = theirPick === "away";
+                    const myHomeWin = myPickVal === "home";
+                    const myAwayWin = myPickVal === "away";
                     const sameWinner = theirPick && myPickVal && theirPick === myPickVal;
                     return (
                       <div key={m.id} className={`view-picks-ko-match ${showCompare ? "compare-ko-match" : ""}`}>
                         <div className="view-picks-ko-matchup">
                           <span className={`view-picks-ko-team ${homeWin ? "picked" : ""}`}>
-                            {flag(m.home_code)} {m.home_team || m.home_placeholder || "TBD"}
+                            {flag(m.home_team_code)} {homeName}
                           </span>
                           <span className="view-picks-ko-vs">vs</span>
                           <span className={`view-picks-ko-team ${awayWin ? "picked" : ""}`}>
-                            {m.away_team || m.away_placeholder || "TBD"} {flag(m.away_code)}
+                            {awayName} {flag(m.away_team_code)}
                           </span>
                           {theirScore && (
                             <span className="view-picks-ko-score">
@@ -264,7 +267,7 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
                           <div className="compare-ko-my-pick">
                             {myPickVal ? (
                               <span className={`compare-ko-label ${sameWinner ? "compare-match" : "compare-differ"}`}>
-                                You: {myHomeWin ? (m.home_team || "TBD") : myAwayWin ? (m.away_team || "TBD") : "?"}
+                                You: {myHomeWin ? homeName : myAwayWin ? awayName : "?"}
                                 {myScore ? ` (${myScore.home} - ${myScore.away})` : ""}
                                 {sameWinner && " ✓"}
                               </span>
