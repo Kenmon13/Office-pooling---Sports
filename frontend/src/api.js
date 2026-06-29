@@ -742,6 +742,11 @@ export async function fetchChampionPickStats(poolId) {
   return res.json();
 }
 
+export async function fetchKnockoutPickStats(poolId) {
+  const res = await fetch(`${API}/stats/knockout-picks?pool_id=${poolId}`, { headers: authHeaders() });
+  return res.json();
+}
+
 export async function fetchAwardPickStats(poolId) {
   const res = await fetch(`${API}/stats/award-picks?pool_id=${poolId}`, { headers: authHeaders() });
   return res.json();

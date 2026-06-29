@@ -242,40 +242,56 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
                     if (!theirPick && !myPickVal) return null;
                     const homeName = m.home_team_name || m.home_slot || "TBD";
                     const awayName = m.away_team_name || m.away_slot || "TBD";
-                    const homeWin = theirPick === "home";
-                    const awayWin = theirPick === "away";
-                    const myHomeWin = myPickVal === "home";
-                    const myAwayWin = myPickVal === "away";
-                    const sameWinner = theirPick && myPickVal && theirPick === myPickVal;
-                    return (
-                      <div key={m.id} className={`view-picks-ko-match ${showCompare ? "compare-ko-match" : ""}`}>
-                        <div className="view-picks-ko-matchup">
-                          <span className={`view-picks-ko-team ${homeWin ? "picked" : ""}`}>
-                            {flag(m.home_team_code)} {homeName}
-                          </span>
-                          <span className="view-picks-ko-vs">vs</span>
-                          <span className={`view-picks-ko-team ${awayWin ? "picked" : ""}`}>
-                            {awayName} {flag(m.away_team_code)}
-                          </span>
-                          {theirScore && (
-                            <span className="view-picks-ko-score">
-                              ({theirScore.home} - {theirScore.away})
-                            </span>
-                          )}
-                        </div>
-                        {showCompare && (
-                          <div className="compare-ko-my-pick">
-                            {myPickVal ? (
-                              <span className={`compare-ko-label ${sameWinner ? "compare-match" : "compare-differ"}`}>
-                                You: {myHomeWin ? homeName : myAwayWin ? awayName : "?"}
-                                {myScore ? ` (${myScore.home} - ${myScore.away})` : ""}
-                                {sameWinner && " ✓"}
-                              </span>
+                    const teamCls = (side) => {
+                      const theirs = theirPick === side;
+                      const mine = myPickVal === side;
+                      if (showCompare) {
+                        if (theirs && mine) return "picked compare-match";
+                        if (theirs) return "picked";
+                        if (mine) return "compare-mine-only";
+                        return "";
+                      }
+                      return theirs ? "picked" : "";
+                    };
+                    const indicators = (side) => showCompare ? (
+                      <span className="compare-indicators">
+                        <span className={`compare-indicator ${theirPick === side ? "compare-ind-theirs" : ""}`} />
+                        <span className={`compare-indicator ${myPickVal === side ? "compare-ind-mine" : ""}`} />
+                      </span>
+                    ) : null;
+                    const scoreArea = (side) => {
+                      if (showCompare) {
+                        const t = theirScore ? theirScore[side] : null;
+                        const mine = myScore ? myScore[side] : null;
+                        if (t == null && mine == null) return null;
+                        const same = t != null && mine != null && t === mine;
+                        return (
+                          <span className="view-picks-ko-team-score">
+                            {same ? (
+                              <span className="vpko-sl vpko-sl-match">{t}</span>
                             ) : (
-                              <span className="compare-ko-label compare-no-pick">You: No pick</span>
+                              <>
+                                {t != null && <span className="vpko-sl vpko-sl-theirs">{t}</span>}
+                                {mine != null && <span className="vpko-sl vpko-sl-mine">{mine}</span>}
+                              </>
                             )}
-                          </div>
-                        )}
+                          </span>
+                        );
+                      }
+                      return theirScore ? <span className="view-picks-ko-team-score">{theirScore[side]}</span> : null;
+                    };
+                    return (
+                      <div key={m.id} className="view-picks-ko-match">
+                        <div className="view-picks-ko-cell">
+                          <span className={`view-picks-ko-team top ${teamCls("home")}`}>
+                            <span className="view-picks-ko-team-label">{indicators("home")}{flag(m.home_team_code)} {homeName}</span>
+                            {scoreArea("home")}
+                          </span>
+                          <span className={`view-picks-ko-team ${teamCls("away")}`}>
+                            <span className="view-picks-ko-team-label">{indicators("away")}{flag(m.away_team_code)} {awayName}</span>
+                            {scoreArea("away")}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}

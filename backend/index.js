@@ -2563,6 +2563,32 @@ app.post("/api/admin/restore/:name", requireAdminToken, async (req, res) => {
 
 // ── Global stats (across all pools for a tournament) ─────────────────────────
 
+const KO_STATS_ROUND_ORDER = ["R32", "R16", "QF", "SF", "F"];
+const KO_STATS_ROUND_LABELS = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-Finals", SF: "Semi-Finals", F: "Final" };
+
+// Shape raw knockout pick-count rows into rounds → matches with win-share
+// percentages. Predicted scores are intentionally excluded. Matches with no
+// picks or TBD teams are dropped.
+function shapeKnockoutStats(rows) {
+  const byRound = {};
+  for (const r of rows) {
+    const total = r.home_count + r.away_count;
+    if (total === 0 || !r.home_team_name || !r.away_team_name) continue;
+    if (!byRound[r.round]) {
+      byRound[r.round] = { round: r.round, round_name: KO_STATS_ROUND_LABELS[r.round] || r.round, matches: [] };
+    }
+    byRound[r.round].matches.push({
+      match_id: r.match_id,
+      home_team_name: r.home_team_name, home_team_code: r.home_team_code,
+      away_team_name: r.away_team_name, away_team_code: r.away_team_code,
+      home_count: r.home_count, away_count: r.away_count,
+      home_pct: Math.round((r.home_count / total) * 100),
+      away_pct: Math.round((r.away_count / total) * 100),
+    });
+  }
+  return KO_STATS_ROUND_ORDER.filter((rd) => byRound[rd]).map((rd) => byRound[rd]);
+}
+
 app.get("/api/stats/global", (req, res) => {
   const tournament = req.query.tournament || "wc2026";
 
@@ -2655,9 +2681,28 @@ app.get("/api/stats/global", (req, res) => {
     }
   }
 
+  // Knockout winner picks across all pools for this tournament (no scores)
+  const knockoutRows = db.prepare(`
+    SELECT km.id as match_id, km.round,
+           ht.name as home_team_name, ht.code as home_team_code,
+           at.name as away_team_name, at.code as away_team_code,
+           SUM(CASE WHEN kp.predicted_winner = 'home' THEN 1 ELSE 0 END) as home_count,
+           SUM(CASE WHEN kp.predicted_winner = 'away' THEN 1 ELSE 0 END) as away_count
+    FROM knockout_predictions kp
+    JOIN participants p ON p.id = kp.participant_id
+    JOIN pools po ON po.id = p.pool_id
+    JOIN knockout_matches km ON km.id = kp.match_id
+    LEFT JOIN teams ht ON ht.id = km.home_team_id
+    LEFT JOIN teams at ON at.id = km.away_team_id
+    WHERE po.tournament = ?
+    GROUP BY km.id
+    ORDER BY km.id
+  `).all(tournament);
+  const knockout = shapeKnockoutStats(knockoutRows);
+
   const totalPlayers = champTotal;
 
-  res.json({ champions, groups: Object.values(groups), awards, totalPlayers });
+  res.json({ champions, groups: Object.values(groups), awards, knockout, totalPlayers });
 });
 
 // ── Stats endpoints ──────────────────────────────────────────────────────────
@@ -2699,6 +2744,29 @@ app.get("/api/stats/group-picks", (req, res) => {
   }
 
   res.json(Object.values(groups));
+});
+
+app.get("/api/stats/knockout-picks", (req, res) => {
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.json({ error: "pool_id required" });
+
+  const rows = db.prepare(`
+    SELECT km.id as match_id, km.round,
+           ht.name as home_team_name, ht.code as home_team_code,
+           at.name as away_team_name, at.code as away_team_code,
+           SUM(CASE WHEN kp.predicted_winner = 'home' THEN 1 ELSE 0 END) as home_count,
+           SUM(CASE WHEN kp.predicted_winner = 'away' THEN 1 ELSE 0 END) as away_count
+    FROM knockout_predictions kp
+    JOIN participants p ON p.id = kp.participant_id
+    JOIN knockout_matches km ON km.id = kp.match_id
+    LEFT JOIN teams ht ON ht.id = km.home_team_id
+    LEFT JOIN teams at ON at.id = km.away_team_id
+    WHERE p.pool_id = ?
+    GROUP BY km.id
+    ORDER BY km.id
+  `).all(poolId);
+
+  res.json(shapeKnockoutStats(rows));
 });
 
 app.get("/api/stats/champion-picks", (req, res) => {

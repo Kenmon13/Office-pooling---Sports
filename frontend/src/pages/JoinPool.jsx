@@ -210,6 +210,43 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
           </div>
         )}
 
+        {globalStats && globalStats.knockout && globalStats.knockout.length > 0 && (
+          <div className="global-stats-section">
+            <h4>Knockout Stage Favourites</h4>
+            {globalStats.knockout.map((rd) => (
+              <div key={rd.round} className="stats-ko-round">
+                <h4 className="stats-ko-round-title">{rd.round_name}</h4>
+                <div className="stats-groups-grid">
+                  {rd.matches.map((m) => (
+                    <div key={m.match_id} className="stats-group-card">
+                      <div className="stats-row stats-row-compact">
+                        <span className="stats-team">
+                          {flag(m.home_team_code)}
+                          {SHORT_NAMES[m.home_team_name] || m.home_team_name}
+                        </span>
+                        <div className="stats-bar-wrapper">
+                          <div className="stats-bar stats-bar-group" style={{ width: `${m.home_pct}%` }} />
+                        </div>
+                        <span className="stats-pct">{m.home_pct}%</span>
+                      </div>
+                      <div className="stats-row stats-row-compact">
+                        <span className="stats-team">
+                          {flag(m.away_team_code)}
+                          {SHORT_NAMES[m.away_team_name] || m.away_team_name}
+                        </span>
+                        <div className="stats-bar-wrapper">
+                          <div className="stats-bar stats-bar-group" style={{ width: `${m.away_pct}%` }} />
+                        </div>
+                        <span className="stats-pct">{m.away_pct}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {globalStats && globalStats.awards && AWARDS.some((a) => (globalStats.awards[a.key] || []).length > 0) && (
           <div className="global-stats-section">
             <h4>Award Picks</h4>
