@@ -56,13 +56,35 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
     }
   }, [currentUser, isWC2022]);
 
-  const handlePick = async (matchId, teamId) => {
+  const handlePick = async (matchId, teamId, draftHome, draftAway) => {
     if (!currentUser) return;
     setSaving(matchId);
     setPredictions((prev) => ({ ...prev, [matchId]: teamId }));
     const submitFn = isWC2022 ? submitWC2022KnockoutPrediction : submitKnockoutPrediction;
-    const existing = scores[matchId];
-    await submitFn(currentUser.id, matchId, teamId, existing?.home ?? null, existing?.away ?? null);
+
+    // WC2026 bracket passes the live score inputs, so a just-typed score is KEPT when it
+    // now agrees with the new winner (and dropped when it contradicts — ties stay valid).
+    // WC2022 omits them → fall back to the persisted score.
+    let sh, sa;
+    if (draftHome !== undefined || draftAway !== undefined) {
+      const hv = (draftHome === "" || draftHome == null) ? null : parseInt(draftHome, 10);
+      const av = (draftAway === "" || draftAway == null) ? null : parseInt(draftAway, 10);
+      const haveScore = hv != null && !isNaN(hv) && av != null && !isNaN(av);
+      const contradicts = haveScore && ((teamId === "home" && hv < av) || (teamId === "away" && av < hv));
+      sh = (haveScore && !contradicts) ? hv : null;
+      sa = (haveScore && !contradicts) ? av : null;
+    } else {
+      const existing = scores[matchId];
+      sh = existing?.home ?? null;
+      sa = existing?.away ?? null;
+    }
+    setScores((prev) => {
+      const next = { ...prev };
+      if (sh == null && sa == null) delete next[matchId];
+      else next[matchId] = { home: sh, away: sa };
+      return next;
+    });
+    await submitFn(currentUser.id, matchId, teamId, sh, sa);
     setSaving(null);
     window.dispatchEvent(new CustomEvent("picks-saved"));
   };
@@ -89,7 +111,12 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
   const missingScoreMatches = exactScoresDisabled ? [] : openKoMatches
     .filter((m) => predictions[m.id] && !scores[m.id])
     .sort((a, b) => (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99));
-  const koAlerts = currentUser && groupStageComplete && !koStageComplete && (missingPickMatches.length > 0 || missingScoreMatches.length > 0) ? (
+  const scoreContradictsPick = (winner, sc) => !!sc && sc.home != null && sc.away != null &&
+    ((winner === "home" && sc.home < sc.away) || (winner === "away" && sc.away < sc.home));
+  const mismatchMatches = exactScoresDisabled ? [] : openKoMatches
+    .filter((m) => predictions[m.id] && scoreContradictsPick(predictions[m.id], scores[m.id]))
+    .sort((a, b) => (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99));
+  const koAlerts = currentUser && groupStageComplete && !koStageComplete && (missingPickMatches.length > 0 || missingScoreMatches.length > 0 || mismatchMatches.length > 0) ? (
     <div className="page-alerts">
       <div className="notif-window-card win-urgent">
         <div className="win-card-top">
@@ -109,6 +136,13 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
             ⚠️ {missingScoreMatches.length === 1
               ? `${missingScoreMatches[0].round}: ${missingScoreMatches[0].home_team_name} vs ${missingScoreMatches[0].away_team_name} — missing score`
               : `${missingScoreMatches.length} matches missing score`}
+          </div>
+        )}
+        {mismatchMatches.length > 0 && (
+          <div className="win-missed">
+            ⚠️ {mismatchMatches.length === 1
+              ? `${mismatchMatches[0].round}: ${mismatchMatches[0].home_team_name} vs ${mismatchMatches[0].away_team_name} — your predicted score doesn’t match your pick, update before kickoff`
+              : `${mismatchMatches.length} match${mismatchMatches.length === 1 ? "" : "es"}: your predicted score doesn’t match your pick — update before kickoff`}
           </div>
         )}
       </div>
