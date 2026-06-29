@@ -43,6 +43,10 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
     setScoreError({ forPred: pred, msg: exactScoresDisabled ? "" : evalPickError(pred, h, a) });
   }
   const visibleError = exactScoresDisabled ? "" : scoreError.msg;
+  // True when the *saved* score (not just a freshly-typed one) contradicts the pick —
+  // lets us word the cue as "doesn't match" rather than "not saved".
+  const savedConflict = !exactScoresDisabled && scoreData && scoreData.home != null && scoreData.away != null &&
+    !!evalPickError(pred, String(scoreData.home), String(scoreData.away));
 
   const matchLocked = !matchOpen || (ko && ko.status !== "upcoming");
   const canPick = onPick && !matchLocked;
@@ -55,7 +59,9 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
     const hv = h === "" ? null : parseInt(h, 10);
     const av = a === "" ? null : parseInt(a, 10);
     if (hv !== null && !isNaN(hv) && av !== null && !isNaN(av)) {
-      setScoreError({ forPred: pred, msg: evalPickError(pred, h, a) });
+      const err = evalPickError(pred, h, a);
+      setScoreError({ forPred: pred, msg: err });
+      if (err) return; // score contradicts the winner pick — block the save (ties are allowed)
       onScore(m.id, hv, av);
     }
   };
@@ -108,11 +114,11 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
 
   return (
     <div
-      className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""} ${!matchOpen ? "not-open" : ""} ${matchOpen && !pred && ko?.home_team_name ? "unpicked" : ""} ${pickedNoScore ? "picked-no-score" : ""}`}
+      className={`bracket-match ${status || ""} ${isSaving ? "saving" : ""} ${!matchOpen ? "not-open" : ""} ${matchOpen && !pred && ko?.home_team_name ? "unpicked" : ""} ${pickedNoScore ? "picked-no-score" : ""} ${visibleError ? "score-conflict" : ""}`}
       style={{ position: "absolute", left, top, width: ROUND_W, height: MATCH_H }}
     >
       <div className={`bracket-team top ${canPick ? "clickable" : ""} ${pred === "home" ? "picked" : ""}`}
-        onClick={canPick ? () => onPick(m.id, "home") : undefined}>
+        onClick={canPick ? () => onPick(m.id, "home", h, a) : undefined}>
         <span className="team-label">{homeLabel}</span>
         <div className="team-score-area" onClick={(e) => e.stopPropagation()}>
           {showInputs && (
@@ -126,7 +132,7 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
         </div>
       </div>
       <div className={`bracket-team bottom ${canPick ? "clickable" : ""} ${pred === "away" ? "picked" : ""}`}
-        onClick={canPick ? () => onPick(m.id, "away") : undefined}>
+        onClick={canPick ? () => onPick(m.id, "away", h, a) : undefined}>
         <span className="team-label">{awayLabel}</span>
         <div className="team-score-area" onClick={(e) => e.stopPropagation()}>
           {showInputs && (
@@ -139,7 +145,13 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
           {scoreSuffix("away") && <span className="score-suffix">{scoreSuffix("away")}</span>}
         </div>
       </div>
-      {!exactScoresDisabled && visibleError && <div className="score-error">{visibleError}</div>}
+      {!exactScoresDisabled && visibleError && (
+        <div className="score-error score-error-blocked">
+          {savedConflict
+            ? "⚠ Pick doesn’t match your score — update before kickoff"
+            : "⚠ Score not saved — winner can’t score fewer goals"}
+        </div>
+      )}
       {liveBadge && (
         <div className="ko-live-badge">· {liveBadge} ·</div>
       )}

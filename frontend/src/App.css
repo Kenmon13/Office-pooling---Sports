@@ -2175,6 +2175,19 @@ nav a.active {
   border-color: #d97706;
 }
 
+.bracket-match.score-conflict {
+  border-color: #ef5350;
+  box-shadow: 0 0 0 1px #ef5350;
+}
+.score-error.score-error-blocked {
+  background: #3a0d0d;
+  color: #ff8a80;
+  font-weight: 700;
+  border: 1px solid #ef5350;
+  border-radius: 4px;
+  z-index: 5;
+}
+
 .bracket-match-time {
   font-size: 9px;
   color: #4a7a4a;
