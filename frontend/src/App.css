@@ -2948,6 +2948,87 @@ nav a.active {
   margin-left: auto;
 }
 
+/* WC ViewPicks: bracket-cell knockout layout — scoped to .view-picks-ko so
+   the shared ViewEPLPicks rules above are untouched. */
+.view-picks-ko .view-picks-ko-matches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.view-picks-ko .view-picks-ko-match {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: #0f240f;
+  overflow: hidden;
+}
+.view-picks-ko-cell {
+  display: flex;
+  flex-direction: column;
+}
+.view-picks-ko .view-picks-ko-team {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 10px;
+  min-height: 30px;
+  box-sizing: border-box;
+}
+.view-picks-ko .view-picks-ko-team.top {
+  border-bottom: 1px solid #1e3a1e;
+}
+.view-picks-ko .view-picks-ko-team.picked {
+  background: #1a4a1a;
+}
+.view-picks-ko .view-picks-ko-team.compare-mine-only {
+  background: #0d2a3d;
+  color: #64b5f6;
+}
+.view-picks-ko .view-picks-ko-team.compare-match {
+  background: #3a3a00;
+  color: #ffca28;
+}
+.view-picks-ko-team-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-picks-ko-team-score {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: inherit;
+  flex-shrink: 0;
+}
+.vpko-sl {
+  min-width: 18px;
+  text-align: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.vpko-sl-theirs { background: #14331a; color: #6fdc6f; }
+.vpko-sl-mine { background: #0d2a3d; color: #64b5f6; }
+.vpko-sl-match { background: #3a3a00; color: #ffca28; }
+
+.stats-ko-round {
+  margin-bottom: 16px;
+}
+.stats-ko-round-title {
+  font-size: 13px;
+  color: #8ab88a;
+  margin: 0 0 8px;
+}
+
 /* Champion pick */
 .view-picks-champion {
   background: #122412;
@@ -3091,6 +3172,10 @@ nav a.active {
 }
 .compare-ko-my-pick {
   padding-left: 4px;
+}
+.view-picks-ko .compare-ko-my-pick {
+  padding: 6px 10px;
+  border-top: 1px solid #1e3a1e;
 }
 .compare-ko-label {
   font-size: 12px;

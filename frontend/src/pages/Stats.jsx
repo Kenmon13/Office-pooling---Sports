@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchGroupPickStats, fetchChampionPickStats, fetchAwardPickStats } from "../api";
+import { fetchGroupPickStats, fetchChampionPickStats, fetchAwardPickStats, fetchKnockoutPickStats } from "../api";
 import { flag } from "../flags";
 
 const SHORT_NAMES = {
@@ -18,6 +18,7 @@ function Stats({ poolId }) {
   const [groupStats, setGroupStats] = useState([]);
   const [championStats, setChampionStats] = useState([]);
   const [awardStats, setAwardStats] = useState({});
+  const [knockoutStats, setKnockoutStats] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,10 +26,12 @@ function Stats({ poolId }) {
       fetchGroupPickStats(poolId),
       fetchChampionPickStats(poolId),
       fetchAwardPickStats(poolId),
-    ]).then(([groups, champions, awards]) => {
+      fetchKnockoutPickStats(poolId),
+    ]).then(([groups, champions, awards, knockout]) => {
       if (!groups.error) setGroupStats(groups);
       if (!champions.error) setChampionStats(champions);
       if (!awards.error) setAwardStats(awards);
+      if (Array.isArray(knockout)) setKnockoutStats(knockout);
       setLoading(false);
     });
   }, [poolId]);
@@ -98,6 +101,46 @@ function Stats({ poolId }) {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="stats-section">
+        <h3>Knockout Stage Picks</h3>
+        <p className="stats-subtitle">Who the pool backs to advance in each knockout match</p>
+        {knockoutStats.length === 0 ? (
+          <p className="notice">No knockout picks yet.</p>
+        ) : (
+          knockoutStats.map((rd) => (
+            <div key={rd.round} className="stats-ko-round">
+              <h4 className="stats-ko-round-title">{rd.round_name}</h4>
+              <div className="stats-groups-grid">
+                {rd.matches.map((m) => (
+                  <div key={m.match_id} className="stats-group-card">
+                    <div className="stats-row stats-row-compact">
+                      <span className="stats-team">
+                        {flag(m.home_team_code)}
+                        {SHORT_NAMES[m.home_team_name] || m.home_team_name}
+                      </span>
+                      <div className="stats-bar-wrapper">
+                        <div className="stats-bar stats-bar-group" style={{ width: `${m.home_pct}%` }} />
+                      </div>
+                      <span className="stats-pct">{m.home_pct}%</span>
+                    </div>
+                    <div className="stats-row stats-row-compact">
+                      <span className="stats-team">
+                        {flag(m.away_team_code)}
+                        {SHORT_NAMES[m.away_team_name] || m.away_team_name}
+                      </span>
+                      <div className="stats-bar-wrapper">
+                        <div className="stats-bar stats-bar-group" style={{ width: `${m.away_pct}%` }} />
+                      </div>
+                      <span className="stats-pct">{m.away_pct}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
         )}
       </section>
 
