@@ -642,6 +642,31 @@ try {
   `).run();
 } catch (_) {}
 
+// One-off goodwill fix (2026-06-30): R32-4 finished Brazil 2-1 Japan (Brazil/home won).
+// These 49 users had predicted_winner = 'away' (Japan) but entered a score where the home
+// side (Brazil) wins — their winner toggle contradicted their own predicted score, so they
+// scored 0 KO-winner points even though their score called Brazil correctly. (Same class as
+// the R32-1 fix above; PR #39 blocks this going forward.) Flip these 49 to 'home' so the
+// pick matches their score and earns the R32 winner points (3, doubled to 6 for the 18 who
+// entered exactly 2-1). Scoped to an explicit id allowlist AND guarded on predicted_winner =
+// 'away' + home_score > away_score, so it touches ONLY these rows and ONLY while still
+// contradicting. Idempotent: once flipped the WHERE no longer matches (0 rows on rerun);
+// R32-4 is finished/locked so a pick can't revert. Deliberately does NOT touch the 150 users
+// who picked Japan consistently, the 47 with a draw score, or the 45 with no score entered.
+// Reversible via the explicit id list (flip the same 49 back to 'away').
+// Verified on a prod-backup copy: 49 rows change, rerun = 0, R32-4 distribution away 291->242
+// / home 1553->1602 with no other rows touched, 201 points restored across the 49.
+try {
+  db.prepare(`
+    UPDATE knockout_predictions
+    SET predicted_winner = 'home'
+    WHERE match_id = 'R32-4' AND predicted_winner = 'away'
+      AND predicted_home_score IS NOT NULL AND predicted_away_score IS NOT NULL
+      AND predicted_home_score > predicted_away_score
+      AND participant_id IN (30,55,189,261,292,544,591,1028,1131,1481,1534,1659,1881,1964,2046,2064,2170,2187,2240,2417,2418,2422,2447,2753,2791,3062,3068,3072,3121,3142,3166,3235,3256,3351,3433,3434,3526,3739,3913,3953,4021,4028,4210,4480,4544,4569,4570,4633,4635)
+  `).run();
+} catch (_) {}
+
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
