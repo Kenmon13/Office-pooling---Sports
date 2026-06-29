@@ -621,6 +621,27 @@ try {
   fillRow2.run("J", "J", "Argentina", "J", "Austria");
 } catch (_) {}
 
+// One-off goodwill fix (2026-06-29): R32-1 finished South Africa 0-1 Canada (Canada/away
+// won). These 58 users had predicted_winner = 'home' (South Africa) but entered a score
+// where the away side wins — their winner toggle contradicted their own predicted score,
+// so they scored 0 even though their score called Canada correctly. (At pick time the
+// winner/score validation was advisory-only and didn't block the save — PR #39 fixes that
+// going forward.) Flip these 58 to 'away' so the pick matches their score and earns the
+// R32 winner points. Scoped to an explicit id allowlist AND guarded on predicted_winner =
+// 'home', so it touches ONLY these rows and ONLY while still 'home'. Idempotent: once
+// flipped, the WHERE no longer matches (0 rows on rerun); R32-1 is finished/locked so a
+// pick can't revert to 'home'. Deliberately does NOT touch the 15 Case-B users (correct
+// winner 'away' + a contradicting score) — flipping them would strip points they earned.
+// Reversible via the explicit id list (flip the same 58 back to 'home').
+try {
+  db.prepare(`
+    UPDATE knockout_predictions
+    SET predicted_winner = 'away'
+    WHERE match_id = 'R32-1' AND predicted_winner = 'home'
+      AND participant_id IN (55,98,152,258,400,444,596,654,733,764,905,1075,1182,1300,1301,1377,1501,1504,1540,1547,1558,1620,1636,1657,2280,2287,2333,2346,2391,2513,2530,2704,2776,2889,3100,3248,3264,3348,3411,3433,3529,3533,3827,3870,3898,3913,3980,4077,4163,4173,4193,4221,4295,4310,4408,4420,4550,4558)
+  `).run();
+} catch (_) {}
+
 // 2026 FIFA World Cup knockout schedule (all times UTC)
 // Source: FIFA official match schedule (published Dec 2025)
 const KO_SCHEDULE = [
