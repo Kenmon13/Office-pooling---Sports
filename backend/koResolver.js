@@ -292,30 +292,45 @@ async function syncWCKnockouts() {
         if (api.status === "FINISHED") {
           dbStatus = "finished";
           duration = dur ?? null;
+          const ft = api.score?.fullTime;
+          const rt = api.score?.regularTime;
+          const et = api.score?.extraTime;
           // The exact-score bonus is judged on the 90' regulation score, so for matches
           // that went to extra time or penalties we use `regularTime` (90' + stoppage).
           // For REGULAR matches there is no `regularTime` field — `fullTime` IS the 90' score.
           // football-data.org v4 `fullTime` is the cumulative final including the shootout,
           // which would silently make exact-score bonuses unwinnable on any penalty match.
-          const src = wentBeyond90 ? api.score?.regularTime : api.score?.fullTime;
+          const src = wentBeyond90 ? rt : ft;
           homeScore = src?.home ?? null;
           awayScore = src?.away ?? null;
           if (wentBeyond90) {
-            homeEt = api.score?.extraTime?.home ?? 0;
-            awayEt = api.score?.extraTime?.away ?? 0;
+            homeEt = et?.home ?? 0;
+            awayEt = et?.away ?? 0;
           }
           if (dur === "PENALTY_SHOOTOUT") {
-            homePens = api.score?.penalties?.home ?? null;
-            awayPens = api.score?.penalties?.away ?? null;
+            // football-data's `score.penalties` sub-object is unreliable on finished matches
+            // (observed reporting a tied shootout, e.g. 4-4, that contradicts its own fullTime).
+            // `fullTime` is the cumulative final (regulation + ET + shootout) and is consistent,
+            // so derive the shootout tally as fullTime - regularTime - extraTime. Fall back to
+            // the raw penalties object only when those components are missing.
+            if (ft && rt && ft.home != null && ft.away != null && rt.home != null && rt.away != null) {
+              homePens = ft.home - rt.home - (et?.home ?? 0);
+              awayPens = ft.away - rt.away - (et?.away ?? 0);
+            } else {
+              homePens = api.score?.penalties?.home ?? null;
+              awayPens = api.score?.penalties?.away ?? null;
+            }
           }
-          // Winner: prefer `api.score.winner` (authoritative; correctly reflects shootout
-          // result). Fall back to score comparison for older payloads or DRAW edge cases.
+          // Winner: prefer `api.score.winner` (authoritative when present). Football-data has
+          // been observed returning winner=null on a finished penalty shootout, so fall back to
+          // the cumulative `fullTime` (includes ET + shootout) — NOT home_score/away_score, which
+          // hold the 90' regulation score and are a draw for anything decided beyond 90'.
           const apiWinner = api.score && api.score.winner;
           if (apiWinner === "HOME_TEAM" && homeId) winnerId = homeId;
           else if (apiWinner === "AWAY_TEAM" && awayId) winnerId = awayId;
-          else if (homeScore != null && awayScore != null) {
-            if (homeScore > awayScore && homeId) winnerId = homeId;
-            else if (awayScore > homeScore && awayId) winnerId = awayId;
+          else if (ft && ft.home != null && ft.away != null) {
+            if (ft.home > ft.away && homeId) winnerId = homeId;
+            else if (ft.away > ft.home && awayId) winnerId = awayId;
           }
         } else if (api.status === "IN_PLAY" || api.status === "PAUSED") {
           dbStatus = "live";
