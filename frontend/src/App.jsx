@@ -28,6 +28,7 @@ import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
+import DonateModal from "./components/DonateModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -275,6 +276,7 @@ function App() {
 
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [showIssueChat, setShowIssueChat] = useState(false);
+  const [showDonate, setShowDonate] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const hamburgerRef = useRef(null);
 
@@ -485,6 +487,9 @@ function App() {
     ? <button onClick={() => setShowAdmin(true)} className="btn-small btn-admin-dash">Admin Dashboard</button>
     : null;
 
+  // Donate / support shortcut, shown next to Report Issue across the app.
+  const donateBtn = <button onClick={() => setShowDonate(true)} className="btn-small btn-donate">Donate</button>;
+
   const announcementBar = currentTournamentId && (announcements.length > 0 || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
       {announcementIsNew && !editingAnnouncement && (
@@ -640,6 +645,7 @@ function App() {
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
             {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
           </div>
+          {donateBtn}
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
@@ -666,6 +672,7 @@ function App() {
           onSubmitNew={handleSubmitNewIssue}
           onSendReply={handleSendReply}
         />}
+        {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
       </div>
     );
   }
@@ -681,6 +688,7 @@ function App() {
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
             {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
           </div>
+          {donateBtn}
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
@@ -712,6 +720,7 @@ function App() {
           onSubmitNew={handleSubmitNewIssue}
           onSendReply={handleSendReply}
         />}
+        {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
       </div>
     );
   }
@@ -727,6 +736,7 @@ function App() {
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
             {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
           </div>
+          {donateBtn}
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
@@ -759,6 +769,7 @@ function App() {
           onSubmitNew={handleSubmitNewIssue}
           onSendReply={handleSendReply}
         />}
+        {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
       </div>
     );
   }
@@ -825,6 +836,7 @@ function App() {
                       }} className="hamburger-item">Share Link</button>
                       <button onClick={() => { setShowQuitConfirm(true); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Quit Pool</button>
                       <hr className="hamburger-divider" />
+                      <button onClick={() => { setShowDonate(true); setMobileMenuOpen(false); }} className="hamburger-item">Donate ❤️</button>
                       <button onClick={() => { openIssueChat(); setMobileMenuOpen(false); }} className="hamburger-item">Report Issue</button>
                       <button onClick={() => { handleSignOut(); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Sign Out</button>
                     </div>
@@ -884,6 +896,7 @@ function App() {
                     {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
                   </div>
                   {adminDashBtn}
+                  {donateBtn}
                   <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
                   <button onClick={handleSignOut} className="btn-small">Sign Out</button>
                 </span>
@@ -1278,6 +1291,7 @@ function App() {
           onSubmitNew={handleSubmitNewIssue}
           onSendReply={handleSendReply}
         />}
+        {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
 
         {showPatchNotes && (
           <NotificationsModal

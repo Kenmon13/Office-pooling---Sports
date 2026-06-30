@@ -1539,6 +1539,75 @@ nav a.active {
   border-color: #6fdc6f;
 }
 
+.btn-donate {
+  border-color: #b5862a;
+  color: #f0c46a;
+}
+
+.btn-donate:hover {
+  background: #3a2c0a40;
+  border-color: #f0c46a;
+}
+
+/* Donate modal */
+.donate-modal p {
+  line-height: 1.5;
+  margin: 10px 0;
+}
+
+.donate-paypal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #b5862a;
+  border-radius: 8px;
+  background: #2a200a40;
+}
+
+.donate-paypal-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #b5862a;
+}
+
+.donate-paypal-handle {
+  font-size: 30px;
+  font-weight: 700;
+  color: #f0c46a;
+}
+
+.donate-hof {
+  margin-top: 20px;
+}
+
+.donate-hof h4 {
+  margin: 0 0 8px;
+}
+
+.donate-hof-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.donate-hof-table th,
+.donate-hof-table td {
+  border: 1px solid #2a4a2a;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.donate-hof-table th {
+  background: #0f200f;
+  color: #7da67d;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .my-pools-section {
   margin-top: 32px;
 }
