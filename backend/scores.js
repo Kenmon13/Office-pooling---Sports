@@ -74,10 +74,15 @@ async function fetchLiveScores() {
       console.log(`Score check: ${matches.length} matches from API, 0 new updates.`);
     }
 
-    // After group scores update, check if any group is now fully done -> promote teams to KO slots.
-    runResolver();
   } catch (err) {
     console.log("Score fetch error:", err.message);
+  } finally {
+    // Promote finished groups to KO slots + cascade KO winners into the next round. This runs
+    // on every cycle regardless of whether the group-score fetch above succeeded — it is a
+    // local DB operation and must not be gated behind the external API. Otherwise a KO winner
+    // set by the separate 30-min KO sync never advances whenever the group-score fetch is
+    // rate-limited (football-data free tier) or transiently failing.
+    runResolver();
   }
 }
 
