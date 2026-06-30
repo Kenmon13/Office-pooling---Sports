@@ -1543,6 +1543,16 @@ nav a.active {
   color: #6fdc6f;
 }
 
+.admin-link-top-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.admin-link-top-row .admin-link {
+  margin-top: 0;
+}
+
 .my-pools-section {
   margin-top: 32px;
 }
