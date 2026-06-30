@@ -713,7 +713,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                 <div className="issue-chat-bubble-meta">
                   <strong>{r.display_name}{r.is_admin ? " (Admin)" : ""}</strong>
                   <span>{new Date(r.created_at + "Z").toLocaleString()}</span>
-                  {r.is_admin && (
+                  {!!r.is_admin && (
                     <button className="btn-delete-reply" onClick={() => handleDeleteReply(r.id)} title="Delete reply">&times;</button>
                   )}
                 </div>
