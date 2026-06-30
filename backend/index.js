@@ -457,6 +457,7 @@ app.post("/api/admin/ko-consistency-fix", requireAdminToken, (req, res) => {
     matched: rows.length,
     changed: apply ? changed : 0,
     changes: rows.map((r) => ({
+      participant_id: r.participant_id, match_id: r.match_id,
       who: r.who, match: `${r.round}: ${r.home} vs ${r.away}`,
       score: `${r.ph}-${r.pa}`, from: r.old_pick, to: r.new_pick,
     })),
