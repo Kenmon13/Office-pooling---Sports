@@ -2929,6 +2929,19 @@ app.post("/api/epl2627/match-predictions", authenticateToken, (req, res) => {
       errors.push(`Matchday ${match.matchday} is locked`);
       continue;
     }
+    // Reject scores that contradict the outcome (home => home>away, away => away>home,
+    // draw => equal). Enforced here as well as in the UI so a bad row can never persist —
+    // the WC knockout block was UI-only and required one-off cleanup migrations afterward.
+    const hs = p.predicted_home_score, as_ = p.predicted_away_score;
+    if (hs != null && as_ != null) {
+      const consistent = p.predicted_outcome === "home" ? hs > as_
+                       : p.predicted_outcome === "away" ? as_ > hs
+                       : p.predicted_outcome === "draw" ? hs === as_ : false;
+      if (!consistent) {
+        errors.push(`Match ${p.match_id}: score ${hs}-${as_} contradicts "${p.predicted_outcome}" pick`);
+        continue;
+      }
+    }
     upsert.run(participant_id, p.match_id, p.predicted_outcome, p.predicted_home_score ?? null, p.predicted_away_score ?? null);
     saved++;
   }

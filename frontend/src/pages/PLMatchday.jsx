@@ -7,6 +7,18 @@ import {
 } from "../api";
 import { plCrest } from "../flags";
 
+// A predicted score must agree with the predicted outcome. Returns a message when both score
+// fields are filled and contradict the outcome, otherwise "". Unlike the WC knockout rule
+// (ties allowed, decided by penalties), league matches have an explicit draw outcome, so the
+// mapping is exact: home => home>away, away => away>home, draw => equal.
+function evalPLConflict(outcome, h, a) {
+  if (h == null || a == null) return "";
+  if (outcome === "home" && !(h > a)) return "Home win — home score must be higher";
+  if (outcome === "away" && !(a > h)) return "Away win — away score must be higher";
+  if (outcome === "draw" && h !== a) return "Draw — scores must be equal";
+  return "";
+}
+
 function useCountdown(deadline) {
   const [remaining, setRemaining] = useState(null);
   const intervalRef = useRef(null);
@@ -131,8 +143,19 @@ function PLMatchday({ currentUser }) {
 
   const anyPredictions = matches.some((m) => predictions[m.id]?.outcome);
 
+  // Matches whose entered score contradicts the chosen outcome — these block the save.
+  const conflicts = matches
+    .filter((m) => predictions[m.id]?.outcome)
+    .map((m) => ({ id: m.id, msg: evalPLConflict(predictions[m.id].outcome, predictions[m.id].home_score, predictions[m.id].away_score) }))
+    .filter((c) => c.msg);
+  const hasConflict = conflicts.length > 0;
+
   const handleSave = async () => {
     if (!currentUser || !anyPredictions) return;
+    if (hasConflict) {
+      setSaveError("Each predicted score must match its Home / Draw / Away pick. Fix the highlighted matches to save.");
+      return;
+    }
     setSaving(true);
     setSaveError("");
 
@@ -254,6 +277,7 @@ function PLMatchday({ currentUser }) {
             const result = getMatchResult(m, pred);
             const isLive = m.status === "live";
             const isFinished = m.status === "finished";
+            const conflictMsg = !isLocked && !isFinished ? evalPLConflict(pred.outcome, pred.home_score, pred.away_score) : "";
 
             return (
               <div key={m.id} className={`pl-match-card ${isLive ? "live" : ""} ${isFinished ? "finished" : ""}`}>
@@ -332,6 +356,10 @@ function PLMatchday({ currentUser }) {
                   </div>
                 )}
 
+                {conflictMsg && (
+                  <div className="pl-score-conflict">⚠ {conflictMsg}</div>
+                )}
+
                 {isLocked && pred.home_score != null && pred.away_score != null && !isFinished && (
                   <div className="pl-score-inputs locked">
                     <span className="locked-score">{pred.home_score} - {pred.away_score}</span>
@@ -351,7 +379,7 @@ function PLMatchday({ currentUser }) {
             <button
               className="btn-submit btn-save-all"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || hasConflict}
             >
               {saving ? "Saving..." : Object.keys(saved).length > 0 ? "Update Picks" : "Save Picks"}
             </button>
