@@ -160,14 +160,14 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
             <li>Round of 16 opens once all group stage matches are complete.</li>
             <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
             <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
-            {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (including extra time). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>. <em>Pool admins can disable this in Pool Settings.</em></li>}
+            {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the final score (regulation 90′). The winner pick and the exact score score <em>independently</em> — each is worth the round's points. So a correct winner <em>and</em> exact score earns double, while a correct scoreline with the wrong winner (e.g. a draw settled on penalties) still scores the round's points on its own. <em>Pool admins can disable this in Pool Settings.</em></li>}
             {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
-            <li>Points for each correct winner prediction:
+            <li>Points per round (correct winner / exact score each worth):
               <div className="ko-points-grid">
-                <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score)"}</span>
-                <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score)"}</span>
-                <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score)"}</span>
-                <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score)"}</span>
+                <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (+5 exact score)"}</span>
+                <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (+7 exact score)"}</span>
+                <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (+10 exact score)"}</span>
+                <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (+15 exact score)"}</span>
               </div>
             </li>
           </ul>

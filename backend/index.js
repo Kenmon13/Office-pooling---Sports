@@ -1247,17 +1247,18 @@ app.get("/api/leaderboard", (req, res) => {
       const predictedTeamId = kp.predicted_winner === "home" ? match.home_team_id :
                               kp.predicted_winner === "away" ? match.away_team_id :
                               Number(kp.predicted_winner);
-      if (String(predictedTeamId) === String(match.winner_team_id)) {
-        let roundPts = koPointsMap[match.round] || 0;
-        if (!exactScoresDisabled &&
-            kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
-            match.home_score !== null && match.away_score !== null &&
-            kp.predicted_home_score === match.home_score && kp.predicted_away_score === match.away_score) {
-          roundPts *= 2;
-        }
-        ko_points += roundPts;
-        ko_correct++;
-      }
+      const basePts = koPointsMap[match.round] || 0;
+      const winnerCorrect = String(predictedTeamId) === String(match.winner_team_id);
+      const scoreCorrect = !exactScoresDisabled &&
+          kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
+          match.home_score !== null && match.away_score !== null &&
+          kp.predicted_home_score === match.home_score && kp.predicted_away_score === match.away_score;
+      // Winner pick and exact-score bonus are scored independently, each worth the round's
+      // base points. Correct winner + exact score earns 2× base (as before), but an exact
+      // regulation score now also scores base pts when the winner is wrong — e.g. a 1-1 that
+      // went to penalties: the scoreline was nailed even though the shootout wasn't.
+      if (winnerCorrect) { ko_points += basePts; ko_correct++; }
+      if (scoreCorrect) { ko_points += basePts; }
     }
     points += ko_points;
 
@@ -2201,18 +2202,19 @@ app.get("/api/history/:participantId", (req, res) => {
     let desc = `${roundLabel}: ${home} vs ${away}`;
     if (m.winner_team_id) {
       const predictedTeamId = kp.predicted_winner === "home" ? m.home_team_id : kp.predicted_winner === "away" ? m.away_team_id : Number(kp.predicted_winner);
-      if (String(predictedTeamId) === String(m.winner_team_id)) {
-        pts = basePts;
-        const scoreCorrect = !exactScoresDisabledH &&
-                             kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
-                             m.home_score !== null && m.away_score !== null &&
-                             kp.predicted_home_score === m.home_score && kp.predicted_away_score === m.away_score;
-        if (scoreCorrect) pts *= 2;
-        desc += ` — predicted ${teamById[m.winner_team_id]?.name || "?"} ✓${scoreCorrect ? " (correct score, ×2)" : ""}`;
+      const winnerCorrect = String(predictedTeamId) === String(m.winner_team_id);
+      const scoreCorrect = !exactScoresDisabledH &&
+                           kp.predicted_home_score !== null && kp.predicted_away_score !== null &&
+                           m.home_score !== null && m.away_score !== null &&
+                           kp.predicted_home_score === m.home_score && kp.predicted_away_score === m.away_score;
+      if (winnerCorrect) pts += basePts;
+      if (scoreCorrect) pts += basePts;
+      if (winnerCorrect) {
+        desc += ` — predicted ${teamById[m.winner_team_id]?.name || "?"} ✓${scoreCorrect ? ` (exact score, +${basePts})` : ""}`;
+      } else if (scoreCorrect) {
+        desc += ` — wrong winner ✗ but exact score (+${basePts})`;
       } else {
-        const predictedTeam = teamById[m.winner_team_id]?.name || "?";
         desc += ` — wrong prediction ✗`;
-        void predictedTeam;
       }
     }
     events.push({ event_date: m.match_date, type: "ko", description: desc, pts_change: pts });
