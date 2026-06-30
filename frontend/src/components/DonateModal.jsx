@@ -15,10 +15,15 @@ function DonateModal({ onClose }) {
         <p>If you want to show support, you may donate to me at my PayPal account. This goes into resources such as maintaining the website and the domain name.</p>
         <p>If you choose to do so, please also make sure you have enough for yourself as well — after all, this is a pet project and your wellbeing is more important.</p>
 
-        <div className="donate-paypal">
-          <span className="donate-paypal-label">PayPal</span>
+        <a
+          className="donate-paypal"
+          href="https://www.paypal.me/kenmon13"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span className="donate-paypal-label">PayPal — tap to donate</span>
           <span className="donate-paypal-handle">@kenmon13</span>
-        </div>
+        </a>
 
         <div className="donate-hof">
           <h4>🏆 Hall of Fame of Donors</h4>

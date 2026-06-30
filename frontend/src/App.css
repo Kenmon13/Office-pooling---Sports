@@ -1565,6 +1565,14 @@ nav a.active {
   border: 1px solid #b5862a;
   border-radius: 8px;
   background: #2a200a40;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.donate-paypal:hover {
+  background: #3a2c0a80;
+  border-color: #f0c46a;
 }
 
 .donate-paypal-label {
