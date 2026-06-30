@@ -360,6 +360,47 @@ app.get("/api/admin/users", requireAdminToken, (req, res) => {
   res.json(users);
 });
 
+// Audit: KO picks whose predicted winner contradicts the predicted score (read-only).
+// "Inconsistent" = the picked winner has strictly fewer goals than the loser; a regulation
+// draw is fine (settled on penalties) and is not flagged. Scope: all Round of 32 matches plus
+// the Round of 16 Canada vs Morocco match. Returns a per-match summary and the offending rows.
+app.get("/api/admin/ko-consistency-audit", requireAdminToken, (req, res) => {
+  const rows = db.prepare(`
+    SELECT m.round, m.id AS match_id, th.name AS home, ta.name AS away,
+           p.name AS who, kp.predicted_winner AS pick,
+           kp.predicted_home_score AS ph, kp.predicted_away_score AS pa
+    FROM knockout_predictions kp
+    JOIN knockout_matches m ON kp.match_id = m.id
+    JOIN participants p     ON kp.participant_id = p.id
+    LEFT JOIN teams th ON m.home_team_id = th.id
+    LEFT JOIN teams ta ON m.away_team_id = ta.id
+    WHERE kp.predicted_home_score IS NOT NULL
+      AND kp.predicted_away_score IS NOT NULL
+      AND (
+        ((kp.predicted_winner = 'home' OR kp.predicted_winner = CAST(m.home_team_id AS TEXT))
+           AND kp.predicted_home_score < kp.predicted_away_score)
+        OR
+        ((kp.predicted_winner = 'away' OR kp.predicted_winner = CAST(m.away_team_id AS TEXT))
+           AND kp.predicted_away_score < kp.predicted_home_score)
+      )
+      AND (
+        m.round = 'R32'
+        OR (m.round = 'R16'
+            AND m.home_team_id IN (SELECT id FROM teams WHERE code IN ('CAN','MAR'))
+            AND m.away_team_id IN (SELECT id FROM teams WHERE code IN ('CAN','MAR')))
+      )
+    ORDER BY m.round, m.id, p.name
+  `).all();
+
+  const byMatch = {};
+  for (const r of rows) {
+    const key = `${r.round}: ${r.home} vs ${r.away}`;
+    (byMatch[key] ||= []).push({ who: r.who, pick: r.pick, score: `${r.ph}-${r.pa}` });
+  }
+  const summary = Object.entries(byMatch).map(([match, picks]) => ({ match, count: picks.length }));
+  res.json({ inconsistent_total: rows.length, summary, picks: byMatch });
+});
+
 // Admin set/correct/clear a user's email (mirrors the self-serve profile rules).
 app.patch("/api/admin/users/:id/email", requireAdminToken, (req, res) => {
   const { email } = req.body;
@@ -1036,6 +1077,23 @@ app.post("/api/knockout-predictions", (req, res) => {
   const { participant_id, match_id, predicted_winner, predicted_home_score, predicted_away_score } = req.body;
   if (!participant_id || !match_id || !predicted_winner) {
     return res.status(400).json({ error: "All fields are required" });
+  }
+  // Reject a scoreline that contradicts the picked winner. A regulation draw is allowed
+  // (the winner is then decided on penalties); only a score where the picked winner has
+  // strictly fewer goals than the loser is inconsistent. predicted_winner is "home"/"away"
+  // (or a team id for older rows). Mirrors the frontend "winner can't score fewer goals"
+  // guard — enforced here too so the API itself can't store a contradictory pick.
+  if (predicted_home_score != null && predicted_away_score != null) {
+    const m = db.prepare("SELECT home_team_id, away_team_id FROM knockout_matches WHERE id = ?").get(match_id);
+    const winnerSide = predicted_winner === "home" ? "home"
+      : predicted_winner === "away" ? "away"
+      : m && String(predicted_winner) === String(m.home_team_id) ? "home"
+      : m && String(predicted_winner) === String(m.away_team_id) ? "away"
+      : null;
+    if ((winnerSide === "home" && predicted_home_score < predicted_away_score) ||
+        (winnerSide === "away" && predicted_away_score < predicted_home_score)) {
+      return res.status(400).json({ error: "Predicted score contradicts the picked winner" });
+    }
   }
   try {
     db.prepare(`
