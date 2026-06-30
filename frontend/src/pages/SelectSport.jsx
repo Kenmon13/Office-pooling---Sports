@@ -1,4 +1,4 @@
-function SelectSport({ onSelect, onAdminLogin }) {
+function SelectSport({ onSelect }) {
   const sports = [
     { id: "soccer", name: "Soccer", emoji: "\u26BD", available: true },
     { id: "basketball", name: "Basketball", emoji: "\uD83C\uDFC0", available: false },
@@ -6,11 +6,6 @@ function SelectSport({ onSelect, onAdminLogin }) {
 
   return (
     <div className="select-page">
-      {onAdminLogin && (
-        <div className="admin-link-top-row">
-          <button className="admin-link" onClick={onAdminLogin}>Admin Dashboard</button>
-        </div>
-      )}
       <h2>Pick a Sport</h2>
       <p className="select-subtitle">Choose the sport you want to join a pool for</p>
       <div className="sport-grid">

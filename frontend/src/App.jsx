@@ -479,6 +479,12 @@ function App() {
     }
   };
 
+  // Admin-only shortcut into the Admin Dashboard, shown in the auth bar on every
+  // pre-pool screen so admins can reach it any time (not just the sport picker).
+  const adminDashBtn = user?.is_admin
+    ? <button onClick={() => setShowAdmin(true)} className="btn-small btn-admin-dash">Admin Dashboard</button>
+    : null;
+
   const announcementBar = currentTournamentId && (announcements.length > 0 || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
       {announcementIsNew && !editingAnnouncement && (
@@ -629,6 +635,7 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          {adminDashBtn}
           <div className="bell-wrapper">
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
             {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
@@ -636,7 +643,7 @@ function App() {
           <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
           <button onClick={handleSignOut} className="btn-small">Sign Out</button>
         </div>
-        <SelectSport onSelect={handleSelectSport} onAdminLogin={user.is_admin ? () => setShowAdmin(true) : null} />
+        <SelectSport onSelect={handleSelectSport} />
 
         {showPatchNotes && (
           <NotificationsModal
@@ -669,6 +676,7 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          {adminDashBtn}
           <div className="bell-wrapper">
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
             {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
@@ -714,6 +722,7 @@ function App() {
       <div className="app">
         <div className="auth-bar">
           Signed in as <button onClick={() => setShowSettings(true)} className="btn-link"><strong>{user.display_name}</strong></button>
+          {adminDashBtn}
           <div className="bell-wrapper">
             <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
             {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
@@ -787,6 +796,9 @@ function App() {
                         </div>
                       </div>
                       <hr className="hamburger-divider" />
+                      {!!user.is_admin && (
+                        <button className="hamburger-item" onClick={() => { setShowAdmin(true); setMobileMenuOpen(false); }}>Admin Dashboard</button>
+                      )}
                       <button className="hamburger-item" onClick={async () => {
                         if (!pool.is_public && !poolPassword) {
                           const pwRes = await fetchPoolPassword(pool.id);
@@ -871,6 +883,7 @@ function App() {
                     <button onClick={handleOpenPatchNotes} className="btn-small btn-bell" title="What's New">🔔</button>
                     {(unreadPoints + unreadWindows) > 0 && <span className="notif-badge">{unreadPoints + unreadWindows}</span>}
                   </div>
+                  {adminDashBtn}
                   <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
                   <button onClick={handleSignOut} className="btn-small">Sign Out</button>
                 </span>

@@ -1529,28 +1529,14 @@ nav a.active {
   color: #6fdc6f;
 }
 
-.admin-link {
-  background: none;
-  border: none;
-  color: #3a6a3a;
-  font-size: 13px;
-  cursor: pointer;
-  margin-top: 32px;
-  transition: color 0.2s;
-}
-
-.admin-link:hover {
+.btn-admin-dash {
+  border-color: #2a5a2a;
   color: #6fdc6f;
 }
 
-.admin-link-top-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.admin-link-top-row .admin-link {
-  margin-top: 0;
+.btn-admin-dash:hover {
+  background: #15301520;
+  border-color: #6fdc6f;
 }
 
 .my-pools-section {
