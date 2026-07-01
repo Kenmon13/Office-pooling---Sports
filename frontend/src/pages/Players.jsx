@@ -28,6 +28,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
   const [picks, setPicks] = useState({});
   const [results, setResults] = useState([]);
   const [locked, setLocked] = useState(false);
+  const [lockedByAdmin, setLockedByAdmin] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState({});
   const [msg, setMsg] = useState("");
@@ -56,6 +57,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
       setPicks(pickMap);
       setResults(data.results || []);
       setLocked(!!data.locked);
+      setLockedByAdmin(!!data.lockedByAdmin);
       setLoaded(true);
     }).catch(() => setLoaded(true));
   }, [currentUser, poolId, mockDate, isEPL]);
@@ -119,7 +121,11 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
 
       {loaded && locked && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
-          <span className="deadline-locked-text">Player award picks have been locked by your pool admin</span>
+          <span className="deadline-locked-text">
+            {lockedByAdmin || !isEPL
+              ? "Player award picks have been locked by your pool admin"
+              : "Player award picks are locked — the entry window has closed"}
+          </span>
         </div>
       )}
 

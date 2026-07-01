@@ -771,8 +771,9 @@ export async function fetchEPL2627MatchdayDeadline(matchday) {
   return (await fetch(`${API}/epl2627/matchday-deadline?matchday=${matchday}`)).json();
 }
 
-export async function fetchEPL2627SeasonDeadline() {
-  return (await fetch(`${API}/epl2627/season-deadline`)).json();
+export async function fetchEPL2627SeasonDeadline(poolId) {
+  const q = poolId ? `?pool_id=${poolId}` : "";
+  return (await fetch(`${API}/epl2627/season-deadline${q}`)).json();
 }
 
 export async function fetchEPL2627MatchPredictions(participantId, matchday) {
