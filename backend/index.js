@@ -747,6 +747,76 @@ app.post("/api/participants/auto-join", (req, res) => {
   }
 });
 
+// Merge one participant's data into another (admin only).
+// Reassigns every participant-scoped table from `from` -> `into`, then deletes `from`.
+// Both participants must exist and belong to the same pool. Pass ?dryRun=1 (or
+// { dryRun: true }) to preview the row counts that would move without changing anything.
+// The reassignment runs in a single transaction: any UNIQUE collision (both
+// participants predicted the same thing) rolls the whole merge back.
+app.post("/api/admin/merge-participants", requireAdminToken, (req, res) => {
+  const fromId = Number(req.body.from);
+  const intoId = Number(req.body.into);
+  const dryRun = req.query.dryRun === "1" || req.body.dryRun === true;
+
+  if (!Number.isInteger(fromId) || !Number.isInteger(intoId)) {
+    return res.status(400).json({ error: "from and into must be integer participant ids" });
+  }
+  if (fromId === intoId) {
+    return res.status(400).json({ error: "from and into must be different participants" });
+  }
+
+  const from = db.prepare("SELECT * FROM participants WHERE id = ?").get(fromId);
+  const into = db.prepare("SELECT * FROM participants WHERE id = ?").get(intoId);
+  if (!from) return res.status(404).json({ error: `participant ${fromId} not found` });
+  if (!into) return res.status(404).json({ error: `participant ${intoId} not found` });
+  if (from.pool_id !== into.pool_id) {
+    return res.status(400).json({ error: `participants are in different pools (${from.pool_id} vs ${into.pool_id})` });
+  }
+
+  // Hardcoded whitelist — every table with a participant_id column. Not user input, so
+  // safe to interpolate into the statements below.
+  const tables = [
+    "champion_picks",
+    "player_award_picks",
+    "group_predictions",
+    "predictions",
+    "knockout_predictions",
+    "third_place_predictions",
+    "wc2022_champion_picks",
+    "wc2022_group_predictions",
+    "wc2022_knockout_predictions",
+    "pl2627_match_predictions",
+    "pl2627_player_award_picks",
+    "pl2627_season_predictions",
+  ];
+
+  const moved = {};
+  for (const t of tables) {
+    moved[t] = db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE participant_id = ?`).get(fromId).n;
+  }
+
+  if (dryRun) {
+    return res.json({ dryRun: true, from, into, wouldMove: moved });
+  }
+
+  try {
+    const merge = db.transaction(() => {
+      for (const t of tables) {
+        db.prepare(`UPDATE ${t} SET participant_id = ? WHERE participant_id = ?`).run(intoId, fromId);
+      }
+      db.prepare("DELETE FROM participants WHERE id = ?").run(fromId);
+    });
+    merge();
+  } catch (err) {
+    return res.status(409).json({
+      error: "merge aborted — likely a duplicate prediction held by both participants",
+      detail: err.message,
+    });
+  }
+
+  res.json({ success: true, from: fromId, into: intoId, deleted: from, moved });
+});
+
 // --- Groups & Teams ---
 
 app.get("/api/groups", (req, res) => {
