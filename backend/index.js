@@ -17,7 +17,7 @@ const APP_URL = process.env.APP_URL || "https://sportspooling.com";
 
 // Seed on first run
 require("./seed");
-const { startScoreRefresh, syncPLFixtures } = require("./scores");
+const { startScoreRefresh, syncPLFixtures, syncPLSquads } = require("./scores");
 
 const app = express();
 app.use(cors());
@@ -3325,6 +3325,27 @@ app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
     }
 
     res.json({ success: true, matches: count, detail: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/sync-pl-squads", requireAdminToken, async (req, res) => {
+  try {
+    const result = await syncPLSquads();
+    const players = db.prepare("SELECT COUNT(*) as c FROM pl2627_players").get().c;
+
+    if (result && result.ok === false) {
+      const reasons = {
+        window_closed: "Transfer window is closed — squad/manager auto-refresh is frozen (edit PL_SQUAD_LOCK_DATE to reopen).",
+        api_status: `premierleague.com (Pulselive) returned HTTP ${result.status}.`,
+        api_empty: "premierleague.com returned 0 teams for the 26/27 season.",
+        exception: `Sync error: ${result.message}`,
+      };
+      return res.json({ error: reasons[result.reason] || "PL squad sync did nothing.", players });
+    }
+
+    res.json({ success: true, players, detail: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
