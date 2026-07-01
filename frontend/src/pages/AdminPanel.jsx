@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -511,6 +511,32 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
               disabled={!!backupLoading}
             >
               {backupLoading === "pl-sync" ? "Syncing..." : "Sync PL Fixtures"}
+            </button>
+          </div>
+
+          <div className="backup-restore-section" style={{ marginBottom: 16 }}>
+            <h3>PL Squad Sync</h3>
+            <p className="backup-help">Fetch Premier League 26/27 squads (players) and managers from football-data.org. Adds players without removing existing picks; squad data may require a paid API tier.</p>
+            <button
+              className="btn-submit"
+              onClick={async () => {
+                setBackupLoading("pl-squads");
+                setBackupMsg(null);
+                try {
+                  const res = await adminSyncPLSquads();
+                  if (res.error) setBackupMsg({ type: "error", text: res.error });
+                  else {
+                    const d = res.detail || {};
+                    setBackupMsg({ type: "success", text: `Squads synced — ${d.playersAdded ?? 0} players added, ${d.managersUpdated ?? 0} managers updated across ${d.squadTeams ?? 0} clubs (${res.players} players in DB).` });
+                  }
+                } catch (err) {
+                  setBackupMsg({ type: "error", text: err.message });
+                }
+                setBackupLoading("");
+              }}
+              disabled={!!backupLoading}
+            >
+              {backupLoading === "pl-squads" ? "Syncing..." : "Sync PL Squads"}
             </button>
           </div>
 
