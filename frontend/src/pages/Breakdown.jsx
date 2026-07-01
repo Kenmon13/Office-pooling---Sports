@@ -1,17 +1,60 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchLeaderboard, fetchWC2022Leaderboard, fetchEPL2627Leaderboard } from "../api";
+import {
+  fetchLeaderboard, fetchWC2022Leaderboard, fetchEPL2627Leaderboard,
+  fetchHistory, fetchWC2022History,
+} from "../api";
 
-// Renders one "where the points came from" row.
-function BreakdownRow({ label, sub, value, tone }) {
-  const cls = tone === "pos" ? "pts-champ-win" : tone === "neg" ? "pts-champ-loss" : "";
+// Maps a point-history event type to the summary category it belongs under.
+const CATEGORY_OF_TYPE = {
+  group: "group",
+  ko: "ko",
+  champion_pick: "champion",
+  champion_change: "champion",
+  champion_bonus: "champion",
+  player_award: "awards",
+};
+
+// One itemized line (e.g. "Group A: Brazil & Argentina — Both correct").
+function DetailLine({ description, pts }) {
+  const cls = pts > 0 ? "pts-gain" : pts < 0 ? "pts-loss" : "pts-zero";
   return (
-    <div className="bd-row">
-      <div className="bd-row-label">
-        <span className="bd-row-title">{label}</span>
-        {sub && <span className="bd-row-sub">{sub}</span>}
-      </div>
-      <span className={`bd-row-val ${cls}`}>{value}</span>
+    <div className="bd-detail-line">
+      <span className="bd-detail-desc">{description}</span>
+      <span className={`bd-detail-pts ${cls}`}>
+        {pts > 0 ? `+${pts}` : pts === 0 ? "—" : pts}
+      </span>
+    </div>
+  );
+}
+
+// One collapsible category (Group stage / Knockouts / Champion / Awards).
+function Category({ cat, expanded, onToggle }) {
+  const cls = cat.tone === "pos" ? "pts-champ-win" : cat.tone === "neg" ? "pts-champ-loss" : "";
+  const hasDetail = cat.events.length > 0;
+  return (
+    <div className="bd-cat">
+      <button
+        className={`bd-row bd-cat-head ${hasDetail ? "expandable" : ""}`}
+        onClick={hasDetail ? onToggle : undefined}
+        disabled={!hasDetail}
+      >
+        <div className="bd-row-label">
+          <span className="bd-row-title">
+            {hasDetail && <span className={`bd-caret ${expanded ? "open" : ""}`}>▸</span>}
+            {cat.label}
+          </span>
+          <span className="bd-row-sub">{cat.sub}</span>
+        </div>
+        <span className={`bd-row-val ${cls}`}>{cat.value}</span>
+      </button>
+      {hasDetail && expanded && (
+        <div className="bd-detail">
+          {cat.events.map((e, i) => (
+            <DetailLine key={i} description={e.description} pts={e.pts_change} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -19,17 +62,21 @@ function BreakdownRow({ label, sub, value, tone }) {
 function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   const navigate = useNavigate();
   const isEPL = tournament === "epl2627";
+  const isWC2022 = tournament === "wc2022";
   const [participants, setParticipants] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  // Keyed by participant id so we never show one player's detail against another.
+  const [eventsData, setEventsData] = useState({ id: null, events: [] });
+  const [expanded, setExpanded] = useState({});
 
   useEffect(() => {
-    const fetchFn = tournament === "wc2022" ? fetchWC2022Leaderboard : isEPL ? fetchEPL2627Leaderboard : fetchLeaderboard;
+    const fetchFn = isWC2022 ? fetchWC2022Leaderboard : isEPL ? fetchEPL2627Leaderboard : fetchLeaderboard;
     fetchFn(poolId)
       .then((data) => setParticipants(Array.isArray(data) ? data : []))
       .catch(() => setParticipants([]))
       .finally(() => setLoaded(true));
-  }, [poolId, tournament, isEPL, mockDate]);
+  }, [poolId, tournament, isEPL, isWC2022, mockDate]);
 
   // Participants sorted by name for the picker (leaderboard comes back ranked by points).
   const sortedForPicker = useMemo(
@@ -49,6 +96,30 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   const selected = participants.find((p) => p.id === effectiveId) || null;
   const rank = selected ? participants.findIndex((p) => p.id === selected.id) + 1 : null;
 
+  // Itemized point history for the selected player (EPL has no history endpoint).
+  useEffect(() => {
+    if (isEPL || effectiveId == null) return;
+    const fetchFn = isWC2022 ? fetchWC2022History : fetchHistory;
+    const id = effectiveId;
+    fetchFn(id, poolId)
+      .then((data) => setEventsData({ id, events: Array.isArray(data) ? data : [] }))
+      .catch(() => setEventsData({ id, events: [] }));
+  }, [effectiveId, poolId, isEPL, isWC2022, mockDate]);
+
+  // Only trust the fetched events if they belong to the currently-selected player.
+  const eventsLoading = !isEPL && effectiveId != null && eventsData.id !== effectiveId;
+
+  // Bucket the history events by category for the itemized detail lists.
+  const eventsByCategory = useMemo(() => {
+    const buckets = { group: [], ko: [], champion: [], awards: [] };
+    if (eventsData.id !== effectiveId) return buckets;
+    for (const e of eventsData.events) {
+      const cat = CATEGORY_OF_TYPE[e.type];
+      if (cat) buckets[cat].push(e);
+    }
+    return buckets;
+  }, [eventsData, effectiveId]);
+
   if (loaded && participants.length === 0) {
     return (
       <div className="page">
@@ -57,6 +128,58 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
       </div>
     );
   }
+
+  const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const buildCategories = () => {
+    if (!selected) return [];
+    const total = selected.points || 0;
+    if (isEPL) {
+      // EPL leaderboard has a different shape and no itemized history.
+      return [
+        { key: "match", label: "Matchday predictions", sub: "Weekly fixture picks", value: selected.match_points || 0, events: [] },
+        { key: "season", label: "Season predictions", sub: "Long-term forecasts", value: selected.season_points || 0, events: [] },
+        {
+          key: "awards", label: "Awards", sub: "End-of-season awards",
+          value: (selected.award_points || 0) > 0 ? `+${selected.award_points}` : "—",
+          tone: (selected.award_points || 0) > 0 ? "pos" : null, events: [],
+        },
+      ];
+    }
+    const bonus = selected.champion_bonus || 0;
+    const cost = selected.champion_change_cost || 0;
+    const champNet = bonus - cost;
+    const champSub = cost > 0
+      ? `Bonus +${bonus} · change fee −${cost}`
+      : bonus > 0 ? "Champion pick won" : "No champion bonus yet";
+    const awards = selected.player_awards_points || 0;
+    const groupPts = total - (selected.ko_points || 0) - champNet - awards;
+    return [
+      {
+        key: "group", label: "Group stage",
+        sub: `${selected.groups_correct || 0} full · ${selected.groups_half || 0} partial of ${selected.groups_predicted || 0} predicted`,
+        value: groupPts, events: eventsByCategory.group,
+      },
+      {
+        key: "ko", label: "Knockouts",
+        sub: `${selected.ko_correct || 0} winner${(selected.ko_correct || 0) === 1 ? "" : "s"} correct`,
+        value: selected.ko_points || 0, events: eventsByCategory.ko,
+      },
+      {
+        key: "champion", label: "Champion", sub: champSub,
+        value: champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet,
+        tone: champNet > 0 ? "pos" : champNet < 0 ? "neg" : null,
+        events: eventsByCategory.champion,
+      },
+      {
+        key: "awards", label: "Player awards", sub: "Golden Ball, Boot, Glove, etc.",
+        value: awards > 0 ? `+${awards}` : "—",
+        tone: awards > 0 ? "pos" : null, events: eventsByCategory.awards,
+      },
+    ];
+  };
+
+  const categories = buildCategories();
 
   return (
     <div className="page">
@@ -67,7 +190,7 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
           <select
             className="bd-select"
             value={effectiveId ?? ""}
-            onChange={(e) => setSelectedId(Number(e.target.value))}
+            onChange={(e) => { setSelectedId(Number(e.target.value)); setExpanded({}); }}
           >
             {sortedForPicker.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -78,76 +201,32 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
 
       {!loaded && <p className="notice">Loading…</p>}
 
-      {selected && (() => {
-        const total = selected.points || 0;
-        let rows;
-        if (isEPL) {
-          rows = [
-            { label: "Matchday predictions", sub: "Weekly fixture picks", value: selected.match_points || 0 },
-            { label: "Season predictions", sub: "Long-term forecasts", value: selected.season_points || 0 },
-            {
-              label: "Awards",
-              sub: "End-of-season awards",
-              value: (selected.award_points || 0) > 0 ? `+${selected.award_points}` : "—",
-              tone: (selected.award_points || 0) > 0 ? "pos" : null,
-            },
-          ];
-        } else {
-          const bonus = selected.champion_bonus || 0;
-          const cost = selected.champion_change_cost || 0;
-          const champNet = bonus - cost;
-          const champSub = cost > 0
-            ? `Bonus +${bonus} · change fee −${cost}`
-            : bonus > 0 ? "Champion pick won" : "No champion bonus yet";
-          const awards = selected.player_awards_points || 0;
-          // group_pts isn't returned by the API — derive it the same way the Leaderboard does.
-          const groupPts = total - (selected.ko_points || 0) - champNet - awards;
-          rows = [
-            {
-              label: "Group stage",
-              sub: `${selected.groups_correct || 0} full · ${selected.groups_half || 0} partial of ${selected.groups_predicted || 0} predicted`,
-              value: groupPts,
-            },
-            {
-              label: "Knockouts",
-              sub: `${selected.ko_correct || 0} winner${(selected.ko_correct || 0) === 1 ? "" : "s"} correct`,
-              value: selected.ko_points || 0,
-            },
-            {
-              label: "Champion",
-              sub: champSub,
-              value: champNet > 0 ? `+${champNet}` : champNet === 0 ? "—" : champNet,
-              tone: champNet > 0 ? "pos" : champNet < 0 ? "neg" : null,
-            },
-            {
-              label: "Player awards",
-              sub: "Golden Ball, Boot, Glove, etc.",
-              value: awards > 0 ? `+${awards}` : "—",
-              tone: awards > 0 ? "pos" : null,
-            },
-          ];
-        }
-        return (
-          <div className="bd-card">
-            <div className="bd-card-head">
-              <div>
-                <span className="bd-card-name clickable" onClick={() => navigate(`/picks/${selected.id}`)}>{selected.name}</span>
-                {rank && <span className="bd-card-rank">Rank #{rank}</span>}
-              </div>
-              <div className="bd-card-total">
-                <span className="bd-card-total-val">{total}</span>
-                <span className="bd-card-total-label">total pts</span>
-              </div>
+      {selected && (
+        <div className="bd-card">
+          <div className="bd-card-head">
+            <div>
+              <span className="bd-card-name clickable" onClick={() => navigate(`/picks/${selected.id}`)}>{selected.name}</span>
+              {rank && <span className="bd-card-rank">Rank #{rank}</span>}
             </div>
-            <div className="bd-rows">
-              {rows.map((r) => (
-                <BreakdownRow key={r.label} label={r.label} sub={r.sub} value={r.value} tone={r.tone} />
-              ))}
+            <div className="bd-card-total">
+              <span className="bd-card-total-val">{selected.points || 0}</span>
+              <span className="bd-card-total-label">total pts</span>
             </div>
-            <p className="bd-hint">Tap the name to view {selected.name}&apos;s full picks.</p>
           </div>
-        );
-      })()}
+          <div className="bd-rows">
+            {categories.map((cat) => (
+              <Category key={cat.key} cat={cat} expanded={!!expanded[cat.key]} onToggle={() => toggle(cat.key)} />
+            ))}
+          </div>
+          {!isEPL && (
+            <p className="bd-hint">
+              {eventsLoading
+                ? "Loading itemized detail…"
+                : "Tap a category to see each pick and the points it earned."}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
