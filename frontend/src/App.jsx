@@ -9,6 +9,7 @@ function NavigationExecutor({ to, onDone }) {
 import Matches from "./pages/Matches";
 import Knockouts from "./pages/Knockouts";
 import Leaderboard from "./pages/Leaderboard";
+import Breakdown from "./pages/Breakdown";
 import Champion from "./pages/Champion";
 import PLMatchday from "./pages/PLMatchday";
 import SeasonPredictions from "./pages/SeasonPredictions";
@@ -932,6 +933,7 @@ function App() {
             <NavLink to="/players">Awards</NavLink>
             <NavLink to="/stats">Stats</NavLink>
             <NavLink to="/leaderboard">Leaderboard</NavLink>
+            <NavLink to="/breakdown">Breakdown</NavLink>
             <NavLink to="/history">History</NavLink>
             <NavLink to="/chat">Chat</NavLink>
           </nav>
@@ -953,6 +955,7 @@ function App() {
             <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} tournament={pool.tournament} />} />
             <Route path="/stats" element={<Stats poolId={pool.id} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
+            <Route path="/breakdown" element={<Breakdown currentUser={participant} poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/history" element={<History currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
             <Route path="/picks/:participantId" element={

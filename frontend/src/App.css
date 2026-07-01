@@ -1139,6 +1139,106 @@ nav a.active {
   white-space: nowrap;
 }
 
+/* Breakdown page */
+.bd-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.bd-title-row h2 { margin-bottom: 0; }
+
+.bd-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bd-filter-label {
+  font-size: 13px;
+  color: #6fdc6f;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.bd-select {
+  background: #0b1a0b;
+  border: 1px solid #2e5a2e;
+  border-radius: 6px;
+  color: #d4e8d4;
+  font-size: 14px;
+  padding: 6px 10px;
+  cursor: pointer;
+  min-width: 140px;
+}
+.bd-select:focus { outline: none; border-color: #4a8a4a; }
+
+.bd-card {
+  border: 1px solid #1e3a1e;
+  border-radius: 10px;
+  background: #0a140a;
+  padding: 16px 18px;
+}
+.bd-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #1e3a1e;
+}
+.bd-card-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #eafaea;
+}
+.bd-card-name.clickable { cursor: pointer; }
+.bd-card-name.clickable:hover { text-decoration: underline; }
+.bd-card-rank {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #7fb37f;
+}
+.bd-card-total { text-align: right; line-height: 1.1; }
+.bd-card-total-val {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  color: #6fdc6f;
+}
+.bd-card-total-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7fb37f;
+}
+
+.bd-rows { display: flex; flex-direction: column; }
+.bd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #142614;
+}
+.bd-row:last-child { border-bottom: none; }
+.bd-row-label { display: flex; flex-direction: column; gap: 2px; }
+.bd-row-title { font-size: 15px; color: #d4e8d4; font-weight: 600; }
+.bd-row-sub { font-size: 12px; color: #6a906a; }
+.bd-row-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #d4e8d4;
+  white-space: nowrap;
+}
+.bd-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #5a8a5a;
+  text-align: center;
+}
+
 /* Leaderboard mobile cards */
 .leaderboard-cards {
   display: none;
