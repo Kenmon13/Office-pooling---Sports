@@ -3275,9 +3275,27 @@ app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
 // Manual PL fixture sync
 app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
   try {
-    await syncPLFixtures();
+    const result = await syncPLFixtures();
     const count = db.prepare("SELECT COUNT(*) as c FROM pl2627_matches").get().c;
-    res.json({ success: true, matches: count });
+
+    // Surface *why* nothing imported so the admin button isn't a silent "0".
+    if (result && result.ok === false) {
+      const reasons = {
+        no_api_key: "FOOTBALL_API_KEY is not set on the server (add it in Railway → Variables).",
+        api_status: `football-data.org returned HTTP ${result.status} for PL season 2026 (free tier may not expose next season yet).`,
+        api_empty: "football-data.org returned 0 fixtures for PL season 2026 — the schedule isn't published on that source yet.",
+        exception: `Sync error: ${result.message}`,
+      };
+      return res.json({ error: reasons[result.reason] || "PL sync imported no fixtures.", matches: count });
+    }
+
+    // Imported OK but every row was skipped (e.g. team codes don't match our seed).
+    if (result && result.ok && result.inserted + result.updated === 0 && result.skipped > 0) {
+      const codes = result.unknownCodes?.length ? ` Unknown team codes: ${result.unknownCodes.join(", ")}.` : "";
+      return res.json({ error: `API returned ${result.apiCount} fixtures but all ${result.skipped} were skipped.${codes}`, matches: count });
+    }
+
+    res.json({ success: true, matches: count, detail: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

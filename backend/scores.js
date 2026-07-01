@@ -92,7 +92,7 @@ async function syncPLFixtures() {
   const apiKey = process.env.FOOTBALL_API_KEY;
   if (!apiKey) {
     console.log("No FOOTBALL_API_KEY set, skipping PL fixture sync.");
-    return;
+    return { ok: false, reason: "no_api_key" };
   }
 
   try {
@@ -102,14 +102,14 @@ async function syncPLFixtures() {
 
     if (!res.ok) {
       console.log(`PL fixture API responded ${res.status}, skipping.`);
-      return;
+      return { ok: false, reason: "api_status", status: res.status };
     }
 
     const data = await res.json();
     const matches = data.matches || [];
     if (matches.length === 0) {
       console.log("PL fixtures: no matches returned from API yet.");
-      return;
+      return { ok: false, reason: "api_empty", apiCount: 0 };
     }
 
     // Build team code → local ID lookup
@@ -133,6 +133,7 @@ async function syncPLFixtures() {
     } catch (_) { /* already exists */ }
 
     let inserted = 0, updated = 0, skipped = 0;
+    const unknownCodes = new Set();
     for (const m of matches) {
       const homeCode = m.homeTeam?.tla;
       const awayCode = m.awayTeam?.tla;
@@ -143,6 +144,8 @@ async function syncPLFixtures() {
       const awayId = teamByCode[awayCode];
       if (!homeId || !awayId) {
         console.log(`PL fixtures: unknown team code ${homeCode} or ${awayCode}, skipping.`);
+        if (!homeId) unknownCodes.add(homeCode);
+        if (!awayId) unknownCodes.add(awayCode);
         skipped++;
         continue;
       }
@@ -175,8 +178,17 @@ async function syncPLFixtures() {
     }
 
     console.log(`PL fixture sync: ${inserted} inserted, ${updated} updated, ${skipped} skipped (${matches.length} total from API).`);
+    return {
+      ok: true,
+      apiCount: matches.length,
+      inserted,
+      updated,
+      skipped,
+      unknownCodes: [...unknownCodes],
+    };
   } catch (err) {
     console.log("PL fixture sync error:", err.message);
+    return { ok: false, reason: "exception", message: err.message };
   }
 }
 
