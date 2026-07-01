@@ -11,6 +11,16 @@ const PL_COMPETITION = "PL"; // Premier League
 const PL_TLA_ALIASES = { NOT: "NFO" }; // Nottingham Forest
 const plCode = (tla) => PL_TLA_ALIASES[tla] || tla;
 
+// Squads + managers come from premierleague.com's own public JSON API (Pulselive) — free,
+// no key. compSeason 841 = the 2026/27 Premier League; club.abbr matches our pl2627_teams.code.
+const PULSELIVE_BASE = "https://footballapi.pulselive.com/football";
+const PULSELIVE_HEADERS = { Origin: "https://www.premierleague.com", Referer: "https://www.premierleague.com/" };
+const PL_COMPSEASON = 841;
+const PULSELIVE_POS = { G: "GK", D: "DF", M: "MF", F: "FW" };
+// Auto-refresh of squads/managers STOPS after the summer transfer window closes, so late data
+// changes can't disturb picks once the window is shut. TODO: confirm the exact 2026 deadline day.
+const PL_SQUAD_LOCK_DATE = "2026-09-01T22:00:00Z";
+
 async function fetchLiveScores() {
   const apiKey = process.env.FOOTBALL_API_KEY;
   if (!apiKey) {
@@ -337,6 +347,105 @@ function startScoreRefresh() {
     syncPLFixtures();
     setInterval(syncPLFixtures, 24 * 60 * 60 * 1000);
   }
+
+  // PL squad + manager sync from premierleague.com (Pulselive), daily. Self-guards so it stops
+  // once the transfer window closes (PL_SQUAD_LOCK_DATE).
+  syncPLSquads();
+  setInterval(syncPLSquads, 24 * 60 * 60 * 1000);
 }
 
-module.exports = { startScoreRefresh, syncPLFixtures };
+// Pull PL squads + managers from premierleague.com (Pulselive). Each player is keyed by the
+// API's stable playerId (new api_player_id column), so renames update in place while genuine
+// departures are removed — along with their award picks (a transfer-out clears the pick). Only
+// runs while the transfer window is open (before PL_SQUAD_LOCK_DATE). Per-team, and guarded so a
+// short/empty response can't wipe a squad.
+async function syncPLSquads() {
+  if (new Date() > new Date(PL_SQUAD_LOCK_DATE)) {
+    return { ok: false, reason: "window_closed" };
+  }
+
+  try {
+    const teamsRes = await fetch(
+      `${PULSELIVE_BASE}/teams?pageSize=100&compSeasons=${PL_COMPSEASON}&comps=1&altIds=true&page=0&type=team`,
+      { headers: PULSELIVE_HEADERS }
+    );
+    if (!teamsRes.ok) return { ok: false, reason: "api_status", status: teamsRes.status };
+    const plTeams = (await teamsRes.json()).content || [];
+    if (plTeams.length === 0) return { ok: false, reason: "api_empty" };
+
+    try { db.exec("ALTER TABLE pl2627_players ADD COLUMN api_player_id INTEGER"); } catch (_) { /* exists */ }
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_pl2627_players_api ON pl2627_players(api_player_id)"); } catch (_) {}
+
+    const localByCode = {};
+    for (const t of db.prepare("SELECT id, code FROM pl2627_teams").all()) localByCode[t.code] = t.id;
+
+    const findByPid = db.prepare("SELECT id FROM pl2627_players WHERE api_player_id = ?");
+    const findByName = db.prepare("SELECT id FROM pl2627_players WHERE team_id = ? AND name = ? AND api_player_id IS NULL");
+    const updatePlayer = db.prepare("UPDATE pl2627_players SET name = ?, position = ?, team_id = ?, api_player_id = ? WHERE id = ?");
+    const insertPlayer = db.prepare("INSERT OR IGNORE INTO pl2627_players (name, team_id, position, api_player_id) VALUES (?, ?, ?, ?)");
+    const teamPlayers = db.prepare("SELECT id, api_player_id FROM pl2627_players WHERE team_id = ?");
+    const delPicks = db.prepare("DELETE FROM pl2627_player_award_picks WHERE player_id = ?");
+    const delResults = db.prepare("DELETE FROM pl2627_player_award_results WHERE player_id = ?");
+    const delPlayer = db.prepare("DELETE FROM pl2627_players WHERE id = ?");
+    const updateManager = db.prepare("UPDATE pl2627_teams SET manager = ? WHERE id = ?");
+
+    let teamsProcessed = 0, playersAdded = 0, playersRemoved = 0, managersUpdated = 0;
+    const skippedTeams = [];
+
+    for (const plt of plTeams) {
+      const code = plt.club?.abbr;
+      const teamId = localByCode[code];
+      if (!teamId) { if (code) skippedTeams.push(code); continue; }
+
+      const staffRes = await fetch(
+        `${PULSELIVE_BASE}/teams/${Math.trunc(plt.id)}/compseasons/${PL_COMPSEASON}/staff?altIds=true`,
+        { headers: PULSELIVE_HEADERS }
+      );
+      if (!staffRes.ok) { skippedTeams.push(code); continue; }
+      const staff = await staffRes.json();
+      const apiPlayers = Array.isArray(staff.players) ? staff.players : [];
+      // Guard: never wipe a squad on a suspiciously thin response.
+      if (apiPlayers.length < 15) { skippedTeams.push(code); continue; }
+
+      const applyTeam = db.transaction(() => {
+        const seenPids = new Set();
+        for (const p of apiPlayers) {
+          const name = p.name?.display;
+          const pos = PULSELIVE_POS[p.info?.position];
+          const pid = p.playerId ?? null;
+          if (!name || !pos || pid == null) continue;
+          seenPids.add(pid);
+
+          const byPid = findByPid.get(pid);
+          if (byPid) { updatePlayer.run(name, pos, teamId, pid, byPid.id); continue; }
+          const byName = findByName.get(teamId, name); // adopt file-seeded row, backfill pid
+          if (byName) { updatePlayer.run(name, pos, teamId, pid, byName.id); continue; }
+          if (insertPlayer.run(name, teamId, pos, pid).changes) playersAdded++;
+        }
+
+        // Remove anyone on this team not in the fresh squad: transferred out (pid unseen) or a
+        // stale file-seeded row that Pulselive superseded (api_player_id still NULL). Their
+        // award picks/results go too.
+        for (const ex of teamPlayers.all(teamId)) {
+          if (ex.api_player_id == null || !seenPids.has(ex.api_player_id)) {
+            delPicks.run(ex.id); delResults.run(ex.id); delPlayer.run(ex.id);
+            playersRemoved++;
+          }
+        }
+
+        const mgr = (staff.officials || []).find((o) => o.role === "Manager" && o.active !== false);
+        if (mgr?.name?.display) { updateManager.run(mgr.name.display, teamId); managersUpdated++; }
+      });
+      applyTeam();
+      teamsProcessed++;
+    }
+
+    console.log(`PL squad sync: ${teamsProcessed} teams, +${playersAdded} players, -${playersRemoved} removed, ${managersUpdated} managers.`);
+    return { ok: true, teamsProcessed, playersAdded, playersRemoved, managersUpdated, skippedTeams };
+  } catch (err) {
+    console.log("PL squad sync error:", err.message);
+    return { ok: false, reason: "exception", message: err.message };
+  }
+}
+
+module.exports = { startScoreRefresh, syncPLFixtures, syncPLSquads };
