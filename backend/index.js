@@ -3012,10 +3012,9 @@ app.post("/api/epl2627/match-predictions", authenticateToken, (req, res) => {
   for (const p of predictions) {
     const match = db.prepare("SELECT matchday, match_date FROM pl2627_matches WHERE id = ?").get(p.match_id);
     if (!match) { errors.push(`Match ${p.match_id} not found`); continue; }
-    // Check matchday lock: earliest match_date in this matchday
-    const deadline = db.prepare("SELECT MIN(match_date) as d FROM pl2627_matches WHERE matchday = ? AND match_date IS NOT NULL").get(match.matchday);
-    if (deadline?.d && now >= new Date(deadline.d.replace(" ", "T") + "Z")) {
-      errors.push(`Matchday ${match.matchday} is locked`);
+    // Lock each match individually at its own kickoff (not the whole matchday).
+    if (match.match_date && now >= new Date(match.match_date.replace(" ", "T") + "Z")) {
+      errors.push(`Match ${p.match_id} has already kicked off`);
       continue;
     }
     // Reject scores that contradict the outcome (home => home>away, away => away>home,
