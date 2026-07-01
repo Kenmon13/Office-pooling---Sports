@@ -1023,14 +1023,14 @@ const PL_TEAMS_2627 = [
   { name: "Brighton & Hove Albion", code: "BHA", short_name: "Brighton", manager: "Fabian Hürzeler" },
   { name: "Chelsea", code: "CHE", short_name: "Chelsea", manager: "Xabi Alonso" },
   { name: "Coventry City", code: "COV", short_name: "Coventry", manager: "Frank Lampard" },
-  { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace", manager: null },
+  { name: "Crystal Palace", code: "CRY", short_name: "Crystal Palace", manager: "Oliver Glasner" },
   { name: "Everton", code: "EVE", short_name: "Everton", manager: "David Moyes" },
-  { name: "Fulham", code: "FUL", short_name: "Fulham", manager: null },
+  { name: "Fulham", code: "FUL", short_name: "Fulham", manager: "Marco Silva" },
   { name: "Hull City", code: "HUL", short_name: "Hull City", manager: "Sergej Jakirović" },
-  { name: "Ipswich Town", code: "IPS", short_name: "Ipswich", manager: null },
+  { name: "Ipswich Town", code: "IPS", short_name: "Ipswich", manager: "Kieran McKenna" },
   { name: "Leeds United", code: "LEE", short_name: "Leeds", manager: "Daniel Farke" },
   { name: "Liverpool", code: "LIV", short_name: "Liverpool", manager: "Andoni Iraola" },
-  { name: "Manchester City", code: "MCI", short_name: "Man City", manager: null },
+  { name: "Manchester City", code: "MCI", short_name: "Man City", manager: "Pep Guardiola" },
   { name: "Manchester United", code: "MUN", short_name: "Man United", manager: "Michael Carrick" },
   { name: "Newcastle United", code: "NEW", short_name: "Newcastle", manager: "Eddie Howe" },
   { name: "Nottingham Forest", code: "NFO", short_name: "Nott'm Forest", manager: "Vítor Pereira" },
@@ -1081,6 +1081,37 @@ if (hasOldTeams) {
       console.log(`Added new PL team: ${t.code}`);
     }
   }
+}
+
+// Seed / refresh PL 26/27 squad players from pl-squad-data.js. Re-seeds automatically when
+// pl2627_players is empty or its count no longer matches the squad file (so editing the file
+// and redeploying updates squads). Only player-based award picks/results are cleared on reseed;
+// manager-of-the-season picks (team-based, player_id NULL) are preserved.
+try {
+  const PL_SQUADS = require("./pl-squad-data");
+  const plTeamsByCode = {};
+  for (const row of db.prepare("SELECT id, code FROM pl2627_teams").all()) plTeamsByCode[row.code] = row.id;
+
+  const totalPLPlayers = Object.values(PL_SQUADS).reduce((s, arr) => s + arr.length, 0);
+  const currentPLCount = db.prepare("SELECT COUNT(*) as c FROM pl2627_players").get().c;
+
+  if (currentPLCount !== totalPLPlayers) {
+    const reseed = db.transaction(() => {
+      db.prepare("DELETE FROM pl2627_player_award_results").run();
+      db.prepare("DELETE FROM pl2627_player_award_picks WHERE player_id IS NOT NULL").run();
+      db.prepare("DELETE FROM pl2627_players").run();
+      const insert = db.prepare("INSERT OR IGNORE INTO pl2627_players (name, team_id, position) VALUES (?, ?, ?)");
+      for (const [code, players] of Object.entries(PL_SQUADS)) {
+        const teamId = plTeamsByCode[code];
+        if (!teamId) { console.log(`PL squads: skipping unknown team code ${code}`); continue; }
+        for (const p of players) insert.run(p.name, teamId, p.pos);
+      }
+    });
+    reseed();
+    console.log(`Seeded PL 26/27 squad players (${totalPLPlayers} across ${Object.keys(PL_SQUADS).length} clubs).`);
+  }
+} catch (err) {
+  console.log("PL squad seed skipped:", err.message);
 }
 
 module.exports = db;
