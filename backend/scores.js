@@ -117,6 +117,13 @@ async function syncPLFixtures() {
     const teamByCode = {};
     for (const t of localTeams) teamByCode[t.code] = t.id;
 
+    // The upsert below targets ON CONFLICT(matchday, home_team_id, away_team_id),
+    // so the matching UNIQUE index MUST exist before the statement is prepared —
+    // better-sqlite3 validates the conflict target at prepare() time.
+    try {
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_pl2627_matches_unique ON pl2627_matches(matchday, home_team_id, away_team_id)");
+    } catch (_) { /* already exists */ }
+
     const upsert = db.prepare(`
       INSERT INTO pl2627_matches (matchday, home_team_id, away_team_id, match_date, home_score, away_score, status)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -126,11 +133,6 @@ async function syncPLFixtures() {
         away_score = COALESCE(excluded.away_score, pl2627_matches.away_score),
         status = excluded.status
     `);
-
-    // Add unique constraint if missing (for upsert to work)
-    try {
-      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_pl2627_matches_unique ON pl2627_matches(matchday, home_team_id, away_team_id)");
-    } catch (_) { /* already exists */ }
 
     let inserted = 0, updated = 0, skipped = 0;
     const unknownCodes = new Set();
