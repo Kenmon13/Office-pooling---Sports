@@ -123,74 +123,107 @@ async function syncPLFixtures() {
     const teamByCode = {};
     for (const t of localTeams) teamByCode[t.code] = t.id;
 
-    // The upsert below targets ON CONFLICT(matchday, home_team_id, away_team_id),
-    // so the matching UNIQUE index MUST exist before the statement is prepared —
-    // better-sqlite3 validates the conflict target at prepare() time.
-    try {
-      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_pl2627_matches_unique ON pl2627_matches(matchday, home_team_id, away_team_id)");
-    } catch (_) { /* already exists */ }
+    // Identify each fixture by football-data's stable match id, so a game that is rescheduled
+    // — even to a different matchday — updates the same row instead of leaving a stale
+    // duplicate. Column + indexes must exist before the statements below are prepared.
+    try { db.exec("ALTER TABLE pl2627_matches ADD COLUMN api_match_id INTEGER"); } catch (_) { /* column exists */ }
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_pl2627_matches_api ON pl2627_matches(api_match_id)"); } catch (_) {}
+    // Kept for adopting pre-existing rows (seeded before api ids were stored) and guarding dupes.
+    try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_pl2627_matches_unique ON pl2627_matches(matchday, home_team_id, away_team_id)"); } catch (_) {}
 
-    const upsert = db.prepare(`
-      INSERT INTO pl2627_matches (matchday, home_team_id, away_team_id, match_date, home_score, away_score, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(matchday, home_team_id, away_team_id)
-      DO UPDATE SET match_date = excluded.match_date,
-        home_score = COALESCE(excluded.home_score, pl2627_matches.home_score),
-        away_score = COALESCE(excluded.away_score, pl2627_matches.away_score),
-        status = excluded.status
-    `);
+    const findByApiId = db.prepare("SELECT id, matchday FROM pl2627_matches WHERE api_match_id = ?");
+    const findByTuple = db.prepare("SELECT id FROM pl2627_matches WHERE matchday = ? AND home_team_id = ? AND away_team_id = ? AND api_match_id IS NULL");
+    const updateRow = db.prepare(`UPDATE pl2627_matches
+      SET matchday = ?, home_team_id = ?, away_team_id = ?, match_date = ?,
+        home_score = COALESCE(?, home_score), away_score = COALESCE(?, away_score),
+        status = ?, api_match_id = ? WHERE id = ?`);
+    const insertRow = db.prepare(`INSERT INTO pl2627_matches
+      (matchday, home_team_id, away_team_id, match_date, home_score, away_score, status, api_match_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
 
-    let inserted = 0, updated = 0, skipped = 0;
+    let inserted = 0, updated = 0, remapped = 0, skipped = 0, pruned = 0;
     const unknownCodes = new Set();
-    for (const m of matches) {
-      const homeCode = plCode(m.homeTeam?.tla);
-      const awayCode = plCode(m.awayTeam?.tla);
-      const matchday = m.matchday;
-      if (!homeCode || !awayCode || !matchday) { skipped++; continue; }
+    const seenApiIds = new Set();
 
-      const homeId = teamByCode[homeCode];
-      const awayId = teamByCode[awayCode];
-      if (!homeId || !awayId) {
-        console.log(`PL fixtures: unknown team code ${homeCode} or ${awayCode}, skipping.`);
-        if (!homeId) unknownCodes.add(homeCode);
-        if (!awayId) unknownCodes.add(awayCode);
-        skipped++;
-        continue;
+    const applyAll = db.transaction(() => {
+      for (const m of matches) {
+        const homeCode = plCode(m.homeTeam?.tla);
+        const awayCode = plCode(m.awayTeam?.tla);
+        const matchday = m.matchday;
+        const apiId = m.id ?? null;
+        if (!homeCode || !awayCode || !matchday) { skipped++; continue; }
+
+        const homeId = teamByCode[homeCode];
+        const awayId = teamByCode[awayCode];
+        if (!homeId || !awayId) {
+          if (!homeId) unknownCodes.add(homeCode);
+          if (!awayId) unknownCodes.add(awayCode);
+          skipped++;
+          continue;
+        }
+
+        // Convert UTC date to the format we use (YYYY-MM-DD HH:MM)
+        let matchDate = null;
+        if (m.utcDate) matchDate = m.utcDate.replace("T", " ").replace("Z", "").slice(0, 16);
+
+        let status = "upcoming";
+        let homeScore = null, awayScore = null;
+        if (m.status === "FINISHED") {
+          status = "finished";
+          homeScore = m.score?.fullTime?.home ?? null;
+          awayScore = m.score?.fullTime?.away ?? null;
+        } else if (m.status === "IN_PLAY" || m.status === "PAUSED") {
+          status = "live";
+          homeScore = m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? 0;
+          awayScore = m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? 0;
+        }
+
+        if (apiId != null) seenApiIds.add(apiId);
+
+        // 1) Known fixture (by stable api id) — updates in place, incl. a matchday change.
+        const byId = apiId != null ? findByApiId.get(apiId) : null;
+        if (byId) {
+          updateRow.run(matchday, homeId, awayId, matchDate, homeScore, awayScore, status, apiId, byId.id);
+          if (byId.matchday !== matchday) remapped++; else updated++;
+          continue;
+        }
+        // 2) Adopt a pre-existing row seeded before api ids were tracked; backfill its api id.
+        const byTuple = findByTuple.get(matchday, homeId, awayId);
+        if (byTuple) {
+          updateRow.run(matchday, homeId, awayId, matchDate, homeScore, awayScore, status, apiId, byTuple.id);
+          updated++;
+          continue;
+        }
+        // 3) Brand-new fixture.
+        insertRow.run(matchday, homeId, awayId, matchDate, homeScore, awayScore, status, apiId);
+        inserted++;
       }
 
-      // Convert UTC date to the format we use (YYYY-MM-DD HH:MM)
-      let matchDate = null;
-      if (m.utcDate) {
-        matchDate = m.utcDate.replace("T", " ").replace("Z", "").slice(0, 16);
+      // Prune fixtures the API no longer returns — but only the safe ones: rows that came from
+      // the API (have an api id), are still upcoming, and that nobody has predicted. Guarded on
+      // a plausibly-complete response so a partial/short API reply can't wipe the schedule.
+      if (matches.length >= 300) {
+        const candidates = db.prepare(`
+          SELECT m.id, m.api_match_id FROM pl2627_matches m
+          WHERE m.api_match_id IS NOT NULL AND m.status = 'upcoming'
+            AND NOT EXISTS (SELECT 1 FROM pl2627_match_predictions p WHERE p.match_id = m.id)
+        `).all();
+        const del = db.prepare("DELETE FROM pl2627_matches WHERE id = ?");
+        for (const c of candidates) {
+          if (!seenApiIds.has(c.api_match_id)) { del.run(c.id); pruned++; }
+        }
       }
+    });
+    applyAll();
 
-      let status = "upcoming";
-      let homeScore = null, awayScore = null;
-      if (m.status === "FINISHED") {
-        status = "finished";
-        homeScore = m.score?.fullTime?.home ?? null;
-        awayScore = m.score?.fullTime?.away ?? null;
-      } else if (m.status === "IN_PLAY" || m.status === "PAUSED") {
-        status = "live";
-        homeScore = m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? 0;
-        awayScore = m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? 0;
-      }
-
-      const existing = db.prepare(
-        "SELECT id FROM pl2627_matches WHERE matchday = ? AND home_team_id = ? AND away_team_id = ?"
-      ).get(matchday, homeId, awayId);
-
-      upsert.run(matchday, homeId, awayId, matchDate, homeScore, awayScore, status);
-      if (existing) updated++;
-      else inserted++;
-    }
-
-    console.log(`PL fixture sync: ${inserted} inserted, ${updated} updated, ${skipped} skipped (${matches.length} total from API).`);
+    console.log(`PL fixture sync: ${inserted} inserted, ${updated} updated, ${remapped} remapped, ${pruned} pruned, ${skipped} skipped (${matches.length} total from API).`);
     return {
       ok: true,
       apiCount: matches.length,
       inserted,
       updated,
+      remapped,
+      pruned,
       skipped,
       unknownCodes: [...unknownCodes],
     };
