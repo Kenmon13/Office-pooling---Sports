@@ -5,6 +5,12 @@ const API_BASE = "https://api.football-data.org/v4";
 const COMPETITION = "WC"; // FIFA World Cup
 const PL_COMPETITION = "PL"; // Premier League
 
+// football-data.org's 3-letter code (tla) differs from our seeded pl2627_teams.code
+// for a few clubs. Map their tla -> our code so fixture/score sync can match them.
+// Without this, e.g. Nottingham Forest's fixtures are all skipped.
+const PL_TLA_ALIASES = { NOT: "NFO" }; // Nottingham Forest
+const plCode = (tla) => PL_TLA_ALIASES[tla] || tla;
+
 async function fetchLiveScores() {
   const apiKey = process.env.FOOTBALL_API_KEY;
   if (!apiKey) {
@@ -137,8 +143,8 @@ async function syncPLFixtures() {
     let inserted = 0, updated = 0, skipped = 0;
     const unknownCodes = new Set();
     for (const m of matches) {
-      const homeCode = m.homeTeam?.tla;
-      const awayCode = m.awayTeam?.tla;
+      const homeCode = plCode(m.homeTeam?.tla);
+      const awayCode = plCode(m.awayTeam?.tla);
       const matchday = m.matchday;
       if (!homeCode || !awayCode || !matchday) { skipped++; continue; }
 
@@ -221,8 +227,8 @@ async function syncPLScores() {
 
     let finished = 0, live = 0;
     for (const m of matches) {
-      const homeId = teamByCode[m.homeTeam?.tla];
-      const awayId = teamByCode[m.awayTeam?.tla];
+      const homeId = teamByCode[plCode(m.homeTeam?.tla)];
+      const awayId = teamByCode[plCode(m.awayTeam?.tla)];
       if (!homeId || !awayId) continue;
 
       if (m.status === "FINISHED") {
