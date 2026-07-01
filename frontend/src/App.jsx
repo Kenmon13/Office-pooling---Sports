@@ -946,7 +946,7 @@ function App() {
           <Routes>
             {pool.tournament === "epl2627" ? (<>
               <Route path="/" element={<PLMatchday currentUser={participant} />} />
-              <Route path="/season" element={<SeasonPredictions currentUser={participant} />} />
+              <Route path="/season" element={<SeasonPredictions currentUser={participant} poolId={pool.id} />} />
             </>) : (<>
               <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} groupStageUnlocked={groupStageUnlocked} />} />
               <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} exactScoresDisabled={exactScoresDisabled} />} />

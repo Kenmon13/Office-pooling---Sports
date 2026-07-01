@@ -65,7 +65,7 @@ function getZone(pos) {
   return "";
 }
 
-function SeasonPredictions({ currentUser }) {
+function SeasonPredictions({ currentUser, poolId }) {
   const [teams, setTeams] = useState([]);
   const [table, setTable] = useState([]); // array of team IDs in order (pos 1-20)
   const [savedTable, setSavedTable] = useState([]);
@@ -81,7 +81,7 @@ function SeasonPredictions({ currentUser }) {
   useEffect(() => {
     Promise.all([
       fetchEPL2627Teams(),
-      fetchEPL2627SeasonDeadline(),
+      fetchEPL2627SeasonDeadline(poolId),
     ]).then(([teamData, dlData]) => {
       setTeams(teamData);
       setDeadline(dlData.deadline || null);
@@ -202,7 +202,7 @@ function SeasonPredictions({ currentUser }) {
 
       {isLocked && (
         <div className="deadline-banner locked">
-          <span className="deadline-locked-text">Season predictions are locked — the season has started</span>
+          <span className="deadline-locked-text">Season predictions are locked — the entry window has closed</span>
         </div>
       )}
 

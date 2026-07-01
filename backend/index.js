@@ -2980,9 +2980,35 @@ app.get("/api/epl2627/matchday-deadline", (req, res) => {
   res.json({ deadline: row?.deadline || null });
 });
 
+// Season predictions & player awards for a PL pool stay open until the start of the first
+// matchday that begins AFTER the pool was created. A pool made before MD1 kicks off locks at
+// MD1 (season start, as before); one created once MD1 is under way stays open until MD2, etc.
+// Falls back to season start (MD1) when the pool is unknown.
+function eplPoolSeasonDeadline(poolId) {
+  const pool = poolId ? db.prepare("SELECT created_at FROM pools WHERE id = ?").get(poolId) : null;
+  const createdAt = pool?.created_at || "0000-00-00 00:00:00";
+  const row = db.prepare(`
+    SELECT MIN(md_start) AS d FROM (
+      SELECT MIN(match_date) AS md_start
+      FROM pl2627_matches
+      WHERE match_date IS NOT NULL
+      GROUP BY matchday
+    ) WHERE md_start > ?
+  `).get(createdAt);
+  return row?.d || null;
+}
+
+// True once this pool's season/award entry window has closed.
+function eplSeasonLocked(poolId) {
+  const deadline = eplPoolSeasonDeadline(poolId);
+  if (deadline) return new Date() >= new Date(deadline.replace(" ", "T") + "Z");
+  // No matchday starts after the pool was created — locked only if fixtures exist at all
+  // (i.e. the season is under way/over, not simply "no fixtures loaded yet").
+  return !!db.prepare("SELECT 1 FROM pl2627_matches WHERE match_date IS NOT NULL LIMIT 1").get();
+}
+
 app.get("/api/epl2627/season-deadline", (req, res) => {
-  const row = db.prepare("SELECT MIN(match_date) as deadline FROM pl2627_matches WHERE matchday = 1 AND match_date IS NOT NULL").get();
-  res.json({ deadline: row?.deadline || null });
+  res.json({ deadline: eplPoolSeasonDeadline(req.query.pool_id) });
 });
 
 // Match predictions
@@ -3050,10 +3076,10 @@ app.post("/api/epl2627/season-predictions", authenticateToken, (req, res) => {
   if (!participant_id || !Array.isArray(predictions) || predictions.length !== 20) {
     return res.status(400).json({ error: "Must predict all 20 positions" });
   }
-  // Check lock: matchday 1 started?
-  const deadline = db.prepare("SELECT MIN(match_date) as d FROM pl2627_matches WHERE matchday = 1 AND match_date IS NOT NULL").get();
-  if (deadline?.d && new Date() >= new Date(deadline.d.replace(" ", "T") + "Z")) {
-    return res.status(400).json({ error: "Season predictions are locked — the season has started" });
+  // Lock relative to when the pool was created (open until the next matchday starts).
+  const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
+  if (eplSeasonLocked(participant?.pool_id)) {
+    return res.status(400).json({ error: "Season predictions are locked — the entry window for this pool has closed" });
   }
   const upsert = db.prepare(`INSERT INTO pl2627_season_predictions (participant_id, position, team_id)
     VALUES (?, ?, ?) ON CONFLICT(participant_id, position) DO UPDATE SET team_id = excluded.team_id`);
@@ -3221,7 +3247,10 @@ app.get("/api/epl2627/players", (req, res) => {
 app.get("/api/epl2627/player-award-picks/:participantId", (req, res) => {
   const { pool_id } = req.query;
   const pool = pool_id ? db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(pool_id) : null;
-  const locked = !!(pool && pool.player_awards_locked);
+  const lockedByAdmin = !!(pool && pool.player_awards_locked);
+  const deadline = eplPoolSeasonDeadline(pool_id);
+  // Locked either by the admin toggle or once the pool's entry window has closed.
+  const locked = lockedByAdmin || eplSeasonLocked(pool_id);
 
   const picks = db.prepare(`SELECT pap.*, p.name as player_name,
     COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code,
@@ -3240,7 +3269,7 @@ app.get("/api/epl2627/player-award-picks/:participantId", (req, res) => {
     LEFT JOIN pl2627_teams t ON p.team_id = t.id
     LEFT JOIN pl2627_teams t2 ON par.team_id = t2.id`).all();
 
-  res.json({ picks, results, locked });
+  res.json({ picks, results, locked, lockedByAdmin, deadline });
 });
 
 app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
@@ -3254,6 +3283,7 @@ app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
   if (participant) {
     const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(participant.pool_id);
     if (pool && pool.player_awards_locked) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
+    if (eplSeasonLocked(participant.pool_id)) return res.status(403).json({ error: "Player awards are locked — the entry window for this pool has closed" });
   }
 
   if (award_category === "mots") {
