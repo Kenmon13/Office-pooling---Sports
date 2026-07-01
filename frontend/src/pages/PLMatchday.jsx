@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   fetchEPL2627Matches,
   fetchEPL2627MatchPredictions,
   submitEPL2627MatchPredictions,
-  fetchEPL2627MatchdayDeadline,
 } from "../api";
 import { plCrest } from "../flags";
 
@@ -19,34 +18,15 @@ function evalPLConflict(outcome, h, a) {
   return "";
 }
 
-function useCountdown(deadline) {
-  const [remaining, setRemaining] = useState(null);
-  const intervalRef = useRef(null);
-
-  useEffect(() => {
-    if (!deadline) return;
-    const target = new Date(deadline.replace(" ", "T") + (deadline.includes("Z") ? "" : "Z")).getTime();
-
-    const update = () => {
-      const diff = target - Date.now();
-      if (diff <= 0) {
-        setRemaining(null);
-        clearInterval(intervalRef.current);
-        return;
-      }
-      const days = Math.floor(diff / 86400000);
-      const hours = Math.floor((diff % 86400000) / 3600000);
-      const minutes = Math.floor((diff % 3600000) / 60000);
-      const seconds = Math.floor((diff % 60000) / 1000);
-      setRemaining({ days, hours, minutes, seconds });
-    };
-
-    update();
-    intervalRef.current = setInterval(update, 1000);
-    return () => clearInterval(intervalRef.current);
-  }, [deadline]);
-
-  return remaining;
+// Split a positive millisecond gap into d/h/m/s for the countdown display; null once elapsed.
+function breakdown(diffMs) {
+  if (diffMs <= 0) return null;
+  return {
+    days: Math.floor(diffMs / 86400000),
+    hours: Math.floor((diffMs % 86400000) / 3600000),
+    minutes: Math.floor((diffMs % 3600000) / 60000),
+    seconds: Math.floor((diffMs % 60000) / 1000),
+  };
 }
 
 function formatMatchDate(dateStr) {
@@ -75,22 +55,36 @@ function PLMatchday({ currentUser }) {
   const [matches, setMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
   const [saved, setSaved] = useState({});
-  const [deadline, setDeadline] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const countdown = useCountdown(deadline);
-  const isLocked = deadline ? new Date() >= new Date(deadline.replace(" ", "T") + "Z") : false;
+  const [now, setNow] = useState(() => Date.now());
+
+  // Tick every second so each match locks the instant its own kickoff passes.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const kickoffMs = (m) => (m.match_date ? new Date(m.match_date.replace(" ", "T") + "Z").getTime() : null);
+  // A match is locked once it kicks off (or is already live / finished).
+  const isMatchLocked = (m) => {
+    if (m.status === "finished" || m.status === "live") return true;
+    const k = kickoffMs(m);
+    return k != null && now >= k;
+  };
+  const lockedIds = new Set(matches.filter(isMatchLocked).map((m) => m.id));
+  const allLocked = matches.length > 0 && matches.every(isMatchLocked);
+
+  // Earliest still-open kickoff drives the "next match locks" countdown banner.
+  const nextLock = matches
+    .filter((m) => !isMatchLocked(m) && kickoffMs(m) != null)
+    .reduce((min, m) => (min == null || kickoffMs(m) < kickoffMs(min) ? m : min), null);
+  const countdown = nextLock ? breakdown(kickoffMs(nextLock) - now) : null;
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetchEPL2627Matches(matchday),
-      fetchEPL2627MatchdayDeadline(matchday),
-    ]).then(([matchData, dlData]) => {
-      if (!cancelled) {
-        setMatches(matchData);
-        setDeadline(dlData.deadline || null);
-      }
+    fetchEPL2627Matches(matchday).then((matchData) => {
+      if (!cancelled) setMatches(matchData);
     });
     return () => { cancelled = true; };
   }, [matchday]);
@@ -113,7 +107,7 @@ function PLMatchday({ currentUser }) {
   }, [currentUser, matchday]);
 
   const setOutcome = (matchId, outcome) => {
-    if (isLocked) return;
+    if (lockedIds.has(matchId)) return;
     setPredictions((prev) => ({
       ...prev,
       [matchId]: { ...prev[matchId], outcome },
@@ -121,7 +115,7 @@ function PLMatchday({ currentUser }) {
   };
 
   const setScore = (matchId, field, value) => {
-    if (isLocked) return;
+    if (lockedIds.has(matchId)) return;
     const num = value === "" ? null : parseInt(value, 10);
     if (value !== "" && isNaN(num)) return;
     setPredictions((prev) => ({
@@ -130,8 +124,10 @@ function PLMatchday({ currentUser }) {
     }));
   };
 
+  // Only still-open matches can be saved, so changes/validation ignore locked ones.
   const hasChanges = (() => {
     for (const m of matches) {
+      if (isMatchLocked(m)) continue;
       const pred = predictions[m.id];
       const sv = saved[m.id];
       if (!pred && !sv) continue;
@@ -141,11 +137,11 @@ function PLMatchday({ currentUser }) {
     return false;
   })();
 
-  const anyPredictions = matches.some((m) => predictions[m.id]?.outcome);
+  const anyPredictions = matches.some((m) => !isMatchLocked(m) && predictions[m.id]?.outcome);
 
   // Matches whose entered score contradicts the chosen outcome — these block the save.
   const conflicts = matches
-    .filter((m) => predictions[m.id]?.outcome)
+    .filter((m) => !isMatchLocked(m) && predictions[m.id]?.outcome)
     .map((m) => ({ id: m.id, msg: evalPLConflict(predictions[m.id].outcome, predictions[m.id].home_score, predictions[m.id].away_score) }))
     .filter((c) => c.msg);
   const hasConflict = conflicts.length > 0;
@@ -160,7 +156,7 @@ function PLMatchday({ currentUser }) {
     setSaveError("");
 
     const preds = matches
-      .filter((m) => predictions[m.id]?.outcome)
+      .filter((m) => !isMatchLocked(m) && predictions[m.id]?.outcome)
       .map((m) => ({
         match_id: m.id,
         predicted_outcome: predictions[m.id].outcome,
@@ -210,7 +206,7 @@ function PLMatchday({ currentUser }) {
         <ul>
           <li>Predict the outcome (Home / Draw / Away) for each match: <strong>2 pts</strong> for correct outcome.</li>
           <li>Optionally predict the exact score: <strong>4 pts</strong> if correct score (replaces 2 pts).</li>
-          <li>Each matchday locks when its first match kicks off.</li>
+          <li>Each match locks when it kicks off — you can keep editing later games in the same matchday.</li>
         </ul>
       </div>
 
@@ -232,7 +228,7 @@ function PLMatchday({ currentUser }) {
         </button>
       </div>
 
-      {deadline && !isLocked && countdown && (
+      {nextLock && countdown && (
         <div className="deadline-banner">
           <div className="deadline-timer">
             <div className="timer-unit">
@@ -256,15 +252,15 @@ function PLMatchday({ currentUser }) {
             </div>
           </div>
           <div className="deadline-info">
-            <span className="deadline-label">Matchday {matchday} locks on</span>
-            <span className="deadline-date">{formatDeadlineFull(deadline)}</span>
+            <span className="deadline-label">Next match locks on</span>
+            <span className="deadline-date">{formatDeadlineFull(nextLock.match_date)}</span>
           </div>
         </div>
       )}
 
-      {isLocked && (
+      {allLocked && (
         <div className="deadline-banner locked">
-          <span className="deadline-locked-text">Matchday {matchday} is locked — matches have started</span>
+          <span className="deadline-locked-text">Matchday {matchday} is locked — all matches have started</span>
         </div>
       )}
 
@@ -277,7 +273,8 @@ function PLMatchday({ currentUser }) {
             const result = getMatchResult(m, pred);
             const isLive = m.status === "live";
             const isFinished = m.status === "finished";
-            const conflictMsg = !isLocked && !isFinished ? evalPLConflict(pred.outcome, pred.home_score, pred.away_score) : "";
+            const locked = isMatchLocked(m);
+            const conflictMsg = !locked && !isFinished ? evalPLConflict(pred.outcome, pred.home_score, pred.away_score) : "";
 
             return (
               <div key={m.id} className={`pl-match-card ${isLive ? "live" : ""} ${isFinished ? "finished" : ""}`}>
@@ -302,7 +299,7 @@ function PLMatchday({ currentUser }) {
                   </div>
                 )}
 
-                {currentUser && !isLocked && !isFinished && (
+                {currentUser && !locked && !isFinished && (
                   <div className="pl-outcome-btns">
                     <button
                       className={`outcome-btn ${pred.outcome === "home" ? "selected" : ""}`}
@@ -325,7 +322,7 @@ function PLMatchday({ currentUser }) {
                   </div>
                 )}
 
-                {isLocked && pred.outcome && !isFinished && (
+                {locked && pred.outcome && !isFinished && (
                   <div className="pl-outcome-btns locked">
                     <span className={`outcome-btn ${pred.outcome === "home" ? "selected" : ""}`}>H</span>
                     <span className={`outcome-btn ${pred.outcome === "draw" ? "selected" : ""}`}>D</span>
@@ -333,7 +330,7 @@ function PLMatchday({ currentUser }) {
                   </div>
                 )}
 
-                {currentUser && !isLocked && !isFinished && pred.outcome && (
+                {currentUser && !locked && !isFinished && pred.outcome && (
                   <div className="pl-score-inputs">
                     <input
                       type="number"
@@ -360,7 +357,7 @@ function PLMatchday({ currentUser }) {
                   <div className="pl-score-conflict">⚠ {conflictMsg}</div>
                 )}
 
-                {isLocked && pred.home_score != null && pred.away_score != null && !isFinished && (
+                {locked && pred.home_score != null && pred.away_score != null && !isFinished && (
                   <div className="pl-score-inputs locked">
                     <span className="locked-score">{pred.home_score} - {pred.away_score}</span>
                     <span className="score-label">Your predicted score</span>
@@ -372,7 +369,7 @@ function PLMatchday({ currentUser }) {
         </div>
       )}
 
-      {currentUser && !isLocked && (
+      {currentUser && !allLocked && (
         <div className="save-all-footer">
           {saveError && <p className="error">{saveError}</p>}
           {hasChanges && anyPredictions && (
