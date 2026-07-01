@@ -831,11 +831,3 @@ export async function adminSyncPLFixtures() {
   });
   return res.json();
 }
-
-export async function adminSyncPLSquads() {
-  const res = await fetch(`${API}/admin/sync-pl-squads`, {
-    method: "POST",
-    headers: { ...authHeaders() },
-  });
-  return res.json();
-}
