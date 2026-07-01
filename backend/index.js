@@ -17,7 +17,7 @@ const APP_URL = process.env.APP_URL || "https://sportspooling.com";
 
 // Seed on first run
 require("./seed");
-const { startScoreRefresh, syncPLFixtures, syncPLSquads } = require("./scores");
+const { startScoreRefresh, syncPLFixtures } = require("./scores");
 
 const app = express();
 app.use(cors());
@@ -3325,36 +3325,6 @@ app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
     }
 
     res.json({ success: true, matches: count, detail: result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/admin/sync-pl-squads", requireAdminToken, async (req, res) => {
-  try {
-    const result = await syncPLSquads();
-    const players = db.prepare("SELECT COUNT(*) as c FROM pl2627_players").get().c;
-
-    if (result && result.ok === false) {
-      const reasons = {
-        no_api_key: "FOOTBALL_API_KEY is not set on the server (add it in Railway → Variables).",
-        api_status: `football-data.org returned HTTP ${result.status} for PL teams (squad data is often paid-tier only).`,
-        api_empty: "football-data.org returned 0 teams for PL season 2026.",
-        exception: `Sync error: ${result.message}`,
-      };
-      return res.json({ error: reasons[result.reason] || "PL squad sync did nothing.", players });
-    }
-
-    // Teams came back but with no squad lists — the tell-tale sign the key's tier excludes squads.
-    if (result && result.ok && result.squadTeams === 0) {
-      return res.json({
-        error: `Reached ${result.apiTeams} PL teams but none included a squad list — this API-key tier doesn't expose squads. Managers updated: ${result.managersUpdated}.`,
-        players,
-        detail: result,
-      });
-    }
-
-    res.json({ success: true, players, detail: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
