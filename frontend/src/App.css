@@ -1990,6 +1990,25 @@ nav a.active {
   border-color: #6fdc6f;
 }
 
+.admin-user-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: #1a1a1a;
+  color: #ddd;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.admin-user-search::placeholder { color: #666; }
+
+.admin-user-search:focus {
+  outline: none;
+  border-color: #6fdc6f;
+}
+
 .user-list-info {
   display: flex;
   justify-content: space-between;
