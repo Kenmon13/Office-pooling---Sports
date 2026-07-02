@@ -27,6 +27,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [replySending, setReplySending] = useState(false);
   const [poolSort, setPoolSort] = useState("recent");
   const [userSort, setUserSort] = useState("recent");
+  const [userSearch, setUserSearch] = useState("");
   const [issueFilter, setIssueFilter] = useState("all");
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [userPools, setUserPools] = useState({});
@@ -236,6 +237,18 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
     return sorted;
   };
 
+  // Users tab: filter by name / username / email, then cap how many we render so
+  // a 4000+ user list stays responsive. Search matches take priority over the cap.
+  const USER_RENDER_CAP = 100;
+  const userQuery = userSearch.trim().toLowerCase();
+  const matchedUsers = sortUsers(users).filter((u) =>
+    !userQuery ||
+    (u.display_name || "").toLowerCase().includes(userQuery) ||
+    (u.username || "").toLowerCase().includes(userQuery) ||
+    (u.email || "").toLowerCase().includes(userQuery)
+  );
+  const visibleUsers = matchedUsers.slice(0, USER_RENDER_CAP);
+
   // Group pools by sport, then by tournament
   const grouped = {};
   for (const p of pools) {
@@ -339,14 +352,28 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
       {tab === "users" && (
         <>
           <div className="admin-sort-row">
-            <p className="select-subtitle">{users.length} registered user{users.length !== 1 ? "s" : ""}</p>
+            <p className="select-subtitle">
+              {userQuery
+                ? `${matchedUsers.length} match${matchedUsers.length !== 1 ? "es" : ""} of ${users.length}`
+                : `${users.length} registered user${users.length !== 1 ? "s" : ""}`}
+            </p>
             <select className="admin-sort-select" value={userSort} onChange={(e) => setUserSort(e.target.value)}>
               <option value="recent">Recent</option>
               <option value="alpha">A &ndash; Z</option>
             </select>
           </div>
+          <input
+            type="search"
+            className="admin-user-search"
+            placeholder="Search by name, username, or email…"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+          />
+          {matchedUsers.length === 0 && (
+            <p className="notice">No users match &ldquo;{userSearch}&rdquo;.</p>
+          )}
           <div className="pool-list">
-            {sortUsers(users).map((u) => {
+            {visibleUsers.map((u) => {
               const isExpanded = expandedUserId === u.id;
               const pools = userPools[u.id];
               return (
@@ -411,6 +438,11 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
               );
             })}
           </div>
+          {matchedUsers.length > USER_RENDER_CAP && (
+            <p className="notice">
+              Showing first {USER_RENDER_CAP} of {matchedUsers.length}. Type in the search box to narrow it down.
+            </p>
+          )}
         </>
       )}
 
