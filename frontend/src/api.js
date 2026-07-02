@@ -624,11 +624,6 @@ export async function updateChampionW2Lock(poolId, locked) {
   return res.json();
 }
 
-// ── Admin test pool ───────────────────────────────────────────────────────────
-
-export async function adminFetchTestPools() {
-  return (await fetch(`${API}/admin/test/pools`, { headers: authHeaders() })).json();
-}
 // ── Backup & Restore ─────────────────────────────────────────────────────────
 
 export async function adminDownloadBackup() {
@@ -683,45 +678,6 @@ export async function adminRestoreFromUpload(file) {
 export async function adminRestoreFromBackup(name) {
   const res = await fetch(`${API}/admin/restore/${encodeURIComponent(name)}`, {
     method: "POST",
-    headers: authHeaders(),
-  });
-  return res.json();
-}
-
-export async function adminCreateTestPool(name, password) {
-  const res = await fetch(`${API}/admin/test/pool`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ name, password }),
-  });
-  return res.json();
-}
-export async function adminAddTestParticipants(poolId, count) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/participants`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ count }),
-  });
-  return res.json();
-}
-export async function adminRandomizePicks(poolId) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/randomize-picks`, {
-    method: "POST",
-    headers: authHeaders(),
-  });
-  return res.json();
-}
-export async function adminSetMockDate(poolId, mock_date) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date`, {
-    method: "PUT",
-    headers: authHeaders(),
-    body: JSON.stringify({ mock_date }),
-  });
-  return res.json();
-}
-export async function adminClearMockDate(poolId) {
-  const res = await fetch(`${API}/admin/test/pool/${poolId}/mock-date`, {
-    method: "DELETE",
     headers: authHeaders(),
   });
   return res.json();

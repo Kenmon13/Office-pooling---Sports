@@ -27,7 +27,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, adminAddTestParticipants, adminRandomizePicks, adminSetMockDate, adminClearMockDate, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
 import PasswordInput from "./components/PasswordInput";
@@ -48,7 +48,6 @@ function App() {
   });
   const [participant, setParticipant] = useState(null);
   const [points, setPoints] = useState(0);
-  const [testTzOffset, setTestTzOffset] = useState(8);
 
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
@@ -901,7 +900,7 @@ function App() {
                   <button onClick={openIssueChat} className="btn-small btn-report">Report Issue</button>
                   <button onClick={handleSignOut} className="btn-small">Sign Out</button>
                 </span>
-                <p className="tz-note">All match times are in {localTzLabel(pool?.is_test && user?.is_admin ? testTzOffset : undefined)}</p>
+                <p className="tz-note">All match times are in {localTzLabel(undefined)}</p>
               </div>
               <svg className="soccer-ball" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="50" cy="50" r="48" fill="#fff" stroke="#222" strokeWidth="2"/>
@@ -940,16 +939,13 @@ function App() {
         </header>
 
         <main>
-          {!!pool.is_test && !!user.is_admin && (
-            <TestControls pool={pool} onMockDateChange={(d) => setPool((p) => ({ ...p, mock_date: d }))} tzOffset={testTzOffset} onTzOffsetChange={setTestTzOffset} />
-          )}
           <Routes>
             {pool.tournament === "epl2627" ? (<>
               <Route path="/" element={<PLMatchday currentUser={participant} />} />
               <Route path="/season" element={<SeasonPredictions currentUser={participant} poolId={pool.id} />} />
             </>) : (<>
-              <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} groupStageUnlocked={groupStageUnlocked} />} />
-              <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} displayTzOffset={pool.is_test && user.is_admin ? testTzOffset : undefined} exactScoresDisabled={exactScoresDisabled} />} />
+              <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} groupStageUnlocked={groupStageUnlocked} />} />
+              <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} exactScoresDisabled={exactScoresDisabled} />} />
               <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             </>)}
             <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} tournament={pool.tournament} />} />
@@ -1411,123 +1407,6 @@ function IssueChatModal({ issueView, setIssueView, myIssues, selectedIssue, issu
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function utcToLocalParts(utcStr, offsetHours = 8) {
-  if (!utcStr) return { date: "", time: "00:00" };
-  const local = new Date(new Date(utcStr.replace(" ", "T") + "Z").getTime() + offsetHours * 3600000);
-  const iso = local.toISOString();
-  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
-}
-
-function offsetToISO(hours) {
-  const sign = hours >= 0 ? "+" : "-";
-  const abs = Math.abs(hours);
-  return `${sign}${String(Math.floor(abs)).padStart(2, "0")}:${String(Math.round((abs % 1) * 60)).padStart(2, "0")}`;
-}
-
-function TestControls({ pool, onMockDateChange, tzOffset, onTzOffsetChange }) {
-  const [mockDate, setMockDate] = useState(() => utcToLocalParts(pool.mock_date, tzOffset).date);
-  const [mockTime, setMockTime] = useState(() => utcToLocalParts(pool.mock_date, tzOffset).time);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  // Re-display the stored mock date whenever tzOffset or the stored date changes
-  const syncKey = `${pool.mock_date ?? ""}|${tzOffset}`;
-  const [lastSyncKey, setLastSyncKey] = useState(syncKey);
-  if (lastSyncKey !== syncKey) {
-    setLastSyncKey(syncKey);
-    const { date, time } = utcToLocalParts(pool.mock_date, tzOffset);
-    setMockDate(date || "");
-    setMockTime(time);
-  }
-
-  const flash = (text) => { setMsg(text); setTimeout(() => setMsg(""), 2500); };
-
-  const syncInputs = (utcStr) => {
-    const { date, time } = utcToLocalParts(utcStr, tzOffset);
-    setMockDate(date);
-    setMockTime(time);
-  };
-
-  const adjustDate = async (offsetMs) => {
-    setBusy(true);
-    const base = pool.mock_date ? new Date(pool.mock_date.replace(" ", "T") + "Z") : new Date();
-    const next = new Date(base.getTime() + offsetMs);
-    const utcStr = next.toISOString().slice(0, 16).replace("T", " ");
-    await adminSetMockDate(pool.id, utcStr);
-    onMockDateChange(utcStr);
-    syncInputs(utcStr);
-    flash("Date adjusted");
-    setBusy(false);
-  };
-
-  const applyDate = async () => {
-    if (!mockDate) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(mockDate)) { flash("Date: YYYY-MM-DD"); return; }
-    if (!/^\d{2}:\d{2}$/.test(mockTime)) { flash("Time: HH:MM"); return; }
-    setBusy(true);
-    const utcStr = new Date(`${mockDate}T${mockTime}${offsetToISO(tzOffset)}`).toISOString().slice(0, 16).replace("T", " ");
-    await adminSetMockDate(pool.id, utcStr);
-    onMockDateChange(utcStr);
-    flash("Date set");
-    setBusy(false);
-  };
-
-  const clearDate = async () => {
-    setBusy(true);
-    await adminClearMockDate(pool.id);
-    setMockDate("");
-    setMockTime("00:00");
-    onMockDateChange(null);
-    flash("Using real time");
-    setBusy(false);
-  };
-
-  const addPlayers = async (n) => {
-    setBusy(true);
-    const res = await adminAddTestParticipants(pool.id, n);
-    flash(res.added?.length ? `Added ${res.added.length} player(s)` : (res.error || "No more names available"));
-    setBusy(false);
-  };
-
-  const randomize = async () => {
-    setBusy(true);
-    const res = await adminRandomizePicks(pool.id);
-    flash(res.success ? `Randomized picks for ${res.participants} players` : (res.error || "Error"));
-    setBusy(false);
-  };
-
-  const H = 3600000;
-  const D = 86400000;
-
-  return (
-    <div className="test-controls">
-      <span className="test-badge">TEST POOL</span>
-      <div className="test-controls-actions">
-        <button className="btn-test" onClick={() => addPlayers(5)} disabled={busy}>+5 Players</button>
-        <button className="btn-test" onClick={() => addPlayers(1)} disabled={busy}>+1 Player</button>
-        <button className="btn-test" onClick={randomize} disabled={busy}>Randomize Picks</button>
-        <span className="test-divider" />
-        <span className="test-date-label">Sim time (UTC<input type="number" className="test-tz-input" value={tzOffset} min="-12" max="14" onChange={(e) => onTzOffsetChange(Number(e.target.value))} />):</span>
-        <input type="text" className="test-date-input" placeholder="YYYY-MM-DD" value={mockDate} onChange={(e) => setMockDate(e.target.value)} />
-        <div className="test-spin">
-          <button className="btn-spin" onClick={() => adjustDate(D)} disabled={busy}>▲</button>
-          <button className="btn-spin" onClick={() => adjustDate(-D)} disabled={busy}>▼</button>
-        </div>
-        <input type="text" className="test-date-input test-time-input" placeholder="HH:MM" value={mockTime} onChange={(e) => setMockTime(e.target.value)} />
-        <div className="test-spin">
-          <button className="btn-spin" onClick={() => adjustDate(H)} disabled={busy}>▲</button>
-          <button className="btn-spin" onClick={() => adjustDate(-H)} disabled={busy}>▼</button>
-        </div>
-        <button className="btn-test" onClick={applyDate} disabled={busy || !mockDate}>Set</button>
-        {pool.mock_date && (
-          <button className="btn-test btn-test-clear" onClick={clearDate} disabled={busy}>Clear</button>
-        )}
-      </div>
-      {msg && <span className="test-msg">{msg}</span>}
     </div>
   );
 }

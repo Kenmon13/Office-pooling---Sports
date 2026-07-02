@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminFetchTestPools, adminCreateTestPool, adminDeletePool as deletePool, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -17,10 +17,6 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [tab, setTab] = useState("pools");
   const [pools, setPools] = useState([]);
   const [users, setUsers] = useState([]);
-  const [testPools, setTestPools] = useState([]);
-  const [newTestName, setNewTestName] = useState("");
-  const [newTestPwd, setNewTestPwd] = useState("");
-  const [creating, setCreating] = useState(false);
   const [backups, setBackups] = useState([]);
   const [backupLoading, setBackupLoading] = useState("");
   const [backupMsg, setBackupMsg] = useState(null);
@@ -114,35 +110,10 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   useEffect(() => {
     adminFetchPools().then((data) => { if (!data.error) setPools(data); });
     adminFetchUsers().then((data) => { if (!data.error) setUsers(data); });
-    adminFetchTestPools().then((d) => { if (!d.error) setTestPools(d); });
     adminFetchKoMismatches().then((d) => { if (Array.isArray(d)) setKoMismatches(d); });
     loadBackups();
     loadIssues();
   }, [user.id]);
-
-  const handleCreateTestPool = async () => {
-    if (!newTestName.trim() || !newTestPwd.trim()) return;
-    setCreating(true);
-    try {
-      const res = await adminCreateTestPool(newTestName.trim(), newTestPwd.trim());
-      if (!res.error) {
-        setNewTestName(""); setNewTestPwd("");
-        adminFetchTestPools().then((d) => { if (!d.error) setTestPools(d); });
-      } else {
-        alert(res.error);
-      }
-    } catch (err) {
-      alert("Failed to create pool: " + err.message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleDeleteTestPool = async (poolId) => {
-    if (!confirm("Delete this test pool and all its data?")) return;
-    await deletePool(poolId);
-    setTestPools((prev) => prev.filter((p) => p.id !== poolId));
-  };
 
   const handleDeletePool = async (e, poolId) => {
     e.stopPropagation();
@@ -286,9 +257,6 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
         </button>
         <button className={`admin-tab ${tab === "users" ? "active" : ""}`} onClick={() => setTab("users")}>
           Users ({users.length})
-        </button>
-        <button className={`admin-tab ${tab === "test" ? "active" : ""}`} onClick={() => setTab("test")}>
-          Test ({testPools.length})
         </button>
         <button className={`admin-tab ${tab === "backup" ? "active" : ""}`} onClick={() => { setTab("backup"); loadBackups(); }}>
           Backup
@@ -442,49 +410,6 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                 </div>
               );
             })}
-          </div>
-        </>
-      )}
-
-      {tab === "test" && (
-        <>
-          <p className="select-subtitle">WC2022 test pools — isolated data, all results known.</p>
-
-          <div className="test-pool-create">
-            <input
-              className="test-input"
-              placeholder="Pool name"
-              value={newTestName}
-              onChange={(e) => setNewTestName(e.target.value)}
-            />
-            <input
-              className="test-input"
-              placeholder="Password"
-              value={newTestPwd}
-              onChange={(e) => setNewTestPwd(e.target.value)}
-            />
-            <button className="btn-submit" onClick={handleCreateTestPool} disabled={creating || !newTestName.trim() || !newTestPwd.trim()}>
-              {creating ? "Creating…" : "Create WC2022 Test Pool"}
-            </button>
-          </div>
-
-          {testPools.length === 0 && <p className="notice">No test pools yet.</p>}
-          <div className="pool-list" style={{ marginTop: 12 }}>
-            {testPools.map((p) => (
-              <div key={p.id} className="pool-list-item">
-                <button
-                  className="pool-list-btn"
-                  onClick={() => onSelectPool({ id: p.id, name: p.name, sport: "soccer", tournament: "wc2022", is_test: 1, mock_date: p.mock_date, isAdmin: true })}
-                >
-                  <span className="pool-list-name">{p.name}</span>
-                  <span className="pool-list-meta">
-                    {p.participant_count} player{p.participant_count !== 1 ? "s" : ""}
-                    {p.mock_date && <> &middot; sim {p.mock_date.slice(0,10)}</>}
-                  </span>
-                </button>
-                <button className="pool-delete-btn" onClick={() => handleDeleteTestPool(p.id)}>&times;</button>
-              </div>
-            ))}
           </div>
         </>
       )}

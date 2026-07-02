@@ -1450,100 +1450,6 @@ app.get("/api/knockout-deadline", (req, res) => {
   res.json({ openMatchIds, groupStageComplete, koStageComplete, matchMeta });
 });
 
-// ── Admin: test pool management ──────────────────────────────────────────────
-
-app.post("/api/admin/test/pool", requireAdminToken, (req, res) => {
-  const { name, password } = req.body;
-  if (!name || !password) return res.status(400).json({ error: "name and password required" });
-  try {
-    const result = db.prepare("INSERT INTO pools (name, sport, tournament, password, is_test) VALUES (?, 'soccer', 'wc2022', ?, 1)").run(name.trim(), password.trim());
-    res.json({ id: result.lastInsertRowid, name: name.trim(), sport: "soccer", tournament: "wc2022", is_test: 1 });
-  } catch (err) {
-    if (err.message.includes("UNIQUE")) return res.status(409).json({ error: "Pool name already taken" });
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const TEST_NAMES = [
-  "Alice","Bob","Charlie","Diana","Edward","Fatima","George","Hannah",
-  "Ivan","Julia","Kevin","Laura","Michael","Nina","Oscar","Paula",
-  "Quinn","Rachel","Samuel","Tina","Ulrich","Victoria","William","Xena",
-  "Yusuf","Zara","Aaron","Bella","Carlos","Demi",
-];
-
-app.post("/api/admin/test/pool/:poolId/participants", requireAdminToken, (req, res) => {
-  const { count = 5 } = req.body;
-  const poolId = req.params.poolId;
-  const pool = db.prepare("SELECT is_test FROM pools WHERE id = ?").get(poolId);
-  if (!pool || !pool.is_test) return res.status(400).json({ error: "Not a test pool" });
-
-  const existing = db.prepare("SELECT name FROM participants WHERE pool_id = ?").all(poolId).map((p) => p.name);
-  const available = TEST_NAMES.filter((n) => !existing.includes(n));
-  const toAdd = available.slice(0, Math.min(count, available.length));
-
-  const insert = db.prepare("INSERT INTO participants (name, pool_id) VALUES (?, ?)");
-  const added = [];
-  for (const name of toAdd) {
-    const result = insert.run(name, poolId);
-    added.push({ id: result.lastInsertRowid, name });
-  }
-  res.json({ added });
-});
-
-app.post("/api/admin/test/pool/:poolId/randomize-picks", requireAdminToken, (req, res) => {
-  const poolId = req.params.poolId;
-  const pool = db.prepare("SELECT is_test FROM pools WHERE id = ?").get(poolId);
-  if (!pool || !pool.is_test) return res.status(400).json({ error: "Not a test pool" });
-
-  const participants = db.prepare("SELECT id FROM participants WHERE pool_id = ?").all(poolId);
-  const groups = db.prepare("SELECT * FROM wc2022_groups").all();
-  const teams = db.prepare("SELECT * FROM wc2022_teams").all();
-  const koMatches = db.prepare("SELECT * FROM wc2022_knockout_matches").all();
-
-  const upsertGp = db.prepare(`
-    INSERT INTO wc2022_group_predictions (participant_id, group_id, team1_id, team2_id)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(participant_id, group_id) DO UPDATE SET team1_id=excluded.team1_id, team2_id=excluded.team2_id
-  `);
-  const upsertKp = db.prepare(`
-    INSERT INTO wc2022_knockout_predictions (participant_id, match_id, predicted_winner)
-    VALUES (?, ?, ?)
-    ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_winner=excluded.predicted_winner
-  `);
-  const upsertChamp = db.prepare(`
-    INSERT INTO wc2022_champion_picks (participant_id, team_id)
-    VALUES (?, ?)
-    ON CONFLICT(participant_id) DO UPDATE SET team_id=excluded.team_id
-  `);
-
-  const shuffle = (arr) => arr.sort(() => Math.random() - 0.5);
-
-  for (const p of participants) {
-    for (const g of groups) {
-      const groupTeams = shuffle(teams.filter((t) => t.group_id === g.id));
-      upsertGp.run(p.id, g.id, groupTeams[0].id, groupTeams[1].id);
-    }
-    for (const m of koMatches) {
-      const winner = Math.random() < 0.5 ? m.home_team_id : m.away_team_id;
-      upsertKp.run(p.id, m.id, winner);
-    }
-    const randomTeam = teams[Math.floor(Math.random() * teams.length)];
-    upsertChamp.run(p.id, randomTeam.id);
-  }
-  res.json({ success: true, participants: participants.length });
-});
-
-app.put("/api/admin/test/pool/:poolId/mock-date", requireAdminToken, (req, res) => {
-  const { mock_date } = req.body;
-  db.prepare("UPDATE pools SET mock_date = ? WHERE id = ? AND is_test = 1").run(mock_date || null, req.params.poolId);
-  res.json({ success: true });
-});
-
-app.delete("/api/admin/test/pool/:poolId/mock-date", requireAdminToken, (req, res) => {
-  db.prepare("UPDATE pools SET mock_date = NULL WHERE id = ? AND is_test = 1").run(req.params.poolId);
-  res.json({ success: true });
-});
-
 // ── WC2022 data endpoints ────────────────────────────────────────────────────
 
 app.get("/api/wc2022/groups", (req, res) => {
@@ -1867,15 +1773,6 @@ app.get("/api/wc2022/prediction-deadline", (req, res) => {
   const groupDeadlines = {};
   for (const gm of groupFirstMatches) groupDeadlines[gm.group_id] = gm.first_match;
   res.json({ deadline: firstMatch.match_date, groupDeadlines });
-});
-
-app.get("/api/admin/test/pools", requireAdminToken, (req, res) => {
-  const pools = db.prepare(`
-    SELECT p.id, p.name, p.mock_date,
-      (SELECT COUNT(*) FROM participants pt WHERE pt.pool_id = p.id) as participant_count
-    FROM pools p WHERE p.is_test = 1 ORDER BY p.created_at DESC
-  `).all();
-  res.json(pools);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
