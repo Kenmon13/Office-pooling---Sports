@@ -26,6 +26,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [poolSort, setPoolSort] = useState("recent");
+  const [poolSearch, setPoolSearch] = useState("");
   const [userSort, setUserSort] = useState("recent");
   const [userSearch, setUserSearch] = useState("");
   const [issueFilter, setIssueFilter] = useState("all");
@@ -249,9 +250,16 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   );
   const visibleUsers = matchedUsers.slice(0, USER_RENDER_CAP);
 
-  // Group pools by sport, then by tournament
+  // Pools tab: filter by name, then cap how many render so a 1000+ pool list
+  // stays responsive. Search matches take priority over the cap.
+  const POOL_RENDER_CAP = 100;
+  const poolQuery = poolSearch.trim().toLowerCase();
+  const matchedPools = pools.filter((p) => !poolQuery || (p.name || "").toLowerCase().includes(poolQuery));
+  const visiblePools = sortPools(matchedPools).slice(0, POOL_RENDER_CAP);
+
+  // Group the visible pools by sport, then by tournament.
   const grouped = {};
-  for (const p of pools) {
+  for (const p of visiblePools) {
     if (!grouped[p.sport]) grouped[p.sport] = {};
     if (!grouped[p.sport][p.tournament]) grouped[p.sport][p.tournament] = [];
     grouped[p.sport][p.tournament].push(p);
@@ -288,15 +296,29 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
       {tab === "pools" && (
         <>
           <div className="admin-sort-row">
-            <p className="select-subtitle">{pools.length} pool{pools.length !== 1 ? "s" : ""} &middot; {totalPoolUsers} total participant{totalPoolUsers !== 1 ? "s" : ""}</p>
+            <p className="select-subtitle">
+              {poolQuery
+                ? `${matchedPools.length} match${matchedPools.length !== 1 ? "es" : ""} of ${pools.length}`
+                : `${pools.length} pool${pools.length !== 1 ? "s" : ""} · ${totalPoolUsers} total participant${totalPoolUsers !== 1 ? "s" : ""}`}
+            </p>
             <select className="admin-sort-select" value={poolSort} onChange={(e) => setPoolSort(e.target.value)}>
               <option value="recent">Recent</option>
               <option value="alpha">A &ndash; Z</option>
               <option value="users">Most Users</option>
             </select>
           </div>
+          <input
+            type="search"
+            className="admin-user-search"
+            placeholder="Search pools by name…"
+            value={poolSearch}
+            onChange={(e) => setPoolSearch(e.target.value)}
+          />
 
-          {Object.keys(grouped).length === 0 && <p className="notice">No pools created yet.</p>}
+          {pools.length === 0 && <p className="notice">No pools created yet.</p>}
+          {pools.length > 0 && matchedPools.length === 0 && (
+            <p className="notice">No pools match &ldquo;{poolSearch}&rdquo;.</p>
+          )}
 
           {Object.entries(grouped).map(([sport, tournaments]) => {
             const sportLabel = SPORT_LABELS[sport] || { name: sport, emoji: "" };
@@ -346,6 +368,11 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
               </div>
             );
           })}
+          {matchedPools.length > POOL_RENDER_CAP && (
+            <p className="notice">
+              Showing first {POOL_RENDER_CAP} of {matchedPools.length}. Type in the search box to narrow it down.
+            </p>
+          )}
         </>
       )}
 
