@@ -2,9 +2,15 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   fetchEPL2627Leaderboard, fetchEPL2627Matches, fetchEPL2627MatchPredictions,
-  fetchEPL2627SeasonPredictions, fetchEPL2627PlayerAwardPicks,
+  fetchEPL2627SeasonPredictions, fetchEPL2627PlayerAwardPicks, fetchEPL2627Standings,
 } from "../api";
 import { plCrest } from "../flags";
+
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 const EPL_AWARDS = [
   { key: "golden_boot",   label: "Golden Boot",              emoji: "\u{1F45F}" },
@@ -33,6 +39,7 @@ function ViewEPLPicks({ poolId, currentUser }) {
   const [matchPreds, setMatchPreds] = useState({});
   const [seasonPreds, setSeasonPreds] = useState([]);
   const [awardPicks, setAwardPicks] = useState({});
+  const [standings, setStandings] = useState([]); // live table, sorted (index+1 = position)
   const [loaded, setLoaded] = useState(false);
 
   // Compare mode
@@ -57,8 +64,10 @@ function ViewEPLPicks({ poolId, currentUser }) {
       fetchEPL2627MatchPredictions(participantId),
       fetchEPL2627SeasonPredictions(participantId),
       fetchEPL2627PlayerAwardPicks(participantId, poolId),
-    ]).then(([matchData, mPreds, sPreds, awardsData]) => {
+      fetchEPL2627Standings(),
+    ]).then(([matchData, mPreds, sPreds, awardsData, standingsData]) => {
       setMatches(matchData);
+      setStandings(Array.isArray(standingsData) ? standingsData : []);
 
       const mMap = {};
       mPreds.forEach((p) => {
@@ -112,6 +121,11 @@ function ViewEPLPicks({ poolId, currentUser }) {
   }
 
   const showCompare = comparing && myLoaded;
+
+  // Live league position per team (standings come back sorted, so index+1 = position).
+  const currentPos = {};
+  standings.forEach((t, i) => { currentPos[t.team_id] = i + 1; });
+  const hasStarted = standings.some((t) => t.played > 0);
 
   // Group matches by matchday
   const matchesByDay = {};
@@ -253,12 +267,24 @@ function ViewEPLPicks({ poolId, currentUser }) {
               </div>
             ) : (
               <div className="season-table">
-                {seasonPreds.map((s) => (
-                  <div key={s.position} className={`season-row ${getZone(s.position)}`}>
-                    <span className="season-pos">{s.position}</span>
-                    <span className="season-team-name">{plCrest(s.team_code)} {s.short_name || s.team_name}</span>
-                  </div>
-                ))}
+                {seasonPreds.map((s) => {
+                  const curPos = hasStarted ? currentPos[s.team_id] : null;
+                  const posDiff = curPos ? s.position - curPos : null; // >0 = higher than predicted
+                  return (
+                    <div key={s.position} className={`season-row ${getZone(s.position)}`}>
+                      <span className="season-pos">{s.position}</span>
+                      <span className="season-team-name">{plCrest(s.team_code)} {s.short_name || s.team_name}</span>
+                      {curPos && (
+                        <span className="season-actual" title={`Currently ${ordinal(curPos)} · predicted ${ordinal(s.position)}`}>
+                          <span className="season-actual-pos">Now {ordinal(curPos)}</span>
+                          <span className={`season-actual-delta ${posDiff > 0 ? "up" : posDiff < 0 ? "down" : "same"}`}>
+                            {posDiff > 0 ? `▲${posDiff}` : posDiff < 0 ? `▼${Math.abs(posDiff)}` : "on track"}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

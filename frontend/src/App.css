@@ -5319,6 +5319,20 @@ nav a.active {
   font-size: 14px;
 }
 
+.season-actual {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  margin-left: auto;
+}
+.season-actual-pos { color: #a0d8a0; font-weight: 700; }
+.season-actual-delta { font-weight: 700; }
+.season-actual-delta.up { color: #6fdc6f; }
+.season-actual-delta.down { color: #e07070; }
+.season-actual-delta.same { color: #8a9a8a; font-weight: 500; }
+
 .season-arrows {
   display: flex;
   flex-direction: column;

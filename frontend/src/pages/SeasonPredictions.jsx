@@ -4,8 +4,15 @@ import {
   fetchEPL2627SeasonPredictions,
   submitEPL2627SeasonPredictions,
   fetchEPL2627SeasonDeadline,
+  fetchEPL2627Standings,
 } from "../api";
 import { plCrest } from "../flags";
+
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 function useCountdown(deadline) {
   const [remaining, setRemaining] = useState(null);
@@ -69,6 +76,7 @@ function SeasonPredictions({ currentUser, poolId }) {
   const [teams, setTeams] = useState([]);
   const [table, setTable] = useState([]); // array of team IDs in order (pos 1-20)
   const [savedTable, setSavedTable] = useState([]);
+  const [standings, setStandings] = useState([]); // live table, sorted (index+1 = position)
   const [deadline, setDeadline] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -82,9 +90,11 @@ function SeasonPredictions({ currentUser, poolId }) {
     Promise.all([
       fetchEPL2627Teams(),
       fetchEPL2627SeasonDeadline(poolId),
-    ]).then(([teamData, dlData]) => {
+      fetchEPL2627Standings(),
+    ]).then(([teamData, dlData, standingsData]) => {
       setTeams(teamData);
       setDeadline(dlData.deadline || null);
+      setStandings(Array.isArray(standingsData) ? standingsData : []);
       if (table.length === 0 && teamData.length > 0) {
         setTable(teamData.map((t) => t.id));
       }
@@ -105,6 +115,12 @@ function SeasonPredictions({ currentUser, poolId }) {
 
   const teamMap = {};
   teams.forEach((t) => { teamMap[t.id] = t; });
+
+  // Live league position per team (standings come back sorted, so index+1 = position).
+  const currentPos = {};
+  standings.forEach((t, i) => { currentPos[t.team_id] = i + 1; });
+  // The season has kicked off once at least one match has been played.
+  const hasStarted = standings.some((t) => t.played > 0);
 
   const hasChanges = table.length === 20 && JSON.stringify(table) !== JSON.stringify(savedTable);
 
@@ -210,7 +226,11 @@ function SeasonPredictions({ currentUser, poolId }) {
         <p className="pick-hint">Loading teams...</p>
       ) : (
         <>
-          <p className="pick-hint">Click a position to pick a team, or drag to reorder.</p>
+          <p className="pick-hint">
+            {hasStarted
+              ? "The season is underway — each row shows the team's current league position and how it compares to your prediction (▲ ahead of / ▼ behind where you placed it)."
+              : "Click a position to pick a team, or drag to reorder."}
+          </p>
           <div className="season-table">
             {table.map((teamId, idx) => {
               const team = teamMap[teamId];
@@ -218,6 +238,9 @@ function SeasonPredictions({ currentUser, poolId }) {
               const zone = getZone(pos);
               const zoneLabel = ZONE_LABELS[pos];
               const isSelecting = selectingIdx === idx;
+              // How the team is actually doing vs where it was predicted.
+              const curPos = hasStarted ? currentPos[teamId] : null;
+              const posDiff = curPos ? pos - curPos : null; // >0 = higher (better) than predicted
 
               return (
                 <div key={teamId}>
@@ -240,6 +263,17 @@ function SeasonPredictions({ currentUser, poolId }) {
                     <span className="season-pos">{pos}</span>
                     {team && plCrest(team.code)}
                     <span className="season-team-name">{team?.short_name || team?.name || "?"}</span>
+                    {curPos && (
+                      <span
+                        className="season-actual"
+                        title={`Currently ${ordinal(curPos)} · you predicted ${ordinal(pos)}`}
+                      >
+                        <span className="season-actual-pos">Now {ordinal(curPos)}</span>
+                        <span className={`season-actual-delta ${posDiff > 0 ? "up" : posDiff < 0 ? "down" : "same"}`}>
+                          {posDiff > 0 ? `▲${posDiff}` : posDiff < 0 ? `▼${Math.abs(posDiff)}` : "on track"}
+                        </span>
+                      </span>
+                    )}
                     {!isLocked && (
                       <span className="season-arrows">
                         <button
