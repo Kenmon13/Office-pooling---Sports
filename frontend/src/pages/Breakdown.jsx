@@ -15,12 +15,22 @@ const CATEGORY_OF_TYPE = {
   player_award: "awards",
 };
 
+// Compact "when" label for a point event, e.g. "Jun 28, 02:55 PM".
+function formatEventDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr.replace(" ", "T") + "Z");
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 // One itemized line (e.g. "Group A: Brazil & Argentina — Both correct").
-function DetailLine({ description, pts }) {
+function DetailLine({ description, date, pts }) {
   const cls = pts > 0 ? "pts-gain" : pts < 0 ? "pts-loss" : "pts-zero";
   return (
     <div className="bd-detail-line">
-      <span className="bd-detail-desc">{description}</span>
+      <span className="bd-detail-main">
+        <span className="bd-detail-desc">{description}</span>
+        {date && <span className="bd-detail-time">{formatEventDate(date)}</span>}
+      </span>
       <span className={`bd-detail-pts ${cls}`}>
         {pts > 0 ? `+${pts}` : pts === 0 ? "—" : pts}
       </span>
@@ -51,7 +61,7 @@ function Category({ cat, expanded, onToggle }) {
       {hasDetail && expanded && (
         <div className="bd-detail">
           {cat.events.map((e, i) => (
-            <DetailLine key={i} description={e.description} pts={e.pts_change} />
+            <DetailLine key={i} description={e.description} date={e.event_date} pts={e.pts_change} />
           ))}
         </div>
       )}
@@ -222,7 +232,7 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
             <p className="bd-hint">
               {eventsLoading
                 ? "Loading itemized detail…"
-                : "Tap a category to see each pick and the points it earned."}
+                : "Tap a category to see each pick, when it scored, and the points it earned."}
             </p>
           )}
         </div>
