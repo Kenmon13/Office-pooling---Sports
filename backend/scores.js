@@ -16,12 +16,12 @@ const COMPETITION = "WC"; // FIFA World Cup
 const TLA_ALIASES = {
   epl2627: { NOT: "NFO" }, // Nottingham Forest
   laliga2627: {
-    ATL: "ATM", // Atlético de Madrid (fd ATL → our ATM)
-    DEP: "RCD", // Deportivo de La Coruña, promoted (fd DEP → our RCD)
-    // Promoted clubs to confirm against the first PD sync's unknownCodes log:
-    //   • Racing Santander — our RAC; fd likely also RAC (no alias unless the log says otherwise).
-    //   • Málaga — our MGA; candidate is MAL:MGA, omitted for now because fd's "MAL" has
-    //     historically been Mallorca — verify it's Málaga in the 26/27 feed before adding.
+    // Confirmed against football-data's PD/2026 team list (the other 15 clubs' tlas match ours).
+    ATL: "ATM", // Atlético de Madrid
+    FCB: "BAR", // FC Barcelona
+    MAL: "MGA", // Málaga
+    DEP: "RCD", // Deportivo de La Coruña
+    SAN: "RAC", // Racing Santander
   },
 };
 const mapCode = (leagueCode, tla) => (TLA_ALIASES[leagueCode] || {})[tla] || tla;
