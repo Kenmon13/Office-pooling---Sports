@@ -3299,6 +3299,25 @@ app.post("/api/admin/sync-scores", requireAdminToken, async (req, res) => {
   }
 });
 
+// Diagnostic: what does football-data.org expose for La Liga (PD) on our key's tier? Returns
+// each club's football-data tla + coach name so we can (a) decide whether to sync coaches from
+// here instead of scraping, and (b) confirm the PD tlas for TLA_ALIASES.laliga2627. Read-only.
+app.get("/api/admin/laliga-fd-probe", requireAdminToken, async (req, res) => {
+  const apiKey = process.env.FOOTBALL_API_KEY;
+  if (!apiKey) return res.json({ error: "FOOTBALL_API_KEY not set" });
+  try {
+    const r = await fetch("https://api.football-data.org/v4/competitions/PD/teams?season=2026", {
+      headers: { "X-Auth-Token": apiKey },
+    });
+    if (!r.ok) return res.json({ error: `football-data returned ${r.status}`, body: (await r.text()).slice(0, 300) });
+    const data = await r.json();
+    const teams = (data.teams || []).map((t) => ({ tla: t.tla, name: t.shortName || t.name, coach: t.coach?.name || null }));
+    res.json({ count: teams.length, coachesPresent: teams.filter((t) => t.coach).length, teams });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 // Client-side routing fallback
 app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
