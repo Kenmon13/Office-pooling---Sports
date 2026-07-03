@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  fetchLeaderboard, fetchWC2022Leaderboard, fetchEPL2627Leaderboard,
+  fetchLeaderboard, fetchWC2022Leaderboard, fetchLeagueLeaderboard,
   fetchHistory, fetchWC2022History,
 } from "../api";
+import { isLeague } from "../leagues";
 
 // Maps a point-history event type to the summary category it belongs under.
 const CATEGORY_OF_TYPE = {
@@ -71,7 +72,7 @@ function Category({ cat, expanded, onToggle }) {
 
 function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   const navigate = useNavigate();
-  const isEPL = tournament === "epl2627";
+  const isEPL = isLeague(tournament); // any domestic league (EPL, La Liga, …) shares this shape
   const isWC2022 = tournament === "wc2022";
   const [participants, setParticipants] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -81,7 +82,9 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   const [expanded, setExpanded] = useState({});
 
   useEffect(() => {
-    const fetchFn = isWC2022 ? fetchWC2022Leaderboard : isEPL ? fetchEPL2627Leaderboard : fetchLeaderboard;
+    const fetchFn = isWC2022
+      ? fetchWC2022Leaderboard
+      : isEPL ? (pid) => fetchLeagueLeaderboard(tournament, pid) : fetchLeaderboard;
     fetchFn(poolId)
       .then((data) => setParticipants(Array.isArray(data) ? data : []))
       .catch(() => setParticipants([]))

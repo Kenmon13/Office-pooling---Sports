@@ -2827,32 +2827,52 @@ app.get("/api/stats/award-picks", (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Premier League 26/27 API
 // ═══════════════════════════════════════════════════════════════════════════════
+// Domestic league API — config-driven (EPL, La Liga, …). See leagues.js.
+// ═══════════════════════════════════════════════════════════════════════════════
+const { getLeague } = require("./leagues");
 
-app.get("/api/epl2627/teams", (req, res) => {
-  res.json(db.prepare("SELECT * FROM pl2627_teams ORDER BY name").all());
+// Resolve :code -> league config; 404 for unknown leagues. Attaches req.league.
+function resolveLeague(req, res, next) {
+  const league = getLeague(req.params.code);
+  if (!league) return res.status(404).json({ error: `Unknown league: ${req.params.code}` });
+  req.league = league;
+  next();
+}
+
+app.get("/api/league/:code/config", resolveLeague, (req, res) => {
+  const L = req.league;
+  res.json({
+    code: L.code, name: L.name, shortName: L.shortName, emoji: L.emoji,
+    teamCount: L.teamCount, matchdays: L.matchdays, zones: L.zones,
+    awards: L.awards, scoring: L.scoring,
+  });
 });
 
-app.get("/api/epl2627/matches", (req, res) => {
+app.get("/api/league/:code/teams", resolveLeague, (req, res) => {
+  res.json(db.prepare("SELECT * FROM league_teams WHERE league = ? ORDER BY name").all(req.params.code));
+});
+
+app.get("/api/league/:code/matches", resolveLeague, (req, res) => {
   const { matchday } = req.query;
-  let query = `SELECT m.*, ht.name as home_team, ht.code as home_code, ht.short_name as home_short,
-    at.name as away_team, at.code as away_code, at.short_name as away_short
-    FROM pl2627_matches m
-    JOIN pl2627_teams ht ON m.home_team_id = ht.id
-    JOIN pl2627_teams at ON m.away_team_id = at.id`;
-  const params = [];
-  if (matchday) { query += " WHERE m.matchday = ?"; params.push(Number(matchday)); }
+  let query = `SELECT m.*, ht.name as home_team, ht.code as home_code, ht.short_name as home_short, ht.crest_url as home_crest,
+    at.name as away_team, at.code as away_code, at.short_name as away_short, at.crest_url as away_crest
+    FROM league_matches m
+    JOIN league_teams ht ON m.home_team_id = ht.id
+    JOIN league_teams at ON m.away_team_id = at.id
+    WHERE m.league = ?`;
+  const params = [req.params.code];
+  if (matchday) { query += " AND m.matchday = ?"; params.push(Number(matchday)); }
   query += " ORDER BY m.matchday, m.match_date, m.id";
   res.json(db.prepare(query).all(...params));
 });
 
-app.get("/api/epl2627/standings", (req, res) => {
-  const teams = db.prepare("SELECT * FROM pl2627_teams").all();
-  const matches = db.prepare("SELECT * FROM pl2627_matches WHERE status IN ('finished', 'live')").all();
+app.get("/api/league/:code/standings", resolveLeague, (req, res) => {
+  const teams = db.prepare("SELECT * FROM league_teams WHERE league = ?").all(req.params.code);
+  const matches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status IN ('finished', 'live')").all(req.params.code);
   const stats = {};
   for (const t of teams) {
-    stats[t.id] = { team_id: t.id, name: t.name, code: t.code, short_name: t.short_name, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
+    stats[t.id] = { team_id: t.id, name: t.name, code: t.code, short_name: t.short_name, crest_url: t.crest_url, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
   }
   for (const m of matches) {
     const h = stats[m.home_team_id], a = stats[m.away_team_id];
@@ -2870,79 +2890,69 @@ app.get("/api/epl2627/standings", (req, res) => {
   res.json(table);
 });
 
-app.get("/api/epl2627/matchday-deadline", (req, res) => {
+app.get("/api/league/:code/matchday-deadline", resolveLeague, (req, res) => {
   const { matchday } = req.query;
   if (!matchday) return res.json({ deadline: null });
-  const row = db.prepare("SELECT MIN(match_date) as deadline FROM pl2627_matches WHERE matchday = ? AND match_date IS NOT NULL").get(Number(matchday));
+  const row = db.prepare("SELECT MIN(match_date) as deadline FROM league_matches WHERE league = ? AND matchday = ? AND match_date IS NOT NULL").get(req.params.code, Number(matchday));
   res.json({ deadline: row?.deadline || null });
 });
 
-// Season predictions & player awards for a PL pool stay open until the start of the first
-// matchday that begins AFTER the pool was created. A pool made before MD1 kicks off locks at
-// MD1 (season start, as before); one created once MD1 is under way stays open until MD2, etc.
-// Falls back to season start (MD1) when the pool is unknown.
-function eplPoolSeasonDeadline(poolId) {
+// Season/award entry window: open until the start of the first matchday that begins AFTER the
+// pool was created (falls back to season start). Scoped to one league's fixtures.
+function leaguePoolSeasonDeadline(code, poolId) {
   const pool = poolId ? db.prepare("SELECT created_at FROM pools WHERE id = ?").get(poolId) : null;
   const createdAt = pool?.created_at || "0000-00-00 00:00:00";
   const row = db.prepare(`
     SELECT MIN(md_start) AS d FROM (
       SELECT MIN(match_date) AS md_start
-      FROM pl2627_matches
-      WHERE match_date IS NOT NULL
+      FROM league_matches
+      WHERE league = ? AND match_date IS NOT NULL
       GROUP BY matchday
     ) WHERE md_start > ?
-  `).get(createdAt);
+  `).get(code, createdAt);
   return row?.d || null;
 }
 
-// True once this pool's season/award entry window has closed.
-function eplSeasonLocked(poolId) {
-  const deadline = eplPoolSeasonDeadline(poolId);
+function leagueSeasonLocked(code, poolId) {
+  const deadline = leaguePoolSeasonDeadline(code, poolId);
   if (deadline) return new Date() >= new Date(deadline.replace(" ", "T") + "Z");
-  // No matchday starts after the pool was created — locked only if fixtures exist at all
-  // (i.e. the season is under way/over, not simply "no fixtures loaded yet").
-  return !!db.prepare("SELECT 1 FROM pl2627_matches WHERE match_date IS NOT NULL LIMIT 1").get();
+  return !!db.prepare("SELECT 1 FROM league_matches WHERE league = ? AND match_date IS NOT NULL LIMIT 1").get(code);
 }
 
-app.get("/api/epl2627/season-deadline", (req, res) => {
-  res.json({ deadline: eplPoolSeasonDeadline(req.query.pool_id) });
+app.get("/api/league/:code/season-deadline", resolveLeague, (req, res) => {
+  res.json({ deadline: leaguePoolSeasonDeadline(req.params.code, req.query.pool_id) });
 });
 
-// Match predictions
-app.get("/api/epl2627/match-predictions/:participantId", (req, res) => {
-  const { participantId } = req.params;
+app.get("/api/league/:code/match-predictions/:participantId", resolveLeague, (req, res) => {
+  const { participantId, code } = req.params;
   const { matchday } = req.query;
-  let query = "SELECT * FROM pl2627_match_predictions WHERE participant_id = ?";
-  const params = [participantId];
-  if (matchday) {
-    query += " AND match_id IN (SELECT id FROM pl2627_matches WHERE matchday = ?)";
-    params.push(Number(matchday));
-  }
+  let query = "SELECT * FROM league_match_predictions WHERE participant_id = ? AND match_id IN (SELECT id FROM league_matches WHERE league = ?";
+  const params = [participantId, code];
+  if (matchday) { query += " AND matchday = ?"; params.push(Number(matchday)); }
+  query += ")";
   res.json(db.prepare(query).all(...params));
 });
 
-app.post("/api/epl2627/match-predictions", authenticateToken, (req, res) => {
+app.post("/api/league/:code/match-predictions", resolveLeague, authenticateToken, (req, res) => {
+  const { code } = req.params;
   const { participant_id, predictions } = req.body;
   if (!participant_id || !Array.isArray(predictions)) return res.status(400).json({ error: "participant_id and predictions array required" });
 
   const now = new Date();
-  const upsert = db.prepare(`INSERT INTO pl2627_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score)
+  const upsert = db.prepare(`INSERT INTO league_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score)
     VALUES (?, ?, ?, ?, ?) ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_outcome = excluded.predicted_outcome,
     predicted_home_score = excluded.predicted_home_score, predicted_away_score = excluded.predicted_away_score`);
 
   let saved = 0;
   const errors = [];
   for (const p of predictions) {
-    const match = db.prepare("SELECT matchday, match_date FROM pl2627_matches WHERE id = ?").get(p.match_id);
+    const match = db.prepare("SELECT matchday, match_date FROM league_matches WHERE id = ? AND league = ?").get(p.match_id, code);
     if (!match) { errors.push(`Match ${p.match_id} not found`); continue; }
-    // Lock each match individually at its own kickoff (not the whole matchday).
     if (match.match_date && now >= new Date(match.match_date.replace(" ", "T") + "Z")) {
       errors.push(`Match ${p.match_id} has already kicked off`);
       continue;
     }
-    // Reject scores that contradict the outcome (home => home>away, away => away>home,
-    // draw => equal). Enforced here as well as in the UI so a bad row can never persist —
-    // the WC knockout block was UI-only and required one-off cleanup migrations afterward.
+    // Reject scores that contradict the outcome — enforced server-side, not UI-only.
     const hs = p.predicted_home_score, as_ = p.predicted_away_score;
     if (hs != null && as_ != null) {
       const consistent = p.predicted_outcome === "home" ? hs > as_
@@ -2960,46 +2970,42 @@ app.post("/api/epl2627/match-predictions", authenticateToken, (req, res) => {
   res.json({ success: true, saved, errors });
 });
 
-// Season predictions
-app.get("/api/epl2627/season-predictions/:participantId", (req, res) => {
-  const preds = db.prepare(`SELECT sp.*, t.name as team_name, t.code as team_code, t.short_name
-    FROM pl2627_season_predictions sp JOIN pl2627_teams t ON sp.team_id = t.id
-    WHERE sp.participant_id = ? ORDER BY sp.position`).all(req.params.participantId);
+app.get("/api/league/:code/season-predictions/:participantId", resolveLeague, (req, res) => {
+  const preds = db.prepare(`SELECT sp.*, t.name as team_name, t.code as team_code, t.short_name, t.crest_url
+    FROM league_season_predictions sp JOIN league_teams t ON sp.team_id = t.id
+    WHERE sp.participant_id = ? AND sp.league = ? ORDER BY sp.position`).all(req.params.participantId, req.params.code);
   res.json(preds);
 });
 
-app.post("/api/epl2627/season-predictions", authenticateToken, (req, res) => {
+app.post("/api/league/:code/season-predictions", resolveLeague, authenticateToken, (req, res) => {
+  const { code } = req.params;
   const { participant_id, predictions } = req.body;
-  if (!participant_id || !Array.isArray(predictions) || predictions.length !== 20) {
-    return res.status(400).json({ error: "Must predict all 20 positions" });
+  const n = req.league.teamCount;
+  if (!participant_id || !Array.isArray(predictions) || predictions.length !== n) {
+    return res.status(400).json({ error: `Must predict all ${n} positions` });
   }
-  // Lock relative to when the pool was created (open until the next matchday starts).
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
-  if (eplSeasonLocked(participant?.pool_id)) {
+  if (leagueSeasonLocked(code, participant?.pool_id)) {
     return res.status(400).json({ error: "Season predictions are locked — the entry window for this pool has closed" });
   }
-  const upsert = db.prepare(`INSERT INTO pl2627_season_predictions (participant_id, position, team_id)
-    VALUES (?, ?, ?) ON CONFLICT(participant_id, position) DO UPDATE SET team_id = excluded.team_id`);
-  for (const p of predictions) {
-    upsert.run(participant_id, p.position, p.team_id);
-  }
+  const upsert = db.prepare(`INSERT INTO league_season_predictions (participant_id, league, position, team_id)
+    VALUES (?, ?, ?, ?) ON CONFLICT(participant_id, league, position) DO UPDATE SET team_id = excluded.team_id`);
+  for (const p of predictions) upsert.run(participant_id, code, p.position, p.team_id);
   res.json({ success: true });
 });
 
-// PL Leaderboard
-app.get("/api/epl2627/leaderboard", (req, res) => {
+app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
+  const { code } = req.params;
+  const L = req.league, S = L.scoring, Z = L.zones, N = L.teamCount;
   const poolId = req.query.pool_id;
   if (!poolId) return res.status(400).json({ error: "pool_id required" });
 
   const participants = db.prepare("SELECT p.* FROM participants p JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND u.is_admin = 0 ORDER BY p.name").all(poolId);
-  const finishedMatches = db.prepare("SELECT * FROM pl2627_matches WHERE status = 'finished'").all();
-  const allMatchPreds = db.prepare("SELECT * FROM pl2627_match_predictions").all();
-
-  // Build actual standings for season scoring
-  const teams = db.prepare("SELECT * FROM pl2627_teams").all();
-  const totalMatches = db.prepare("SELECT COUNT(*) as c FROM pl2627_matches").get().c;
-  const finishedCount = finishedMatches.length;
-  const seasonComplete = totalMatches > 0 && finishedCount === totalMatches;
+  const finishedMatches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status = 'finished'").all(code);
+  const allMatchPreds = db.prepare("SELECT mp.* FROM league_match_predictions mp JOIN league_matches m ON mp.match_id = m.id WHERE m.league = ?").all(code);
+  const teams = db.prepare("SELECT * FROM league_teams WHERE league = ?").all(code);
+  const totalMatches = db.prepare("SELECT COUNT(*) as c FROM league_matches WHERE league = ?").get(code).c;
+  const seasonComplete = totalMatches > 0 && finishedMatches.length === totalMatches;
 
   const standings = {};
   for (const t of teams) standings[t.id] = { team_id: t.id, points: 0, gf: 0, ga: 0 };
@@ -3018,182 +3024,140 @@ app.get("/api/epl2627/leaderboard", (req, res) => {
   const actualPositions = {};
   actualTable.forEach((t, i) => { actualPositions[t.team_id] = i + 1; });
 
-  // Match results lookup
-  const matchResults = {};
+  const matchResults = {}, matchScores = {};
   for (const m of finishedMatches) {
-    if (m.home_score > m.away_score) matchResults[m.id] = "home";
-    else if (m.away_score > m.home_score) matchResults[m.id] = "away";
-    else matchResults[m.id] = "draw";
+    matchResults[m.id] = m.home_score > m.away_score ? "home" : m.away_score > m.home_score ? "away" : "draw";
+    matchScores[m.id] = { home: m.home_score, away: m.away_score };
   }
-  const matchScores = {};
-  for (const m of finishedMatches) matchScores[m.id] = { home: m.home_score, away: m.away_score };
-
-  // Per-participant predictions
   const predsByParticipant = {};
-  for (const p of allMatchPreds) {
-    if (!predsByParticipant[p.participant_id]) predsByParticipant[p.participant_id] = [];
-    predsByParticipant[p.participant_id].push(p);
-  }
-
-  const allSeasonPreds = db.prepare("SELECT * FROM pl2627_season_predictions").all();
+  for (const p of allMatchPreds) (predsByParticipant[p.participant_id] ||= []).push(p);
+  const allSeasonPreds = db.prepare("SELECT * FROM league_season_predictions WHERE league = ?").all(code);
   const seasonByParticipant = {};
-  for (const sp of allSeasonPreds) {
-    if (!seasonByParticipant[sp.participant_id]) seasonByParticipant[sp.participant_id] = [];
-    seasonByParticipant[sp.participant_id].push(sp);
-  }
-
-  // Player award scoring
-  const allAwardPicks = db.prepare("SELECT * FROM pl2627_player_award_picks").all();
-  const awardResults = db.prepare("SELECT * FROM pl2627_player_award_results").all();
+  for (const sp of allSeasonPreds) (seasonByParticipant[sp.participant_id] ||= []).push(sp);
+  const allAwardPicks = db.prepare("SELECT * FROM league_award_picks WHERE league = ?").all(code);
+  const awardResults = db.prepare("SELECT * FROM league_award_results WHERE league = ?").all(code);
   const awardPicksByParticipant = {};
-  for (const ap of allAwardPicks) {
-    if (!awardPicksByParticipant[ap.participant_id]) awardPicksByParticipant[ap.participant_id] = [];
-    awardPicksByParticipant[ap.participant_id].push(ap);
-  }
+  for (const ap of allAwardPicks) (awardPicksByParticipant[ap.participant_id] ||= []).push(ap);
+  const managerKeys = new Set(L.awards.filter((a) => a.type === "manager").map((a) => a.key));
+
+  const [clFrom, clTo] = Z.cl, [relFrom, relTo] = Z.relegation;
 
   const result = participants.map((part) => {
     let matchPoints = 0, matchCorrect = 0, matchExact = 0;
-    const preds = predsByParticipant[part.id] || [];
-    for (const p of preds) {
+    for (const p of (predsByParticipant[part.id] || [])) {
       const actual = matchResults[p.match_id];
       if (!actual) continue;
       if (p.predicted_outcome === actual) {
-        const score = matchScores[p.match_id];
+        const sc = matchScores[p.match_id];
         if (p.predicted_home_score != null && p.predicted_away_score != null &&
-            p.predicted_home_score === score.home && p.predicted_away_score === score.away) {
-          matchPoints += 4;
-          matchExact++;
-        } else {
-          matchPoints += 2;
-        }
+            p.predicted_home_score === sc.home && p.predicted_away_score === sc.away) { matchPoints += S.matchExact; matchExact++; }
+        else matchPoints += S.matchOutcome;
         matchCorrect++;
       }
     }
 
     let seasonPoints = 0;
     if (seasonComplete) {
-      const sp = seasonByParticipant[part.id] || [];
       const predictedTeams = {};
-      for (const s of sp) predictedTeams[s.position] = s.team_id;
-
-      // Champion (pos 1): 25 pts
-      if (predictedTeams[1] && actualPositions[predictedTeams[1]] === 1) seasonPoints += 25;
-
-      // CL top 4: 5 pts each
-      const predTop4 = [1, 2, 3, 4].map((p) => predictedTeams[p]).filter(Boolean);
-      for (const tid of predTop4) {
-        if (actualPositions[tid] && actualPositions[tid] <= 4) seasonPoints += 5;
+      for (const s of (seasonByParticipant[part.id] || [])) predictedTeams[s.position] = s.team_id;
+      if (predictedTeams[Z.champion] && actualPositions[predictedTeams[Z.champion]] === Z.champion) seasonPoints += S.seasonChampion;
+      for (let pos = clFrom; pos <= clTo; pos++) {
+        const tid = predictedTeams[pos];
+        if (tid && actualPositions[tid] && actualPositions[tid] <= clTo) seasonPoints += S.seasonCL;
       }
-
-      // Europa (pos 5): 2 pts
-      if (predictedTeams[5] && actualPositions[predictedTeams[5]] === 5) seasonPoints += 2;
-
-      // Conference (pos 6): 2 pts
-      if (predictedTeams[6] && actualPositions[predictedTeams[6]] === 6) seasonPoints += 2;
-
-      // Relegation (bottom 3): 5 pts each
-      const predBottom3 = [18, 19, 20].map((p) => predictedTeams[p]).filter(Boolean);
-      for (const tid of predBottom3) {
-        if (actualPositions[tid] && actualPositions[tid] >= 18) seasonPoints += 5;
+      if (Z.europa && predictedTeams[Z.europa] && actualPositions[predictedTeams[Z.europa]] === Z.europa) seasonPoints += S.seasonEuropa;
+      if (Z.conference && predictedTeams[Z.conference] && actualPositions[predictedTeams[Z.conference]] === Z.conference) seasonPoints += S.seasonConference;
+      for (let pos = relFrom; pos <= relTo; pos++) {
+        const tid = predictedTeams[pos];
+        if (tid && actualPositions[tid] && actualPositions[tid] >= relFrom) seasonPoints += S.seasonRelegation;
       }
-
-      // Exact positions: 1 pt each
-      for (let pos = 1; pos <= 20; pos++) {
-        if (predictedTeams[pos] && actualPositions[predictedTeams[pos]] === pos) seasonPoints += 1;
+      for (let pos = 1; pos <= N; pos++) {
+        const tid = predictedTeams[pos];
+        if (tid && actualPositions[tid] === pos) seasonPoints += S.seasonExact;
       }
     }
 
-    // Award scoring (5 pts each)
     let awardPoints = 0;
-    const myAwardPicks = awardPicksByParticipant[part.id] || [];
-    for (const ap of myAwardPicks) {
-      const result = awardResults.find((r) => r.award_category === ap.award_category);
-      if (!result) continue;
-      if (ap.award_category === "mots") {
-        if (ap.team_id && String(ap.team_id) === String(result.team_id)) awardPoints += 5;
+    for (const ap of (awardPicksByParticipant[part.id] || [])) {
+      const r = awardResults.find((x) => x.award_category === ap.award_category);
+      if (!r) continue;
+      if (managerKeys.has(ap.award_category)) {
+        if (ap.team_id && String(ap.team_id) === String(r.team_id)) awardPoints += S.award;
       } else {
-        if (ap.player_id && String(ap.player_id) === String(result.player_id)) awardPoints += 5;
+        if (ap.player_id && String(ap.player_id) === String(r.player_id)) awardPoints += S.award;
       }
     }
 
     const totalPoints = matchPoints + seasonPoints + awardPoints;
-    return {
-      id: part.id,
-      name: part.name,
-      points: totalPoints,
-      match_points: matchPoints,
-      match_correct: matchCorrect,
-      match_exact: matchExact,
-      season_points: seasonPoints,
-      award_points: awardPoints,
-    };
+    return { id: part.id, name: part.name, points: totalPoints, match_points: matchPoints, match_correct: matchCorrect, match_exact: matchExact, season_points: seasonPoints, award_points: awardPoints };
   });
 
   result.sort((a, b) => b.points - a.points || b.match_correct - a.match_correct || a.name.localeCompare(b.name));
   res.json(result);
 });
 
-// PL Players
-app.get("/api/epl2627/players", (req, res) => {
-  const players = db.prepare(`SELECT p.*, t.name as team_name, t.code as team_code, t.short_name as team_short
-    FROM pl2627_players p JOIN pl2627_teams t ON p.team_id = t.id ORDER BY t.name, p.position, p.name`).all();
-  res.json(players);
+app.get("/api/league/:code/players", resolveLeague, (req, res) => {
+  res.json(db.prepare(`SELECT p.*, t.name as team_name, t.code as team_code, t.short_name as team_short, t.crest_url as team_crest
+    FROM league_players p JOIN league_teams t ON p.team_id = t.id
+    WHERE p.league = ? ORDER BY t.name, p.position, p.name`).all(req.params.code));
 });
 
-// PL Player Award Picks
-app.get("/api/epl2627/player-award-picks/:participantId", (req, res) => {
+app.get("/api/league/:code/player-award-picks/:participantId", resolveLeague, (req, res) => {
+  const { code } = req.params;
   const { pool_id } = req.query;
   const pool = pool_id ? db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(pool_id) : null;
   const lockedByAdmin = !!(pool && pool.player_awards_locked);
-  const deadline = eplPoolSeasonDeadline(pool_id);
-  // Locked either by the admin toggle or once the pool's entry window has closed.
-  const locked = lockedByAdmin || eplSeasonLocked(pool_id);
+  const deadline = leaguePoolSeasonDeadline(code, pool_id);
+  const locked = lockedByAdmin || leagueSeasonLocked(code, pool_id);
 
   const picks = db.prepare(`SELECT pap.*, p.name as player_name,
     COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code,
     COALESCE(t2.manager, t.manager) as manager
-    FROM pl2627_player_award_picks pap
-    LEFT JOIN pl2627_players p ON pap.player_id = p.id
-    LEFT JOIN pl2627_teams t ON p.team_id = t.id
-    LEFT JOIN pl2627_teams t2 ON pap.team_id = t2.id
-    WHERE pap.participant_id = ?`).all(req.params.participantId);
+    FROM league_award_picks pap
+    LEFT JOIN league_players p ON pap.player_id = p.id
+    LEFT JOIN league_teams t ON p.team_id = t.id
+    LEFT JOIN league_teams t2 ON pap.team_id = t2.id
+    WHERE pap.participant_id = ? AND pap.league = ?`).all(req.params.participantId, code);
 
   const results = db.prepare(`SELECT par.*, p.name as player_name,
     COALESCE(t2.name, t.name) as team_name, COALESCE(t2.code, t.code) as team_code,
     COALESCE(t2.manager, t.manager) as manager
-    FROM pl2627_player_award_results par
-    LEFT JOIN pl2627_players p ON par.player_id = p.id
-    LEFT JOIN pl2627_teams t ON p.team_id = t.id
-    LEFT JOIN pl2627_teams t2 ON par.team_id = t2.id`).all();
+    FROM league_award_results par
+    LEFT JOIN league_players p ON par.player_id = p.id
+    LEFT JOIN league_teams t ON p.team_id = t.id
+    LEFT JOIN league_teams t2 ON par.team_id = t2.id
+    WHERE par.league = ?`).all(code);
 
   res.json({ picks, results, locked, lockedByAdmin, deadline });
 });
 
-app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
+app.post("/api/league/:code/player-award-picks", resolveLeague, authenticateToken, (req, res) => {
+  const { code } = req.params;
   const { participant_id, award_category, player_id, team_id } = req.body;
   if (!participant_id || !award_category) return res.status(400).json({ error: "participant_id and award_category required" });
 
-  const validCategories = ["golden_boot", "golden_glove", "pots", "ypots", "mots"];
-  if (!validCategories.includes(award_category)) return res.status(400).json({ error: "Invalid award category" });
+  const award = req.league.awards.find((a) => a.key === award_category);
+  if (!award) return res.status(400).json({ error: "Invalid award category" });
+  const isManager = award.type === "manager";
 
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
   if (participant) {
     const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(participant.pool_id);
     if (pool && pool.player_awards_locked) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
-    if (eplSeasonLocked(participant.pool_id)) return res.status(403).json({ error: "Player awards are locked — the entry window for this pool has closed" });
+    if (leagueSeasonLocked(code, participant.pool_id)) return res.status(403).json({ error: "Player awards are locked — the entry window for this pool has closed" });
   }
 
-  if (award_category === "mots") {
-    if (!team_id) return res.status(400).json({ error: "team_id required for Manager of the Season" });
-    db.prepare(`INSERT INTO pl2627_player_award_picks (participant_id, award_category, team_id, player_id)
-      VALUES (?, ?, ?, NULL) ON CONFLICT(participant_id, award_category) DO UPDATE SET team_id=excluded.team_id, player_id=NULL, updated_at=datetime('now')`)
-      .run(participant_id, award_category, team_id);
+  if (isManager) {
+    if (!team_id) return res.status(400).json({ error: "team_id required for this award" });
+    db.prepare(`INSERT INTO league_award_picks (participant_id, league, award_category, team_id, player_id)
+      VALUES (?, ?, ?, ?, NULL) ON CONFLICT(participant_id, league, award_category) DO UPDATE SET team_id=excluded.team_id, player_id=NULL, updated_at=datetime('now')`)
+      .run(participant_id, code, award_category, team_id);
   } else {
     if (!player_id) return res.status(400).json({ error: "player_id required" });
-    const player = db.prepare("SELECT team_id FROM pl2627_players WHERE id = ?").get(player_id);
-    db.prepare(`INSERT INTO pl2627_player_award_picks (participant_id, award_category, player_id, team_id)
-      VALUES (?, ?, ?, ?) ON CONFLICT(participant_id, award_category) DO UPDATE SET player_id=excluded.player_id, team_id=excluded.team_id, updated_at=datetime('now')`)
-      .run(participant_id, award_category, player_id, player?.team_id || null);
+    const player = db.prepare("SELECT team_id FROM league_players WHERE id = ? AND league = ?").get(player_id, code);
+    db.prepare(`INSERT INTO league_award_picks (participant_id, league, award_category, player_id, team_id)
+      VALUES (?, ?, ?, ?, ?) ON CONFLICT(participant_id, league, award_category) DO UPDATE SET player_id=excluded.player_id, team_id=excluded.team_id, updated_at=datetime('now')`)
+      .run(participant_id, code, award_category, player_id, player?.team_id || null);
   }
   res.json({ success: true });
 });
@@ -3202,7 +3166,7 @@ app.post("/api/epl2627/player-award-picks", authenticateToken, (req, res) => {
 app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
   try {
     const result = await syncPLFixtures();
-    const count = db.prepare("SELECT COUNT(*) as c FROM pl2627_matches").get().c;
+    const count = db.prepare("SELECT COUNT(*) as c FROM league_matches WHERE league = 'epl2627'").get().c;
 
     // Surface *why* nothing imported so the admin button isn't a silent "0".
     if (result && result.ok === false) {
@@ -3230,7 +3194,7 @@ app.post("/api/admin/sync-pl-fixtures", requireAdminToken, async (req, res) => {
 app.post("/api/admin/sync-pl-squads", requireAdminToken, async (req, res) => {
   try {
     const result = await syncPLSquads();
-    const players = db.prepare("SELECT COUNT(*) as c FROM pl2627_players").get().c;
+    const players = db.prepare("SELECT COUNT(*) as c FROM league_players WHERE league = 'epl2627'").get().c;
 
     if (result && result.ok === false) {
       const reasons = {

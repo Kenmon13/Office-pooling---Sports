@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { fetchWcPlayers, fetchPlayerAwardPicks, submitPlayerAwardPick, fetchGroups,
-  fetchEPL2627Players, fetchEPL2627PlayerAwardPicks, submitEPL2627PlayerAwardPick, fetchEPL2627Teams } from "../api";
-import { flag, plCrest } from "../flags";
+  fetchLeaguePlayers, fetchLeaguePlayerAwardPicks, submitLeaguePlayerAwardPick, fetchLeagueTeams } from "../api";
+import { flag, plCrest, registerCrests } from "../flags";
+import { isLeague, getLeague } from "../leagues";
 
 const WC_AWARDS = [
   { key: "golden_ball",   label: "Golden Ball",          emoji: "🥇", pts: 5, type: "player", desc: "Awarded to the best overall player of the tournament." },
@@ -11,17 +12,10 @@ const WC_AWARDS = [
   { key: "fair_play",     label: "FIFA Fair Play Trophy", emoji: "🤝", pts: 2, type: "team", desc: "Awarded to the team with the best fair play record (fewest fouls, cards, and disciplinary incidents)." },
 ];
 
-const EPL_AWARDS = [
-  { key: "golden_boot",   label: "Golden Boot",              emoji: "👟", pts: 5, type: "player", desc: "Awarded to the top goalscorer of the season." },
-  { key: "golden_glove",  label: "Golden Glove",             emoji: "🧤", pts: 5, type: "player", posFilter: "GK", desc: "Awarded to the goalkeeper with the most clean sheets." },
-  { key: "pots",          label: "Player of the Season",     emoji: "🥇", pts: 5, type: "player", desc: "Awarded to the best overall player of the season." },
-  { key: "ypots",         label: "Young Player of the Season", emoji: "🌟", pts: 5, type: "player", desc: "Awarded to the best player aged 23 or younger." },
-  { key: "mots",          label: "Manager of the Season",    emoji: "🧑‍💼", pts: 5, type: "team", desc: "Awarded to the best manager of the season." },
-];
-
 function Players({ currentUser, poolId, mockDate, tournament }) {
-  const isEPL = tournament === "epl2627";
-  const AWARDS = isEPL ? EPL_AWARDS : WC_AWARDS;
+  const isLeagueMode = isLeague(tournament);
+  const managerAward = isLeagueMode ? (getLeague(tournament)?.awards || []).find((a) => a.type === "team") : null;
+  const AWARDS = isLeagueMode ? (getLeague(tournament)?.awards || []) : WC_AWARDS;
 
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -33,12 +27,12 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
   const [saving, setSaving] = useState({});
   const [msg, setMsg] = useState("");
 
-  const crestFn = isEPL ? plCrest : flag;
+  const crestFn = isLeagueMode ? plCrest : flag;
 
   useEffect(() => {
-    if (isEPL) {
-      fetchEPL2627Players().then(setPlayers);
-      fetchEPL2627Teams().then(setTeams);
+    if (isLeagueMode) {
+      fetchLeaguePlayers(tournament).then(setPlayers);
+      fetchLeagueTeams(tournament).then((t) => { registerCrests(t); setTeams(t); });
     } else {
       fetchWcPlayers().then(setPlayers);
       fetchGroups().then((gs) => {
@@ -46,11 +40,11 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
         setTeams(allTeams);
       });
     }
-  }, [isEPL]);
+  }, [isLeagueMode, tournament]);
 
   useEffect(() => {
     if (!currentUser) return;
-    const fetchFn = isEPL ? fetchEPL2627PlayerAwardPicks : fetchPlayerAwardPicks;
+    const fetchFn = isLeagueMode ? (uid, pid) => fetchLeaguePlayerAwardPicks(tournament, uid, pid) : fetchPlayerAwardPicks;
     fetchFn(currentUser.id, poolId).then((data) => {
       const pickMap = {};
       for (const p of (data.picks || data)) pickMap[p.award_category] = p;
@@ -60,19 +54,19 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
       setLockedByAdmin(!!data.lockedByAdmin);
       setLoaded(true);
     }).catch(() => setLoaded(true));
-  }, [currentUser, poolId, mockDate, isEPL]);
+  }, [currentUser, poolId, mockDate, isLeagueMode, tournament]);
 
   const handleSave = async (awardKey, playerId, teamId) => {
     if (!currentUser) return;
     setSaving((s) => ({ ...s, [awardKey]: true }));
     setMsg("");
-    const res = isEPL
-      ? await submitEPL2627PlayerAwardPick(currentUser.id, awardKey, playerId, teamId)
+    const res = isLeagueMode
+      ? await submitLeaguePlayerAwardPick(tournament, currentUser.id, awardKey, playerId, teamId)
       : await submitPlayerAwardPick(currentUser.id, awardKey, playerId, teamId);
     if (res.error) {
       setMsg(res.error);
     } else {
-      const fetchFn = isEPL ? fetchEPL2627PlayerAwardPicks : fetchPlayerAwardPicks;
+      const fetchFn = isLeagueMode ? (uid, pid) => fetchLeaguePlayerAwardPicks(tournament, uid, pid) : fetchPlayerAwardPicks;
       const data = await fetchFn(currentUser.id, poolId);
       const pickMap = {};
       for (const p of (data.picks || data)) pickMap[p.award_category] = p;
@@ -89,7 +83,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
     return (
       <div className="page">
         <h2>Player Awards</h2>
-        <AwardRules isEPL={isEPL} />
+        <AwardRules isLeagueMode={isLeagueMode} managerLabel={managerAward?.label} />
         <p className="notice">Join the pool to make your player award picks.</p>
       </div>
     );
@@ -101,7 +95,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
   return (
     <div className="page">
       <h2>Player Awards</h2>
-      <AwardRules isEPL={isEPL} />
+      <AwardRules isLeagueMode={isLeagueMode} managerLabel={managerAward?.label} />
 
       {loaded && !locked && missingCount > 0 && (
         <div className="notif-window-card win-urgent" style={{ marginBottom: 16 }}>
@@ -122,7 +116,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
       {loaded && locked && (
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
           <span className="deadline-locked-text">
-            {lockedByAdmin || !isEPL
+            {lockedByAdmin || !isLeagueMode
               ? "Player award picks have been locked by your pool admin"
               : "Player award picks are locked — the entry window has closed"}
           </span>
@@ -178,7 +172,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
                       onSelect={(teamId) => handleSave(award.key, null, teamId)}
                       saving={!!saving[award.key]}
                       crestFn={crestFn}
-                      isEPL={isEPL}
+                      isLeagueMode={isLeagueMode}
                     />
                   : <PlayerPicker
                       players={players.filter((p) => {
@@ -266,7 +260,7 @@ function PlayerPicker({ players, currentPick, onSelect, saving, crestFn }) {
   );
 }
 
-function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isEPL }) {
+function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isLeagueMode }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -286,8 +280,8 @@ function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isEPL }) {
       )
     : teams;
 
-  if (isEPL) {
-    // Flat list for EPL teams
+  if (isLeagueMode) {
+    // Flat list for domestic-league clubs (EPL, La Liga, …)
     return (
       <div className="player-picker" ref={ref}>
         <input
@@ -365,15 +359,17 @@ function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isEPL }) {
   );
 }
 
-function AwardRules({ isEPL }) {
-  if (isEPL) {
+function AwardRules({ isLeagueMode, managerLabel }) {
+  if (isLeagueMode) {
     return (
       <div className="ko-rules">
         <p className="ko-rules-title">How player award picks work</p>
         <ul>
           <li>Predict the winners of five individual/team awards given at the end of the season.</li>
           <li>Each correct pick earns <strong>5 pts</strong>.</li>
-          <li>The <strong>Manager of the Season</strong> is awarded to a team&apos;s manager — pick the club.</li>
+          {managerLabel && (
+            <li>The <strong>{managerLabel}</strong> is awarded to a team&apos;s manager — pick the club.</li>
+          )}
           <li>Picks can be changed freely until locked by the pool admin.</li>
         </ul>
       </div>

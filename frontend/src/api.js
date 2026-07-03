@@ -708,37 +708,43 @@ export async function fetchAwardPickStats(poolId) {
   return res.json();
 }
 
-// ── EPL 26/27 ────────────────────────────────────────────────────────────────
+// ── Domestic leagues (config-driven: EPL, La Liga, …) ────────────────────────
+// One generic set of calls hits /api/league/:code/*. `code` is the tournament id
+// (e.g. "epl2627", "laliga2627"). The backend serves every league from LEAGUE_CONFIG.
 
-export async function fetchEPL2627Teams() {
-  return (await fetch(`${API}/epl2627/teams`)).json();
+export async function fetchLeagueConfig(code) {
+  return (await fetch(`${API}/league/${code}/config`)).json();
 }
 
-export async function fetchEPL2627Matches(matchday) {
+export async function fetchLeagueTeams(code) {
+  return (await fetch(`${API}/league/${code}/teams`)).json();
+}
+
+export async function fetchLeagueMatches(code, matchday) {
   const q = matchday ? `?matchday=${matchday}` : "";
-  return (await fetch(`${API}/epl2627/matches${q}`)).json();
+  return (await fetch(`${API}/league/${code}/matches${q}`)).json();
 }
 
-export async function fetchEPL2627Standings() {
-  return (await fetch(`${API}/epl2627/standings`)).json();
+export async function fetchLeagueStandings(code) {
+  return (await fetch(`${API}/league/${code}/standings`)).json();
 }
 
-export async function fetchEPL2627MatchdayDeadline(matchday) {
-  return (await fetch(`${API}/epl2627/matchday-deadline?matchday=${matchday}`)).json();
+export async function fetchLeagueMatchdayDeadline(code, matchday) {
+  return (await fetch(`${API}/league/${code}/matchday-deadline?matchday=${matchday}`)).json();
 }
 
-export async function fetchEPL2627SeasonDeadline(poolId) {
+export async function fetchLeagueSeasonDeadline(code, poolId) {
   const q = poolId ? `?pool_id=${poolId}` : "";
-  return (await fetch(`${API}/epl2627/season-deadline${q}`)).json();
+  return (await fetch(`${API}/league/${code}/season-deadline${q}`)).json();
 }
 
-export async function fetchEPL2627MatchPredictions(participantId, matchday) {
+export async function fetchLeagueMatchPredictions(code, participantId, matchday) {
   const q = matchday ? `?matchday=${matchday}` : "";
-  return (await fetch(`${API}/epl2627/match-predictions/${participantId}${q}`, { headers: authHeaders() })).json();
+  return (await fetch(`${API}/league/${code}/match-predictions/${participantId}${q}`, { headers: authHeaders() })).json();
 }
 
-export async function submitEPL2627MatchPredictions(participant_id, predictions) {
-  const res = await fetch(`${API}/epl2627/match-predictions`, {
+export async function submitLeagueMatchPredictions(code, participant_id, predictions) {
+  const res = await fetch(`${API}/league/${code}/match-predictions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ participant_id, predictions }),
@@ -746,12 +752,12 @@ export async function submitEPL2627MatchPredictions(participant_id, predictions)
   return res.json();
 }
 
-export async function fetchEPL2627SeasonPredictions(participantId) {
-  return (await fetch(`${API}/epl2627/season-predictions/${participantId}`, { headers: authHeaders() })).json();
+export async function fetchLeagueSeasonPredictions(code, participantId) {
+  return (await fetch(`${API}/league/${code}/season-predictions/${participantId}`, { headers: authHeaders() })).json();
 }
 
-export async function submitEPL2627SeasonPredictions(participant_id, predictions) {
-  const res = await fetch(`${API}/epl2627/season-predictions`, {
+export async function submitLeagueSeasonPredictions(code, participant_id, predictions) {
+  const res = await fetch(`${API}/league/${code}/season-predictions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ participant_id, predictions }),
@@ -759,20 +765,20 @@ export async function submitEPL2627SeasonPredictions(participant_id, predictions
   return res.json();
 }
 
-export async function fetchEPL2627Leaderboard(poolId) {
-  return (await fetch(`${API}/epl2627/leaderboard?pool_id=${poolId}`, { headers: authHeaders() })).json();
+export async function fetchLeagueLeaderboard(code, poolId) {
+  return (await fetch(`${API}/league/${code}/leaderboard?pool_id=${poolId}`, { headers: authHeaders() })).json();
 }
 
-export async function fetchEPL2627Players() {
-  return (await fetch(`${API}/epl2627/players`)).json();
+export async function fetchLeaguePlayers(code) {
+  return (await fetch(`${API}/league/${code}/players`)).json();
 }
 
-export async function fetchEPL2627PlayerAwardPicks(participantId, poolId) {
-  return (await fetch(`${API}/epl2627/player-award-picks/${participantId}?pool_id=${poolId}`, { headers: authHeaders() })).json();
+export async function fetchLeaguePlayerAwardPicks(code, participantId, poolId) {
+  return (await fetch(`${API}/league/${code}/player-award-picks/${participantId}?pool_id=${poolId}`, { headers: authHeaders() })).json();
 }
 
-export async function submitEPL2627PlayerAwardPick(participant_id, award_category, player_id, team_id) {
-  const res = await fetch(`${API}/epl2627/player-award-picks`, {
+export async function submitLeaguePlayerAwardPick(code, participant_id, award_category, player_id, team_id) {
+  const res = await fetch(`${API}/league/${code}/player-award-picks`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ participant_id, award_category, player_id, team_id }),

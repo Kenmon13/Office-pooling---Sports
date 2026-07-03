@@ -54,11 +54,31 @@ const plCrestMap = {
   MUN: 66, NEW: 67, NFO: 351, SUN: 71, TOT: 73,
 };
 
-export function plCrest(code) {
-  const id = plCrestMap[code];
-  if (!id) return null;
+// Runtime code -> crest URL registry. Leagues without a hardcoded sprite (e.g. La Liga) carry a
+// `crest_url` on their team/match/standings rows; whichever page loads that data registers the
+// URLs here so plCrest(code) can render them even at callsites that only have a team code (award
+// picks, player dropdowns). EPL still works with no registration via plCrestMap below.
+const crestRegistry = {};
+
+export function registerCrests(items) {
+  if (!Array.isArray(items)) return;
+  for (const it of items) {
+    if (!it) continue;
+    if (it.code && it.crest_url) crestRegistry[it.code] = it.crest_url;
+    if (it.home_code && it.home_crest) crestRegistry[it.home_code] = it.home_crest;
+    if (it.away_code && it.away_crest) crestRegistry[it.away_code] = it.away_crest;
+  }
+}
+
+// Render a club crest by code. An explicit crestUrl (when the row carries one) wins; otherwise
+// the registry (La Liga et al.), then the football-data sprite map (EPL). Returns null if unknown.
+export function plCrest(code, crestUrl) {
+  const src = crestUrl
+    || crestRegistry[code]
+    || (plCrestMap[code] ? `https://crests.football-data.org/${plCrestMap[code]}.png` : null);
+  if (!src) return null;
   return React.createElement("img", {
-    src: `https://crests.football-data.org/${id}.png`,
+    src,
     alt: code,
     className: "team-crest",
   });

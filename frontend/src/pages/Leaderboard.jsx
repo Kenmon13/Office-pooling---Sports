@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchLeaderboard, fetchWC2022Leaderboard, fetchEPL2627Leaderboard } from "../api";
+import { fetchLeaderboard, fetchWC2022Leaderboard, fetchLeagueLeaderboard } from "../api";
+import { isLeague } from "../leagues";
 
 function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
   const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const prevRankRef = useRef({});
-  const isEPL = tournament === "epl2627";
+  const isEPL = isLeague(tournament);
 
   useEffect(() => {
-    const fetchFn = tournament === "wc2022" ? fetchWC2022Leaderboard : isEPL ? fetchEPL2627Leaderboard : fetchLeaderboard;
+    const fetchFn = tournament === "wc2022"
+      ? fetchWC2022Leaderboard
+      : isEPL ? (pid) => fetchLeagueLeaderboard(tournament, pid) : fetchLeaderboard;
     fetchFn(poolId).then((data) => {
       const withRanks = data.map((p, i) => {
         const currentRank = i + 1;

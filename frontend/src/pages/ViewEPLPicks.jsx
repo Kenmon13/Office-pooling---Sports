@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  fetchEPL2627Leaderboard, fetchEPL2627Matches, fetchEPL2627MatchPredictions,
-  fetchEPL2627SeasonPredictions, fetchEPL2627PlayerAwardPicks, fetchEPL2627Standings,
+  fetchLeagueLeaderboard, fetchLeagueMatches, fetchLeagueMatchPredictions,
+  fetchLeagueSeasonPredictions, fetchLeaguePlayerAwardPicks, fetchLeagueStandings,
 } from "../api";
-import { plCrest } from "../flags";
+import { plCrest, registerCrests } from "../flags";
+import { getLeague, zoneForPosition } from "../leagues";
 
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"];
@@ -12,24 +13,9 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-const EPL_AWARDS = [
-  { key: "golden_boot",   label: "Golden Boot",              emoji: "\u{1F45F}" },
-  { key: "golden_glove",  label: "Golden Glove",             emoji: "\u{1F9E4}" },
-  { key: "pots",          label: "Player of the Season",     emoji: "\u{1F947}" },
-  { key: "ypots",         label: "Young Player of the Season", emoji: "\u{1F31F}" },
-  { key: "mots",          label: "Manager of the Season",    emoji: "\u{1F9D1}\u200D\u{1F4BC}" },
-];
-
-function getZone(pos) {
-  if (pos === 1) return "champion";
-  if (pos >= 2 && pos <= 4) return "cl";
-  if (pos === 5) return "europa";
-  if (pos === 6) return "conference";
-  if (pos >= 18) return "relegation";
-  return "";
-}
-
-function ViewEPLPicks({ poolId, currentUser }) {
+function ViewEPLPicks({ poolId, currentUser, league = "epl2627" }) {
+  const awards = getLeague(league)?.awards || [];
+  const getZone = (pos) => zoneForPosition(league, pos) || "";
   const { participantId } = useParams();
   const navigate = useNavigate();
   const isViewingSelf = currentUser && String(currentUser.id) === String(participantId);
@@ -51,21 +37,23 @@ function ViewEPLPicks({ poolId, currentUser }) {
 
   // Fetch participant name
   useEffect(() => {
-    fetchEPL2627Leaderboard(poolId).then((data) => {
+    fetchLeagueLeaderboard(league, poolId).then((data) => {
       const p = data.find((entry) => String(entry.id) === String(participantId));
       if (p) setParticipantName(p.name);
     });
-  }, [participantId, poolId]);
+  }, [league, participantId, poolId]);
 
   // Fetch their picks
   useEffect(() => {
     Promise.all([
-      fetchEPL2627Matches(),
-      fetchEPL2627MatchPredictions(participantId),
-      fetchEPL2627SeasonPredictions(participantId),
-      fetchEPL2627PlayerAwardPicks(participantId, poolId),
-      fetchEPL2627Standings(),
+      fetchLeagueMatches(league),
+      fetchLeagueMatchPredictions(league, participantId),
+      fetchLeagueSeasonPredictions(league, participantId),
+      fetchLeaguePlayerAwardPicks(league, participantId, poolId),
+      fetchLeagueStandings(league),
     ]).then(([matchData, mPreds, sPreds, awardsData, standingsData]) => {
+      registerCrests(matchData);
+      registerCrests(standingsData);
       setMatches(matchData);
       setStandings(Array.isArray(standingsData) ? standingsData : []);
 
@@ -86,16 +74,16 @@ function ViewEPLPicks({ poolId, currentUser }) {
 
       setLoaded(true);
     });
-  }, [participantId, poolId]);
+  }, [league, participantId, poolId]);
 
   // Fetch my picks when compare mode is toggled on
   useEffect(() => {
     if (!comparing || !currentUser || myLoaded) return;
 
     Promise.all([
-      fetchEPL2627MatchPredictions(currentUser.id),
-      fetchEPL2627SeasonPredictions(currentUser.id),
-      fetchEPL2627PlayerAwardPicks(currentUser.id, poolId),
+      fetchLeagueMatchPredictions(league, currentUser.id),
+      fetchLeagueSeasonPredictions(league, currentUser.id),
+      fetchLeaguePlayerAwardPicks(league, currentUser.id, poolId),
     ]).then(([mPreds, sPreds, awardsData]) => {
       const mMap = {};
       mPreds.forEach((p) => {
@@ -114,7 +102,7 @@ function ViewEPLPicks({ poolId, currentUser }) {
 
       setMyLoaded(true);
     });
-  }, [comparing, currentUser, poolId, myLoaded]);
+  }, [league, comparing, currentUser, poolId, myLoaded]);
 
   if (!loaded) {
     return <div className="page"><p className="notice">Loading...</p></div>;
@@ -193,11 +181,11 @@ function ViewEPLPicks({ poolId, currentUser }) {
                   <div key={m.id} className={`view-picks-ko-match ${showCompare ? "compare-ko-match" : ""}`}>
                     <div className="view-picks-ko-matchup">
                       <span className={`view-picks-ko-team ${their?.outcome === "home" ? "picked" : ""}`}>
-                        {plCrest(m.home_code)} {m.home_team || m.home_short || "TBD"}
+                        {plCrest(m.home_code, m.home_crest)} {m.home_team || m.home_short || "TBD"}
                       </span>
                       <span className="view-picks-ko-vs">vs</span>
                       <span className={`view-picks-ko-team ${their?.outcome === "away" ? "picked" : ""}`}>
-                        {m.away_team || m.away_short || "TBD"} {plCrest(m.away_code)}
+                        {m.away_team || m.away_short || "TBD"} {plCrest(m.away_code, m.away_crest)}
                       </span>
                       {their && (
                         <span className="view-picks-ko-score">
@@ -299,7 +287,7 @@ function ViewEPLPicks({ poolId, currentUser }) {
         )}
         {(Object.keys(awardPicks).length > 0 || showCompare) && (
           <div className="view-picks-awards">
-            {EPL_AWARDS.map((award) => {
+            {awards.map((award) => {
               const their = awardPicks[award.key];
               const mine = showCompare ? myAwardPicks[award.key] : null;
               if (!their && !mine) return null;

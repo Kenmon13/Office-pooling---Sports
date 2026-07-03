@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import {
-  fetchEPL2627Matches,
-  fetchEPL2627MatchPredictions,
-  submitEPL2627MatchPredictions,
+  fetchLeagueMatches,
+  fetchLeagueMatchPredictions,
+  submitLeagueMatchPredictions,
 } from "../api";
-import { plCrest } from "../flags";
+import { plCrest, registerCrests } from "../flags";
+import { getLeague } from "../leagues";
 
 // A predicted score must agree with the predicted outcome. Returns a message when both score
 // fields are filled and contradict the outcome, otherwise "". Unlike the WC knockout rule
@@ -50,7 +51,8 @@ function formatDeadlineFull(dateStr) {
   return `${weekdays[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()} at ${h % 12 || 12}:${m} ${ampm}`;
 }
 
-function PLMatchday({ currentUser }) {
+function PLMatchday({ currentUser, league = "epl2627" }) {
+  const matchdays = getLeague(league)?.matchdays || 38;
   const [matchday, setMatchday] = useState(1);
   const [matches, setMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
@@ -83,15 +85,15 @@ function PLMatchday({ currentUser }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchEPL2627Matches(matchday).then((matchData) => {
-      if (!cancelled) setMatches(matchData);
+    fetchLeagueMatches(league, matchday).then((matchData) => {
+      if (!cancelled) { registerCrests(matchData); setMatches(matchData); }
     });
     return () => { cancelled = true; };
-  }, [matchday]);
+  }, [league, matchday]);
 
   useEffect(() => {
     if (currentUser) {
-      fetchEPL2627MatchPredictions(currentUser.id, matchday).then((preds) => {
+      fetchLeagueMatchPredictions(league, currentUser.id, matchday).then((preds) => {
         const map = {};
         preds.forEach((p) => {
           map[p.match_id] = {
@@ -104,7 +106,7 @@ function PLMatchday({ currentUser }) {
         setSaved(map);
       });
     }
-  }, [currentUser, matchday]);
+  }, [league, currentUser, matchday]);
 
   const setOutcome = (matchId, outcome) => {
     if (lockedIds.has(matchId)) return;
@@ -164,11 +166,11 @@ function PLMatchday({ currentUser }) {
         predicted_away_score: predictions[m.id].away_score ?? null,
       }));
 
-    const res = await submitEPL2627MatchPredictions(currentUser.id, preds);
+    const res = await submitLeagueMatchPredictions(league, currentUser.id, preds);
     if (res.error) {
       setSaveError(res.error);
     } else {
-      const refreshed = await fetchEPL2627MatchPredictions(currentUser.id, matchday);
+      const refreshed = await fetchLeagueMatchPredictions(league, currentUser.id, matchday);
       const map = {};
       refreshed.forEach((p) => {
         map[p.match_id] = {
@@ -221,8 +223,8 @@ function PLMatchday({ currentUser }) {
         <span className="matchday-label">Matchday {matchday}</span>
         <button
           className="matchday-arrow"
-          onClick={() => setMatchday((d) => Math.min(38, d + 1))}
-          disabled={matchday >= 38}
+          onClick={() => setMatchday((d) => Math.min(matchdays, d + 1))}
+          disabled={matchday >= matchdays}
         >
           &rarr;
         </button>
@@ -283,13 +285,13 @@ function PLMatchday({ currentUser }) {
                 )}
 
                 <div className="pl-match-teams">
-                  <span className="pl-team home">{plCrest(m.home_code)} {m.home_short || m.home_team}</span>
+                  <span className="pl-team home">{plCrest(m.home_code, m.home_crest)} {m.home_short || m.home_team}</span>
                   <span className={`pl-score ${isLive ? "live" : ""}`}>
                     {isFinished || isLive
                       ? `${m.home_score ?? 0} - ${m.away_score ?? 0}`
                       : "vs"}
                   </span>
-                  <span className="pl-team away">{m.away_short || m.away_team} {plCrest(m.away_code)}</span>
+                  <span className="pl-team away">{m.away_short || m.away_team} {plCrest(m.away_code, m.away_crest)}</span>
                 </div>
 
                 {isLive && <div className="match-status live">LIVE</div>}

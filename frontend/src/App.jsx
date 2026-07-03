@@ -32,12 +32,14 @@ import DonateModal from "./components/DonateModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
+import { isLeague } from "./leagues";
 import "./App.css";
 
 const TOURNAMENT_META = {
   wc2026: { id: "wc2026", name: "World Cup 2026", emoji: "🏆" },
   wc2022: { id: "wc2022", name: "World Cup 2022", emoji: "🏆" },
   epl2627: { id: "epl2627", name: "Premier League 26/27", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  laliga2627: { id: "laliga2627", name: "La Liga 26/27", emoji: "🇪🇸" },
 };
 
 function App() {
@@ -920,7 +922,7 @@ function App() {
           </div>
           {announcementBar}
           <nav>
-            {pool.tournament === "epl2627" ? (<>
+            {isLeague(pool.tournament) ? (<>
               <NavLink to="/">Matchday</NavLink>
               <NavLink to="/season">Season</NavLink>
             </>) : (<>
@@ -938,9 +940,9 @@ function App() {
 
         <main>
           <Routes>
-            {pool.tournament === "epl2627" ? (<>
-              <Route path="/" element={<PLMatchday currentUser={participant} />} />
-              <Route path="/season" element={<SeasonPredictions currentUser={participant} poolId={pool.id} />} />
+            {isLeague(pool.tournament) ? (<>
+              <Route path="/" element={<PLMatchday currentUser={participant} league={pool.tournament} />} />
+              <Route path="/season" element={<SeasonPredictions currentUser={participant} poolId={pool.id} league={pool.tournament} />} />
             </>) : (<>
               <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} groupStageUnlocked={groupStageUnlocked} />} />
               <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} exactScoresDisabled={exactScoresDisabled} />} />
@@ -954,8 +956,8 @@ function App() {
             <Route path="/history" element={<Navigate to="/breakdown" replace />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
             <Route path="/picks/:participantId" element={
-              pool.tournament === "epl2627"
-                ? <ViewEPLPicks poolId={pool.id} currentUser={participant} />
+              isLeague(pool.tournament)
+                ? <ViewEPLPicks poolId={pool.id} currentUser={participant} league={pool.tournament} />
                 : <ViewPicks poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} currentUser={participant} />
             } />
           </Routes>

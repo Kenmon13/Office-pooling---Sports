@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  fetchEPL2627Teams,
-  fetchEPL2627SeasonPredictions,
-  submitEPL2627SeasonPredictions,
-  fetchEPL2627SeasonDeadline,
-  fetchEPL2627Standings,
+  fetchLeagueTeams,
+  fetchLeagueSeasonPredictions,
+  submitLeagueSeasonPredictions,
+  fetchLeagueSeasonDeadline,
+  fetchLeagueStandings,
 } from "../api";
-import { plCrest } from "../flags";
+import { plCrest, registerCrests } from "../flags";
+import { getLeague, zoneForPosition } from "../leagues";
 
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"];
@@ -55,24 +56,23 @@ function formatDeadlineFull(dateStr) {
   return `${weekdays[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()} at ${h % 12 || 12}:${m} ${ampm}`;
 }
 
-const ZONE_LABELS = {
-  1: "Champion",
-  2: "Champions League",
-  5: "Europa League",
-  6: "Conference League",
-  18: "Relegation Zone",
-};
-
-function getZone(pos) {
-  if (pos === 1) return "champion";
-  if (pos >= 2 && pos <= 4) return "cl";
-  if (pos === 5) return "europa";
-  if (pos === 6) return "conference";
-  if (pos >= 18) return "relegation";
-  return "";
+// Divider labels shown above the first row of each table zone, derived from the league's zone
+// config so an 18-team league relegates from a different position without code changes.
+function zoneDividerLabels(league) {
+  const z = getLeague(league)?.zones;
+  if (!z) return {};
+  return {
+    [z.champion]: "Champion",
+    [z.champion + 1]: "Champions League", // CL block starts right after the champion row
+    [z.europa]: "Europa League",
+    [z.conference]: "Conference League",
+    [z.relegation[0]]: "Relegation Zone",
+  };
 }
 
-function SeasonPredictions({ currentUser, poolId }) {
+function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
+  const teamCount = getLeague(league)?.teamCount || 20;
+  const ZONE_LABELS = zoneDividerLabels(league);
   const [teams, setTeams] = useState([]);
   const [table, setTable] = useState([]); // array of team IDs in order (pos 1-20)
   const [savedTable, setSavedTable] = useState([]);
@@ -88,10 +88,12 @@ function SeasonPredictions({ currentUser, poolId }) {
 
   useEffect(() => {
     Promise.all([
-      fetchEPL2627Teams(),
-      fetchEPL2627SeasonDeadline(poolId),
-      fetchEPL2627Standings(),
+      fetchLeagueTeams(league),
+      fetchLeagueSeasonDeadline(league, poolId),
+      fetchLeagueStandings(league),
     ]).then(([teamData, dlData, standingsData]) => {
+      registerCrests(teamData);
+      registerCrests(standingsData);
       setTeams(teamData);
       setDeadline(dlData.deadline || null);
       setStandings(Array.isArray(standingsData) ? standingsData : []);
@@ -99,19 +101,19 @@ function SeasonPredictions({ currentUser, poolId }) {
         setTable(teamData.map((t) => t.id));
       }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [league]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (currentUser) {
-      fetchEPL2627SeasonPredictions(currentUser.id).then((preds) => {
-        if (preds.length === 20) {
+      fetchLeagueSeasonPredictions(league, currentUser.id).then((preds) => {
+        if (preds.length === teamCount) {
           const ordered = preds.sort((a, b) => a.position - b.position).map((p) => p.team_id);
           setTable(ordered);
           setSavedTable(ordered);
         }
       });
     }
-  }, [currentUser]);
+  }, [league, currentUser, teamCount]);
 
   const teamMap = {};
   teams.forEach((t) => { teamMap[t.id] = t; });
@@ -122,7 +124,7 @@ function SeasonPredictions({ currentUser, poolId }) {
   // The season has kicked off once at least one match has been played.
   const hasStarted = standings.some((t) => t.played > 0);
 
-  const hasChanges = table.length === 20 && JSON.stringify(table) !== JSON.stringify(savedTable);
+  const hasChanges = table.length === teamCount && JSON.stringify(table) !== JSON.stringify(savedTable);
 
   const moveTeam = (fromIdx, toIdx) => {
     if (isLocked) return;
@@ -151,7 +153,7 @@ function SeasonPredictions({ currentUser, poolId }) {
   };
 
   const handleSave = async () => {
-    if (!currentUser || table.length !== 20) return;
+    if (!currentUser || table.length !== teamCount) return;
     setSaving(true);
     setSaveError("");
 
@@ -160,7 +162,7 @@ function SeasonPredictions({ currentUser, poolId }) {
       team_id: teamId,
     }));
 
-    const res = await submitEPL2627SeasonPredictions(currentUser.id, predictions);
+    const res = await submitLeagueSeasonPredictions(league, currentUser.id, predictions);
     if (res.error) {
       setSaveError(res.error);
     } else {
@@ -235,7 +237,7 @@ function SeasonPredictions({ currentUser, poolId }) {
             {table.map((teamId, idx) => {
               const team = teamMap[teamId];
               const pos = idx + 1;
-              const zone = getZone(pos);
+              const zone = zoneForPosition(league, pos) || "";
               const zoneLabel = ZONE_LABELS[pos];
               const isSelecting = selectingIdx === idx;
               // How the team is actually doing vs where it was predicted.
@@ -261,7 +263,7 @@ function SeasonPredictions({ currentUser, poolId }) {
                     }}
                   >
                     <span className="season-pos">{pos}</span>
-                    {team && plCrest(team.code)}
+                    {team && plCrest(team.code, team.crest_url)}
                     <span className="season-team-name">{team?.short_name || team?.name || "?"}</span>
                     {curPos && (
                       <span
@@ -283,8 +285,8 @@ function SeasonPredictions({ currentUser, poolId }) {
                         >&#9650;</button>
                         <button
                           className="arrow-btn"
-                          onClick={(e) => { e.stopPropagation(); if (pos < 20) moveTeam(idx, idx + 1); }}
-                          disabled={pos >= 20}
+                          onClick={(e) => { e.stopPropagation(); if (pos < teamCount) moveTeam(idx, idx + 1); }}
+                          disabled={pos >= teamCount}
                         >&#9660;</button>
                       </span>
                     )}
@@ -311,7 +313,7 @@ function SeasonPredictions({ currentUser, poolId }) {
                               setSelectingIdx(null);
                             }}
                           >
-                            {plCrest(t.code)}
+                            {plCrest(t.code, t.crest_url)}
                             <span className="picker-name">{t.short_name || t.name}</span>
                             {isCurrent && <span className="picker-current">current</span>}
                           </button>

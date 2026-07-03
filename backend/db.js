@@ -1114,4 +1114,174 @@ try {
   console.log("PL squad seed skipped:", err.message);
 }
 
+// ── Generalized league engine (EPL + La Liga + future domestic leagues) ──────────────
+// One config-driven set of tables shared by all round-robin domestic leagues (see leagues.js),
+// keyed by a `league` discriminator. EPL is migrated off pl2627_* below (one-time). WC2022/
+// WC2026 stay separate (knockout shape).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS league_teams (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    league     TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    code       TEXT NOT NULL,
+    short_name TEXT,
+    manager    TEXT,
+    crest_url  TEXT,
+    UNIQUE(league, code)
+  );
+  CREATE TABLE IF NOT EXISTS league_matches (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    league       TEXT NOT NULL,
+    matchday     INTEGER NOT NULL,
+    home_team_id INTEGER NOT NULL REFERENCES league_teams(id),
+    away_team_id INTEGER NOT NULL REFERENCES league_teams(id),
+    match_date   TEXT,
+    home_score   INTEGER,
+    away_score   INTEGER,
+    status       TEXT DEFAULT 'upcoming' CHECK(status IN ('upcoming','live','finished'))
+  );
+  CREATE TABLE IF NOT EXISTS league_match_predictions (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id       INTEGER NOT NULL REFERENCES participants(id),
+    match_id             INTEGER NOT NULL REFERENCES league_matches(id),
+    predicted_outcome    TEXT NOT NULL CHECK(predicted_outcome IN ('home','draw','away')),
+    predicted_home_score INTEGER,
+    predicted_away_score INTEGER,
+    created_at           TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, match_id)
+  );
+  CREATE TABLE IF NOT EXISTS league_season_predictions (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    league         TEXT NOT NULL,
+    position       INTEGER NOT NULL,
+    team_id        INTEGER NOT NULL REFERENCES league_teams(id),
+    created_at     TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, league, position)
+  );
+  CREATE TABLE IF NOT EXISTS league_players (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    league   TEXT NOT NULL,
+    name     TEXT NOT NULL,
+    team_id  INTEGER NOT NULL REFERENCES league_teams(id),
+    position TEXT NOT NULL CHECK(position IN ('GK','DF','MF','FW')),
+    UNIQUE(league, name, team_id)
+  );
+  CREATE TABLE IF NOT EXISTS league_award_picks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id  INTEGER NOT NULL REFERENCES participants(id),
+    league          TEXT NOT NULL,
+    award_category  TEXT NOT NULL,
+    player_id       INTEGER REFERENCES league_players(id),
+    team_id         INTEGER REFERENCES league_teams(id),
+    updated_at      TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, league, award_category)
+  );
+  CREATE TABLE IF NOT EXISTS league_award_results (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    league         TEXT NOT NULL,
+    award_category TEXT NOT NULL,
+    player_id      INTEGER REFERENCES league_players(id),
+    team_id        INTEGER REFERENCES league_teams(id),
+    set_at         TEXT DEFAULT (datetime('now')),
+    UNIQUE(league, award_category)
+  );
+`);
+
+// Seed league_teams (idempotent) + refresh manager/crest/name, and reseed league_players
+// from each league's squad file whenever the roster count changes (mirrors the old PL logic).
+try {
+  const { leagues: LEAGUE_CONFIG } = require("./leagues");
+  for (const [code, cfg] of Object.entries(LEAGUE_CONFIG)) {
+    const { teams: cfgTeams, squads: cfgSquads } = cfg.squadData;
+    const insertTeam = db.prepare("INSERT OR IGNORE INTO league_teams (league, name, code, short_name, manager, crest_url) VALUES (?, ?, ?, ?, ?, ?)");
+    const updateTeam = db.prepare("UPDATE league_teams SET name = ?, short_name = ?, manager = ?, crest_url = ? WHERE league = ? AND code = ?");
+    for (const t of cfgTeams) {
+      insertTeam.run(code, t.name, t.code, t.short_name, t.manager ?? null, t.crest ?? null);
+      updateTeam.run(t.name, t.short_name, t.manager ?? null, t.crest ?? null, code, t.code);
+    }
+    const teamIdByCode = {};
+    for (const row of db.prepare("SELECT id, code FROM league_teams WHERE league = ?").all(code)) teamIdByCode[row.code] = row.id;
+
+    const totalPlayers = Object.values(cfgSquads).reduce((s, a) => s + a.length, 0);
+    const currentCount = db.prepare("SELECT COUNT(*) AS c FROM league_players WHERE league = ?").get(code).c;
+    if (currentCount !== totalPlayers) {
+      const reseed = db.transaction(() => {
+        db.prepare("DELETE FROM league_award_results WHERE league = ?").run(code);
+        db.prepare("DELETE FROM league_award_picks WHERE league = ? AND player_id IS NOT NULL").run(code);
+        db.prepare("DELETE FROM league_players WHERE league = ?").run(code);
+        const insP = db.prepare("INSERT OR IGNORE INTO league_players (league, name, team_id, position) VALUES (?, ?, ?, ?)");
+        for (const [tc, players] of Object.entries(cfgSquads)) {
+          const tid = teamIdByCode[tc];
+          if (!tid) { console.log(`${code}: squads skip unknown team ${tc}`); continue; }
+          for (const p of players) insP.run(code, p.name, tid, p.pos);
+        }
+      });
+      reseed();
+      console.log(`Seeded ${code} squads (${totalPlayers} players across ${cfgTeams.length} clubs).`);
+    }
+  }
+} catch (err) {
+  console.log("League seed skipped:", err.message);
+}
+
+// One-time migration of EPL data off pl2627_* into league_* (league='epl2627'). Idempotent —
+// guarded by a settings flag; pl2627_* tables are left intact until a later cleanup.
+try {
+  const eplHasLegacy = db.prepare("SELECT COUNT(*) AS c FROM pl2627_teams").get().c > 0;
+  const alreadyMigrated = db.prepare("SELECT value FROM settings WHERE key = 'epl_migrated_to_league'").get();
+  if (eplHasLegacy && !alreadyMigrated) {
+    const migrate = db.transaction(() => {
+      // old pl2627_teams.id -> new league_teams.id (matched by code, seeded above)
+      const newTeamByCode = {};
+      for (const r of db.prepare("SELECT id, code FROM league_teams WHERE league = 'epl2627'").all()) newTeamByCode[r.code] = r.id;
+      const insTeam = db.prepare("INSERT OR IGNORE INTO league_teams (league, name, code, short_name, manager) VALUES ('epl2627', ?, ?, ?, ?)");
+      const teamMap = {};
+      for (const t of db.prepare("SELECT * FROM pl2627_teams").all()) {
+        if (!newTeamByCode[t.code]) {
+          insTeam.run(t.name, t.code, t.short_name, t.manager);
+          newTeamByCode[t.code] = db.prepare("SELECT id FROM league_teams WHERE league = 'epl2627' AND code = ?").get(t.code).id;
+        }
+        teamMap[t.id] = newTeamByCode[t.code];
+      }
+      // matches: old id -> new id
+      const matchMap = {};
+      const insMatch = db.prepare("INSERT INTO league_matches (league, matchday, home_team_id, away_team_id, match_date, home_score, away_score, status) VALUES ('epl2627', ?, ?, ?, ?, ?, ?, ?)");
+      for (const m of db.prepare("SELECT * FROM pl2627_matches").all()) {
+        const h = teamMap[m.home_team_id], a = teamMap[m.away_team_id];
+        if (!h || !a) continue;
+        matchMap[m.id] = insMatch.run(m.matchday, h, a, m.match_date, m.home_score, m.away_score, m.status).lastInsertRowid;
+      }
+      const insMP = db.prepare("INSERT OR IGNORE INTO league_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+      for (const p of db.prepare("SELECT * FROM pl2627_match_predictions").all()) {
+        const nm = matchMap[p.match_id];
+        if (nm) insMP.run(p.participant_id, nm, p.predicted_outcome, p.predicted_home_score, p.predicted_away_score, p.created_at);
+      }
+      const insSP = db.prepare("INSERT OR IGNORE INTO league_season_predictions (participant_id, league, position, team_id, created_at) VALUES (?, 'epl2627', ?, ?, ?)");
+      for (const s of db.prepare("SELECT * FROM pl2627_season_predictions").all()) {
+        const nt = teamMap[s.team_id];
+        if (nt) insSP.run(s.participant_id, s.position, nt, s.created_at);
+      }
+      // old player id -> new player id (matched by team code + player name)
+      const newPlayerByKey = {};
+      for (const r of db.prepare("SELECT lp.id, lp.name, lt.code FROM league_players lp JOIN league_teams lt ON lp.team_id = lt.id WHERE lp.league = 'epl2627'").all()) newPlayerByKey[`${r.code}|${r.name}`] = r.id;
+      const oldPlayerMap = {};
+      for (const op of db.prepare("SELECT pl.id, pl.name, t.code FROM pl2627_players pl JOIN pl2627_teams t ON pl.team_id = t.id").all()) oldPlayerMap[op.id] = newPlayerByKey[`${op.code}|${op.name}`] || null;
+      const insAP = db.prepare("INSERT OR IGNORE INTO league_award_picks (participant_id, league, award_category, player_id, team_id, updated_at) VALUES (?, 'epl2627', ?, ?, ?, ?)");
+      for (const ap of db.prepare("SELECT * FROM pl2627_player_award_picks").all()) {
+        insAP.run(ap.participant_id, ap.award_category, ap.player_id ? oldPlayerMap[ap.player_id] : null, ap.team_id ? teamMap[ap.team_id] : null, ap.updated_at);
+      }
+      const insAR = db.prepare("INSERT OR IGNORE INTO league_award_results (league, award_category, player_id, team_id, set_at) VALUES ('epl2627', ?, ?, ?, ?)");
+      for (const ar of db.prepare("SELECT * FROM pl2627_player_award_results").all()) {
+        insAR.run(ar.award_category, ar.player_id ? oldPlayerMap[ar.player_id] : null, ar.team_id ? teamMap[ar.team_id] : null, ar.set_at);
+      }
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('epl_migrated_to_league', ?)").run(new Date().toISOString());
+    });
+    migrate();
+    console.log("Migrated EPL (pl2627_*) data into the league_* engine.");
+  }
+} catch (err) {
+  console.log("EPL migration skipped:", err.message);
+}
+
 module.exports = db;
