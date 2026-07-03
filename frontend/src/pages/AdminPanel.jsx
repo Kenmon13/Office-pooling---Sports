@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides, adminFetchPollResults } from "../api";
+import { POLL_OPTIONS } from "../pollOptions";
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -39,10 +40,14 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [issueProfilePools, setIssueProfilePools] = useState(null);
   const [koMismatches, setKoMismatches] = useState([]);
   const [koMismatchSaving, setKoMismatchSaving] = useState(null);
+  const [pollResults, setPollResults] = useState(null);
   const fileInputRef = useRef(null);
 
   const refreshKoMismatches = () =>
     adminFetchKoMismatches().then((d) => { if (Array.isArray(d)) setKoMismatches(d); });
+
+  const loadPollResults = () =>
+    adminFetchPollResults().then((d) => { if (!d.error) setPollResults(d); });
 
   const resolveMismatch = async (m, choice) => {
     const key = `${m.match_id}:${m.field}`;
@@ -290,6 +295,9 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
           onClick={() => { setTab("sync"); refreshKoMismatches(); }}
         >
           Sync {koMismatches.length > 0 ? `(${koMismatches.length})` : ""}
+        </button>
+        <button className={`admin-tab ${tab === "poll" ? "active" : ""}`} onClick={() => { setTab("poll"); loadPollResults(); }}>
+          Poll
         </button>
       </div>
 
@@ -900,6 +908,43 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                   });
                 })()}
               </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "poll" && (
+        <div className="admin-poll-tab">
+          <p className="select-subtitle">&ldquo;What should we build next?&rdquo; — results from the post-login poll.</p>
+          {!pollResults ? (
+            <p className="notice">Loading…</p>
+          ) : (
+            <>
+              <p className="select-subtitle">
+                <strong>{pollResults.voted}</strong> vote{pollResults.voted === 1 ? "" : "s"} · {pollResults.dismissed} dismissed
+              </p>
+              <div className="stats-list">
+                {[...POLL_OPTIONS]
+                  .map((o) => ({ ...o, count: pollResults.counts[o.key] || 0 }))
+                  .sort((a, b) => b.count - a.count)
+                  .map((o) => {
+                    const pct = pollResults.voted > 0 ? Math.round((o.count / pollResults.voted) * 100) : 0;
+                    return (
+                      <div key={o.key} className="stats-row">
+                        <span className="stats-team">{o.emoji} {o.label}</span>
+                        <div className="stats-bar-wrapper"><div className="stats-bar" style={{ width: `${pct}%` }} /></div>
+                        <span className="stats-pct">{pct}%</span>
+                        <span className="stats-count">({o.count})</span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {pollResults.others && pollResults.others.length > 0 && (
+                <div className="admin-poll-others">
+                  <h4>&ldquo;Other&rdquo; responses ({pollResults.others.length})</h4>
+                  <ul>{pollResults.others.map((o, i) => <li key={i}>{o.text}{o.count > 1 ? ` (${o.count})` : ""}</li>)}</ul>
+                </div>
+              )}
             </>
           )}
         </div>
