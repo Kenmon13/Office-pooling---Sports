@@ -771,6 +771,12 @@ if (!existingEPLPool) {
   db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("English Premier League 26/27", "soccer", "epl2627", "");
 }
 
+// Seed default public pool for La Liga 26/27
+const existingLaLigaPool = db.prepare("SELECT id FROM pools WHERE name = 'La Liga 26/27' AND is_public = 1").get();
+if (!existingLaLigaPool) {
+  db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("La Liga 26/27", "soccer", "laliga2627", "");
+}
+
 // Migration: update WC2026 group stage match dates to official FIFA schedule
 const WC2026_MATCH_DATES = [
   // Group A
