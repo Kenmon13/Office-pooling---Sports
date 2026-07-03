@@ -377,6 +377,65 @@ app.patch("/api/admin/users/:id/email", requireAdminToken, (req, res) => {
   res.json({ success: true, email: normalized });
 });
 
+// --- "What should we build next?" poll (one row per user: a vote or a dismissal) ---
+
+app.get("/api/poll/status", authenticateToken, (req, res) => {
+  const row = db.prepare("SELECT status FROM poll_responses WHERE user_id = ?").get(req.user.id);
+  res.json({ done: !!row, status: row ? row.status : null });
+});
+
+app.post("/api/poll/vote", authenticateToken, (req, res) => {
+  let { choices, other } = req.body;
+  if (!Array.isArray(choices)) choices = [];
+  choices = choices.filter((c) => typeof c === "string").slice(0, 30);
+  const otherText = (typeof other === "string" && other.trim()) ? other.trim().slice(0, 300) : null;
+  if (choices.length === 0 && !otherText) {
+    return res.status(400).json({ error: "Pick at least one option or enter your own" });
+  }
+  db.prepare(`
+    INSERT INTO poll_responses (user_id, choices, other_text, status, created_at, updated_at)
+    VALUES (?, ?, ?, 'voted', datetime('now'), datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET
+      choices = excluded.choices, other_text = excluded.other_text,
+      status = 'voted', updated_at = datetime('now')
+  `).run(req.user.id, JSON.stringify(choices), otherText);
+  res.json({ success: true });
+});
+
+app.post("/api/poll/dismiss", authenticateToken, (req, res) => {
+  db.prepare(`
+    INSERT INTO poll_responses (user_id, choices, other_text, status, created_at, updated_at)
+    VALUES (?, NULL, NULL, 'dismissed', datetime('now'), datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET status = 'dismissed', updated_at = datetime('now')
+  `).run(req.user.id);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/poll/results", requireAdminToken, (req, res) => {
+  const rows = db.prepare("SELECT choices, other_text, status FROM poll_responses").all();
+  const counts = {};
+  const otherMap = new Map(); // normalized text -> { text, count } so duplicate write-ins group
+  let voted = 0, dismissed = 0;
+  for (const r of rows) {
+    if (r.status === "dismissed") { dismissed++; continue; }
+    voted++;
+    let ch = [];
+    try { ch = JSON.parse(r.choices || "[]"); } catch (_) { ch = []; }
+    for (const c of ch) counts[c] = (counts[c] || 0) + 1;
+    if (r.other_text) {
+      const text = r.other_text.trim();
+      if (text) {
+        const key = text.toLowerCase();
+        const hit = otherMap.get(key);
+        if (hit) hit.count++;
+        else otherMap.set(key, { text, count: 1 });
+      }
+    }
+  }
+  const others = [...otherMap.values()].sort((a, b) => b.count - a.count);
+  res.json({ voted, dismissed, counts, others });
+});
+
 app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
   const pools = db.prepare(`
     SELECT p.id, p.name, p.sport, p.tournament, p.is_public,

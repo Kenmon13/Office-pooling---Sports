@@ -194,6 +194,18 @@ try { db.exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE users ADD COLUMN google_id TEXT"); } catch (_) {}
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)"); } catch (_) {}
 
+// "What should we build next?" poll — one row per user, either a vote or a dismissal.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS poll_responses (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    choices TEXT,
+    other_text TEXT,
+    status TEXT NOT NULL DEFAULT 'voted',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
 // Add public pool column
 try { db.exec("ALTER TABLE pools ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 

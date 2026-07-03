@@ -193,6 +193,30 @@ export async function adminSetUserEmail(userId, email) {
   return res.json();
 }
 
+export async function fetchPollStatus() {
+  const res = await fetch(`${API}/poll/status`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function submitPollVote(choices, other) {
+  const res = await fetch(`${API}/poll/vote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ choices, other }),
+  });
+  return res.json();
+}
+
+export async function dismissPoll() {
+  const res = await fetch(`${API}/poll/dismiss`, { method: "POST", headers: authHeaders() });
+  return res.json();
+}
+
+export async function adminFetchPollResults() {
+  const res = await fetch(`${API}/admin/poll/results`, { headers: authHeaders() });
+  return res.json();
+}
+
 export async function adminFetchPools() {
   const res = await fetch(`${API}/admin/pools`, { headers: authHeaders() });
   return res.json();

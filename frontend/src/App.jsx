@@ -29,6 +29,7 @@ import Settings from "./pages/Settings";
 import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
+import PollPrompt from "./components/PollModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -674,6 +675,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
+        {user && <PollPrompt user={user} />}
       </div>
     );
   }
@@ -722,6 +724,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
+        {user && <PollPrompt user={user} />}
       </div>
     );
   }
@@ -771,6 +774,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
+        {user && <PollPrompt user={user} />}
       </div>
     );
   }
@@ -1292,6 +1296,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
+        {user && <PollPrompt user={user} />}
 
         {showPatchNotes && (
           <NotificationsModal
