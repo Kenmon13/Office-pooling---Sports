@@ -170,6 +170,9 @@ function BracketMatch2022({ matchId, left, top, pred, status, isSaving, ko, matc
         </div>
       </div>
       {!exactScoresDisabled && visibleError && <div className="score-error">{visibleError}</div>}
+      {!exactScoresDisabled && !visibleError && pickedNoScore && (
+        <div className="score-hint">Winner picked — no score saved. Add a score for the exact-score bonus.</div>
+      )}
       {(scoreCorrect || scoreWrong) && (
         <div className={`score-result ${scoreCorrect ? "correct" : "wrong"}`}>
           {scoreCorrect ? "✓ exact score" : `✗ was ${actualHome}–${actualAway}`}

@@ -152,6 +152,9 @@ function BracketMatch({ m, left, top, MATCH_H, ROUND_W, pred, status, isSaving, 
             : "⚠ Score not saved — winner can’t score fewer goals"}
         </div>
       )}
+      {!exactScoresDisabled && !visibleError && pickedNoScore && (
+        <div className="score-hint">Winner picked — no score saved. Add a score for the exact-score bonus.</div>
+      )}
       {liveBadge && (
         <div className="ko-live-badge">· {liveBadge} ·</div>
       )}

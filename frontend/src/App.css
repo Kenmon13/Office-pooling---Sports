@@ -2426,6 +2426,25 @@ nav a.active {
   z-index: 5;
 }
 
+/* Neutral (not an error) note: a winner is picked but no score is recorded — makes the
+   "winner only, no scoreline" state explicit so it can't be mistaken for a full prediction. */
+.score-hint {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  font-size: 10px;
+  color: #f0a742;
+  text-align: center;
+  padding: 2px 4px;
+  line-height: 1.3;
+  background: #241803;
+  border: 1px solid #6b4a12;
+  border-radius: 4px;
+  z-index: 4;
+  white-space: normal;
+}
+
 .bracket-match-time {
   font-size: 9px;
   color: #4a7a4a;
