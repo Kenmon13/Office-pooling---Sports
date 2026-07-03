@@ -1243,6 +1243,12 @@ try {
   const eplHasLegacy = db.prepare("SELECT COUNT(*) AS c FROM pl2627_teams").get().c > 0;
   const alreadyMigrated = db.prepare("SELECT value FROM settings WHERE key = 'epl_migrated_to_league'").get();
   if (eplHasLegacy && !alreadyMigrated) {
+    // Diagnostics: predictions/picks are re-linked to freshly-seeded rows, mostly by structural
+    // id (safe) but award picks by player name (can drift vs the live-synced pl2627_players).
+    // Count anything that fails to re-link so a silent data loss shows up in the deploy log.
+    const stats = { matchPreds: 0, matchPredsSkipped: 0, seasonPreds: 0, seasonPredsSkipped: 0,
+      awardPicks: 0, awardPicksUnmapped: 0, awardResults: 0, awardResultsUnmapped: 0 };
+    const unmappedPlayers = new Set();
     const migrate = db.transaction(() => {
       // old pl2627_teams.id -> new league_teams.id (matched by code, seeded above)
       const newTeamByCode = {};
@@ -1267,30 +1273,50 @@ try {
       const insMP = db.prepare("INSERT OR IGNORE INTO league_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score, created_at) VALUES (?, ?, ?, ?, ?, ?)");
       for (const p of db.prepare("SELECT * FROM pl2627_match_predictions").all()) {
         const nm = matchMap[p.match_id];
-        if (nm) insMP.run(p.participant_id, nm, p.predicted_outcome, p.predicted_home_score, p.predicted_away_score, p.created_at);
+        if (nm) { insMP.run(p.participant_id, nm, p.predicted_outcome, p.predicted_home_score, p.predicted_away_score, p.created_at); stats.matchPreds++; }
+        else stats.matchPredsSkipped++;
       }
       const insSP = db.prepare("INSERT OR IGNORE INTO league_season_predictions (participant_id, league, position, team_id, created_at) VALUES (?, 'epl2627', ?, ?, ?)");
       for (const s of db.prepare("SELECT * FROM pl2627_season_predictions").all()) {
         const nt = teamMap[s.team_id];
-        if (nt) insSP.run(s.participant_id, s.position, nt, s.created_at);
+        if (nt) { insSP.run(s.participant_id, s.position, nt, s.created_at); stats.seasonPreds++; }
+        else stats.seasonPredsSkipped++;
       }
       // old player id -> new player id (matched by team code + player name)
       const newPlayerByKey = {};
       for (const r of db.prepare("SELECT lp.id, lp.name, lt.code FROM league_players lp JOIN league_teams lt ON lp.team_id = lt.id WHERE lp.league = 'epl2627'").all()) newPlayerByKey[`${r.code}|${r.name}`] = r.id;
       const oldPlayerMap = {};
-      for (const op of db.prepare("SELECT pl.id, pl.name, t.code FROM pl2627_players pl JOIN pl2627_teams t ON pl.team_id = t.id").all()) oldPlayerMap[op.id] = newPlayerByKey[`${op.code}|${op.name}`] || null;
+      const oldPlayerName = {};
+      for (const op of db.prepare("SELECT pl.id, pl.name, t.code FROM pl2627_players pl JOIN pl2627_teams t ON pl.team_id = t.id").all()) {
+        oldPlayerMap[op.id] = newPlayerByKey[`${op.code}|${op.name}`] || null;
+        oldPlayerName[op.id] = `${op.code}|${op.name}`;
+      }
       const insAP = db.prepare("INSERT OR IGNORE INTO league_award_picks (participant_id, league, award_category, player_id, team_id, updated_at) VALUES (?, 'epl2627', ?, ?, ?, ?)");
       for (const ap of db.prepare("SELECT * FROM pl2627_player_award_picks").all()) {
-        insAP.run(ap.participant_id, ap.award_category, ap.player_id ? oldPlayerMap[ap.player_id] : null, ap.team_id ? teamMap[ap.team_id] : null, ap.updated_at);
+        const mappedPlayer = ap.player_id ? oldPlayerMap[ap.player_id] : null;
+        // A player-type pick (had a player_id) that maps to null lost its player — a real,
+        // silent data loss. A team-type pick (team_id only) legitimately has no player.
+        if (ap.player_id && !mappedPlayer) { stats.awardPicksUnmapped++; unmappedPlayers.add(oldPlayerName[ap.player_id] || `id:${ap.player_id}`); }
+        insAP.run(ap.participant_id, ap.award_category, mappedPlayer, ap.team_id ? teamMap[ap.team_id] : null, ap.updated_at);
+        stats.awardPicks++;
       }
       const insAR = db.prepare("INSERT OR IGNORE INTO league_award_results (league, award_category, player_id, team_id, set_at) VALUES ('epl2627', ?, ?, ?, ?)");
       for (const ar of db.prepare("SELECT * FROM pl2627_player_award_results").all()) {
-        insAR.run(ar.award_category, ar.player_id ? oldPlayerMap[ar.player_id] : null, ar.team_id ? teamMap[ar.team_id] : null, ar.set_at);
+        const mappedPlayer = ar.player_id ? oldPlayerMap[ar.player_id] : null;
+        if (ar.player_id && !mappedPlayer) { stats.awardResultsUnmapped++; unmappedPlayers.add(oldPlayerName[ar.player_id] || `id:${ar.player_id}`); }
+        insAR.run(ar.award_category, mappedPlayer, ar.team_id ? teamMap[ar.team_id] : null, ar.set_at);
+        stats.awardResults++;
       }
       db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('epl_migrated_to_league', ?)").run(new Date().toISOString());
     });
     migrate();
-    console.log("Migrated EPL (pl2627_*) data into the league_* engine.");
+    console.log(`Migrated EPL (pl2627_*) into the league_* engine: ${stats.matchPreds} match preds, ${stats.seasonPreds} season preds, ${stats.awardPicks} award picks, ${stats.awardResults} award results.`);
+    if (stats.matchPredsSkipped || stats.seasonPredsSkipped) {
+      console.log(`  ⚠ EPL migration skipped predictions (unmapped team/match): ${stats.matchPredsSkipped} match, ${stats.seasonPredsSkipped} season.`);
+    }
+    if (stats.awardPicksUnmapped || stats.awardResultsUnmapped) {
+      console.log(`  ⚠ EPL migration: ${stats.awardPicksUnmapped} award pick(s) + ${stats.awardResultsUnmapped} award result(s) had a player that did not match the new squad seed and were migrated WITHOUT a player. Unmatched players: ${[...unmappedPlayers].join(", ")}`);
+    }
   }
 } catch (err) {
   console.log("EPL migration skipped:", err.message);
