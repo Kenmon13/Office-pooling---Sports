@@ -9,9 +9,20 @@ const COMPETITION = "WC"; // FIFA World Cup
 // Map their tla -> our code, per league, so fixture/score sync can match them. Without this,
 // e.g. Nottingham Forest's fixtures are all skipped. Extend LALIGA when football-data's PD tlas
 // are confirmed against our laliga.com-derived codes (unmatched codes are logged as unknownCodes).
+// KEY = football-data.org's tla, VALUE = our league_teams.code. Only clubs whose codes differ
+// need an entry; matching codes fall through untouched. A wrong entry would misattribute a club's
+// fixtures, so only high-confidence, collision-free mappings live here — anything unconfirmed is
+// left out and will surface as an unknownCode in the sync log once PD season 2026 publishes.
 const TLA_ALIASES = {
   epl2627: { NOT: "NFO" }, // Nottingham Forest
-  laliga2627: {},          // TODO: fill from football-data PD tlas vs our La Liga codes
+  laliga2627: {
+    ATL: "ATM", // Atlético de Madrid (fd ATL → our ATM)
+    DEP: "RCD", // Deportivo de La Coruña, promoted (fd DEP → our RCD)
+    // Promoted clubs to confirm against the first PD sync's unknownCodes log:
+    //   • Racing Santander — our RAC; fd likely also RAC (no alias unless the log says otherwise).
+    //   • Málaga — our MGA; candidate is MAL:MGA, omitted for now because fd's "MAL" has
+    //     historically been Mallorca — verify it's Málaga in the 26/27 feed before adding.
+  },
 };
 const mapCode = (leagueCode, tla) => (TLA_ALIASES[leagueCode] || {})[tla] || tla;
 
