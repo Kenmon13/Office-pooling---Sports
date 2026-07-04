@@ -190,8 +190,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
 
   const poolPredictionsSection = (
     <section className="ko-pool-preds">
-      <h3>Everyone&rsquo;s predictions</h3>
-      <p className="ko-pool-preds-sub">Pick a match to see how everyone in the pool predicted it.</p>
+      <h3>This pool&rsquo;s predictions</h3>
+      <p className="ko-pool-preds-sub">Pick a match to see how this pool&rsquo;s members predicted it.</p>
       <select
         className="ko-pool-preds-select"
         value={poolPredMatchId}
