@@ -1161,6 +1161,25 @@ app.get("/api/knockout-predictions/:participantId", (req, res) => {
   res.json(predictions);
 });
 
+// Every pool member's prediction for a single knockout match — powers the
+// per-match "everyone's predictions" table in the Knockout Stage view. The same
+// picks are already visible per-player from the leaderboard, so this is just a
+// read-only, pool-scoped re-slice of that data. Members with no pick are included
+// with null fields so the table shows who still hasn't predicted.
+app.get("/api/pools/:poolId/knockout-predictions/:matchId", (req, res) => {
+  const { poolId, matchId } = req.params;
+  const rows = db.prepare(`
+    SELECT p.id as participant_id, p.name,
+           kp.predicted_winner, kp.predicted_home_score, kp.predicted_away_score
+    FROM participants p
+    LEFT JOIN knockout_predictions kp
+      ON kp.participant_id = p.id AND kp.match_id = ?
+    WHERE p.pool_id = ?
+    ORDER BY p.name COLLATE NOCASE
+  `).all(matchId, poolId);
+  res.json(rows);
+});
+
 app.post("/api/knockout-predictions", (req, res) => {
   const { participant_id, match_id, predicted_winner, predicted_home_score, predicted_away_score } = req.body;
   if (!participant_id || !match_id || !predicted_winner) {

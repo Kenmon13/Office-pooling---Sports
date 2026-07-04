@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import {
   fetchKnockoutMatches, fetchKnockoutPredictions, submitKnockoutPrediction, fetchKnockoutDeadline,
   fetchWC2022KnockoutMatches, fetchWC2022KnockoutPredictions, submitWC2022KnockoutPrediction, fetchWC2022KnockoutDeadline,
+  fetchPoolKnockoutMatchPredictions,
 } from "../api";
 import Bracket from "../components/Bracket";
 import Bracket2022 from "../components/Bracket2022";
 import { ROUND_ORDER } from "../windowsHelpers";
+import { flag } from "../flags";
 
 function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset, exactScoresDisabled = false }) {
   const isWC2022 = tournament === "wc2022";
@@ -17,6 +19,11 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
   const [groupStageComplete, setGroupStageComplete] = useState(false);
   const [koStageComplete, setKoStageComplete] = useState(false);
   const [matchMeta, setMatchMeta] = useState({});
+
+  // "Everyone's predictions" per-match viewer (wc2026 only)
+  const [poolPredMatchId, setPoolPredMatchId] = useState("");
+  const [poolPreds, setPoolPreds] = useState([]);
+  const [poolPredsLoading, setPoolPredsLoading] = useState(false);
 
   useEffect(() => {
     if (isWC2022) {
@@ -55,6 +62,17 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
       });
     }
   }, [currentUser, isWC2022]);
+
+  // Load every pool member's prediction for the chosen match on demand.
+  useEffect(() => {
+    if (isWC2022 || !poolId || !poolPredMatchId) return;
+    let cancelled = false;
+    fetchPoolKnockoutMatchPredictions(poolId, poolPredMatchId)
+      .then((rows) => { if (!cancelled) setPoolPreds(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setPoolPreds([]); })
+      .finally(() => { if (!cancelled) setPoolPredsLoading(false); });
+    return () => { cancelled = true; };
+  }, [isWC2022, poolId, poolPredMatchId]);
 
   const handlePick = async (matchId, teamId, draftHome, draftAway) => {
     if (!currentUser) return;
@@ -148,6 +166,95 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
       </div>
     </div>
   ) : null;
+
+  // Matches selectable in the "everyone's predictions" viewer: both teams
+  // confirmed, ordered by round then kickoff.
+  const ROUND_LABELS = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-Finals", SF: "Semi-Finals", F: "Final" };
+  const selectableKoMatches = koMatches
+    .filter((m) => m.home_team_name && m.away_team_name)
+    .sort((a, b) =>
+      (ROUND_ORDER[a.round] || 99) - (ROUND_ORDER[b.round] || 99) ||
+      String(a.match_date || "").localeCompare(String(b.match_date || "")) ||
+      String(a.id).localeCompare(String(b.id))
+    );
+  const selectedPredMatch = koMatches.find((m) => m.id === poolPredMatchId) || null;
+  // Resolve a stored predicted_winner ("home"/"away" or a team id) to a display name.
+  const winnerLabel = (row, m) => {
+    if (!m || row.predicted_winner == null) return null;
+    const w = String(row.predicted_winner);
+    if (w === "home" || w === String(m.home_team_id)) return { code: m.home_team_code, name: m.home_team_name };
+    if (w === "away" || w === String(m.away_team_id)) return { code: m.away_team_code, name: m.away_team_name };
+    return null;
+  };
+  const poolPredsPicked = poolPreds.filter((r) => r.predicted_winner != null).length;
+
+  const poolPredictionsSection = (
+    <section className="ko-pool-preds">
+      <h3>Everyone&rsquo;s predictions</h3>
+      <p className="ko-pool-preds-sub">Pick a match to see how everyone in the pool predicted it.</p>
+      <select
+        className="ko-pool-preds-select"
+        value={poolPredMatchId}
+        onChange={(e) => { setPoolPreds([]); setPoolPredsLoading(!!e.target.value); setPoolPredMatchId(e.target.value); }}
+      >
+        <option value="">Select a match…</option>
+        {selectableKoMatches.map((m) => (
+          <option key={m.id} value={m.id}>
+            {ROUND_LABELS[m.round] || m.round}: {m.home_team_name} vs {m.away_team_name}
+          </option>
+        ))}
+      </select>
+
+      {poolPredMatchId && selectedPredMatch && (
+        <>
+          <div className="ko-pool-preds-matchline">
+            <span>{flag(selectedPredMatch.home_team_code)} {selectedPredMatch.home_team_name}</span>
+            <span className="ko-pool-preds-vs">vs</span>
+            <span>{flag(selectedPredMatch.away_team_code)} {selectedPredMatch.away_team_name}</span>
+            {selectedPredMatch.status === "finished" &&
+              selectedPredMatch.home_score != null && selectedPredMatch.away_score != null && (
+              <span className="ko-pool-preds-result">
+                Final: {selectedPredMatch.home_score}&ndash;{selectedPredMatch.away_score}
+              </span>
+            )}
+          </div>
+          {poolPredsLoading ? (
+            <p className="notice">Loading…</p>
+          ) : poolPreds.length === 0 ? (
+            <p className="notice">No members in this pool yet.</p>
+          ) : (
+            <>
+              <div className="ko-pool-preds-count">
+                {poolPredsPicked} of {poolPreds.length} predicted
+              </div>
+              <table className="ko-pool-preds-table">
+                <thead>
+                  <tr><th>Player</th><th>Winner</th>{!exactScoresDisabled && <th>Score</th>}</tr>
+                </thead>
+                <tbody>
+                  {poolPreds.map((row) => {
+                    const w = winnerLabel(row, selectedPredMatch);
+                    const hasScore = row.predicted_home_score != null && row.predicted_away_score != null;
+                    return (
+                      <tr key={row.participant_id} className={w ? "" : "ko-pool-preds-nopick"}>
+                        <td>{row.name}</td>
+                        <td>{w ? <>{flag(w.code)} {w.name}</> : <span className="ko-pool-preds-dash">No pick</span>}</td>
+                        {!exactScoresDisabled && (
+                          <td>{hasScore
+                            ? `${row.predicted_home_score}–${row.predicted_away_score}`
+                            : <span className="ko-pool-preds-dash">&mdash;</span>}</td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
 
   if (isWC2022) {
     return (
@@ -256,6 +363,8 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
         displayTzOffset={displayTzOffset}
         exactScoresDisabled={exactScoresDisabled}
       />
+
+      {selectableKoMatches.length > 0 && poolPredictionsSection}
     </div>
   );
 }

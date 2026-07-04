@@ -2532,6 +2532,110 @@ nav a.active {
   margin-right: 4px;
 }
 
+/* "Everyone's predictions" per-match viewer */
+.ko-pool-preds {
+  margin-top: 28px;
+  background: #0f240f;
+  border: 1px solid #1e3a1e;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.ko-pool-preds h3 {
+  margin: 0;
+  color: #6fdc6f;
+  font-size: 16px;
+}
+
+.ko-pool-preds-sub {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  color: #7da67d;
+}
+
+.ko-pool-preds-select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0b1f0b;
+  color: #ddd;
+  border: 1px solid #2a4a2a;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ko-pool-preds-select:focus {
+  outline: none;
+  border-color: #6fdc6f;
+}
+
+.ko-pool-preds-matchline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 8px;
+  font-weight: 600;
+  color: #cfe8cf;
+}
+
+.ko-pool-preds-vs {
+  color: #6a8a6a;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.ko-pool-preds-result {
+  margin-left: auto;
+  color: #6fdc6f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ko-pool-preds-count {
+  font-size: 12px;
+  color: #7da67d;
+  margin-bottom: 6px;
+}
+
+.ko-pool-preds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.ko-pool-preds-table th {
+  text-align: left;
+  color: #6a8a6a;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 8px;
+  border-bottom: 1px solid #1e3a1e;
+}
+
+.ko-pool-preds-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #14281433;
+  color: #cfe8cf;
+}
+
+.ko-pool-preds-table th:last-child,
+.ko-pool-preds-table td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ko-pool-preds-nopick td {
+  color: #6a8a6a;
+}
+
+.ko-pool-preds-dash {
+  color: #5a6a5a;
+}
+
 .team-crest {
   width: 20px;
   height: 20px;

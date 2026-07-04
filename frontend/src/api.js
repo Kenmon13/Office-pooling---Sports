@@ -404,6 +404,11 @@ export async function fetchKnockoutPredictions(participantId) {
   return res.json();
 }
 
+export async function fetchPoolKnockoutMatchPredictions(poolId, matchId) {
+  const res = await fetch(`${API}/pools/${poolId}/knockout-predictions/${matchId}`);
+  return res.json();
+}
+
 export async function submitKnockoutPrediction(participant_id, match_id, predicted_winner, predicted_home_score, predicted_away_score) {
   const res = await fetch(`${API}/knockout-predictions`, {
     method: "POST",
