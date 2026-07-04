@@ -4200,6 +4200,33 @@ nav a.active {
   gap: 8px;
 }
 
+.notif-card-clickable {
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, transform 0.06s;
+}
+
+.notif-card-clickable:hover {
+  border-color: #6fdc6f;
+  background: #10301033;
+}
+
+.notif-card-clickable:active {
+  transform: scale(0.99);
+}
+
+.notif-card-clickable:focus-visible {
+  outline: 2px solid #6fdc6f;
+  outline-offset: 2px;
+}
+
+.win-go-hint {
+  color: #6fdc6f;
+  font-size: 12px;
+  font-weight: 600;
+  padding-left: 23px;
+  margin-top: 2px;
+}
+
 .win-icon {
   font-size: 15px;
   flex-shrink: 0;

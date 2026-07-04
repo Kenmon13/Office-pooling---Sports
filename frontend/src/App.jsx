@@ -267,6 +267,18 @@ function App() {
     setPendingNavigation(`/picks/${participantId}`);
   };
 
+  // From a pick-reminder notification card: jump straight to the pick screen
+  // that needs attention. poolData is set when the card belongs to a different
+  // pool (global bell); null means navigate within the pool we're already in.
+  const handleNotifNavigate = (poolData, route) => {
+    if (!route) return;
+    setShowPatchNotes(false);
+    if (poolData && poolData.id !== pool?.id) {
+      handleJoinPool(poolData);
+    }
+    setPendingNavigation(route);
+  };
+
   const handleBackToSport = () => {
     setSelectedSport(null);
     setSelectedTournament(null);
@@ -661,6 +673,7 @@ function App() {
             tournament={null}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
+            onNavigate={handleNotifNavigate}
           />
         )}
         {showIssueChat && <IssueChatModal
@@ -710,6 +723,7 @@ function App() {
             tournament={null}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
+            onNavigate={handleNotifNavigate}
           />
         )}
         {showIssueChat && <IssueChatModal
@@ -760,6 +774,7 @@ function App() {
             tournament={null}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
+            onNavigate={handleNotifNavigate}
           />
         )}
         {showIssueChat && <IssueChatModal
@@ -1306,6 +1321,7 @@ function App() {
             tournament={selectedTournament?.id}
             onReadPoints={() => setUnreadPoints(0)}
             onUnreadWindows={handleUnreadWindows}
+            onNavigate={handleNotifNavigate}
             exactScoresDisabled={exactScoresDisabled}
           />
         )}

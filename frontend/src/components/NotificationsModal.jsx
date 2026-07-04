@@ -3,6 +3,23 @@ import { fetchUserPools, fetchHistory, fetchWC2022History } from "../api";
 import {
   generateSections, countUnread, fetchWindowsForPool, dismissWindowCards, applyDismissals,
 } from "../windowsHelpers";
+import { isLeague } from "../leagues";
+
+// Map a pick-reminder card to the in-pool route where that pick is made, so the
+// card can deep-link the user straight to the screen that needs attention.
+function cardRoute(cardId, isLeaguePool) {
+  if (!cardId) return null;
+  if (cardId.startsWith("player")) return "/players";
+  if (isLeaguePool) {
+    if (cardId.startsWith("group")) return "/";
+    if (cardId.startsWith("champion") || cardId.startsWith("season")) return "/season";
+    return null;
+  }
+  if (cardId.startsWith("group")) return "/";
+  if (cardId.startsWith("ko")) return "/knockouts";
+  if (cardId.startsWith("champion") || cardId.startsWith("third")) return "/champion";
+  return null;
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -144,7 +161,7 @@ function makeKoSummaryCard(koCards) {
   };
 }
 
-function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSections }) {
+function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSections, onNavigate, tournament }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!hasParticipant) {
@@ -152,21 +169,37 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
   }
   if (!loaded) return <p className="notif-empty">Loading…</p>;
 
-  const renderCard = (c) => (
-    <div key={c.id} className={CARD_CLASS[c.status] || "notif-window-card"}>
-      <div className="win-card-top">
-        <span className="win-icon">{c.icon}</span>
-        <span className="win-title">{c.title}</span>
-        <span className={BADGE_CLASS[c.status] || "win-badge"}>{BADGE_LABEL[c.status]}</span>
+  // pool is set in global mode (the card's own pool); null means the pool we're
+  // already viewing. Only open/optional cards with a known destination are clickable.
+  const renderCard = (c, pool) => {
+    const isLeaguePool = isLeague(pool ? pool.tournament : tournament);
+    const route = cardRoute(c.id, isLeaguePool);
+    const clickable = onNavigate && route && ["red", "orange"].includes(c.status);
+    const go = () => onNavigate(pool || null, route);
+    return (
+      <div
+        key={c.id}
+        className={`${CARD_CLASS[c.status] || "notif-window-card"}${clickable ? " notif-card-clickable" : ""}`}
+        onClick={clickable ? go : undefined}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } : undefined}
+      >
+        <div className="win-card-top">
+          <span className="win-icon">{c.icon}</span>
+          <span className="win-title">{c.title}</span>
+          <span className={BADGE_CLASS[c.status] || "win-badge"}>{BADGE_LABEL[c.status]}</span>
+        </div>
+        <div className="win-card-body">{c.body}</div>
+        {c.statusNote && <div className="win-status-note">{c.statusNote}</div>}
+        {c.missingMsg && <div className="win-missed">⚠️ {c.missingMsg}</div>}
+        {c.isChangeWindow && (
+          <div className="win-change-note">💡 Optional — not everyone needs to change</div>
+        )}
+        {clickable && <div className="win-go-hint">Tap to make your pick →</div>}
       </div>
-      <div className="win-card-body">{c.body}</div>
-      {c.statusNote && <div className="win-status-note">{c.statusNote}</div>}
-      {c.missingMsg && <div className="win-missed">⚠️ {c.missingMsg}</div>}
-      {c.isChangeWindow && (
-        <div className="win-change-note">💡 Optional — not everyone needs to change</div>
-      )}
-    </div>
-  );
+    );
+  };
 
   // Global mode: one group of cards per pool, only pools with active alerts
   if (isGlobal && poolSections) {
@@ -187,10 +220,10 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
         {alertPools.map((ps) => (
           <div key={ps.pool.id} className="notif-pool-section">
             <div className="notif-pool-label">{ps.pool.name}</div>
-            {ps.group.filter(hasAlert).map(renderCard)}
-            {ps.winner.filter(hasAlert).map(renderCard)}
-            {ps.koSummary && hasAlert(ps.koSummary) && renderCard(ps.koSummary)}
-            {(ps.awards || []).filter(hasAlert).map(renderCard)}
+            {ps.group.filter(hasAlert).map((c) => renderCard(c, ps.pool))}
+            {ps.winner.filter(hasAlert).map((c) => renderCard(c, ps.pool))}
+            {ps.koSummary && hasAlert(ps.koSummary) && renderCard(ps.koSummary, ps.pool)}
+            {(ps.awards || []).filter(hasAlert).map((c) => renderCard(c, ps.pool))}
           </div>
         ))}
       </div>
@@ -211,8 +244,8 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
   return (
     <div className="notif-tab-content">
       {active.length === 0 && <p className="notif-all-read">All picks made — nothing pending.</p>}
-      {active.map(renderCard)}
-      {expanded && archived.map(renderCard)}
+      {active.map((c) => renderCard(c))}
+      {expanded && archived.map((c) => renderCard(c))}
       {archived.length > 0 && (
         <button className="see-more-btn" onClick={() => setExpanded((x) => !x)}>
           {expanded ? "See less" : `See ${archived.length} archived`}
@@ -224,7 +257,7 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
 
 // ── main component ─────────────────────────────────────────────────────────────
 
-function NotificationsModal({ onClose, participant, poolId, tournament, onReadPoints, onUnreadWindows, exactScoresDisabled = false }) {
+function NotificationsModal({ onClose, participant, poolId, tournament, onReadPoints, onUnreadWindows, onNavigate, exactScoresDisabled = false }) {
   const isGlobal = !participant;
   const isWC2022 = tournament === "wc2022";
 
@@ -517,6 +550,8 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
               isGlobal={isGlobal}
               tournaments={windowTournaments}
               poolSections={poolSections}
+              onNavigate={onNavigate}
+              tournament={tournament}
             />
           )}
         </div>
