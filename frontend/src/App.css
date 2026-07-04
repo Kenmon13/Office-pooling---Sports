@@ -2009,6 +2009,38 @@ nav a.active {
   border-color: #6fdc6f;
 }
 
+.pool-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.pool-page-btn {
+  background: #1a1a1a;
+  color: #c8f0c8;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pool-page-btn:hover:not(:disabled) {
+  border-color: #6fdc6f;
+}
+
+.pool-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pool-page-info {
+  color: #999;
+  font-size: 13px;
+}
+
 .user-list-info {
   display: flex;
   justify-content: space-between;

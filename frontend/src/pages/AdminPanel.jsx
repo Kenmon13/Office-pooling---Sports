@@ -29,6 +29,8 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [replySending, setReplySending] = useState(false);
   const [poolSort, setPoolSort] = useState("recent");
   const [poolSearch, setPoolSearch] = useState("");
+  const [poolMinUsers, setPoolMinUsers] = useState("");
+  const [poolPage, setPoolPage] = useState(0);
   const [userSort, setUserSort] = useState("recent");
   const [userSearch, setUserSearch] = useState("");
   const [issueFilter, setIssueFilter] = useState("all");
@@ -256,12 +258,19 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   );
   const visibleUsers = matchedUsers.slice(0, USER_RENDER_CAP);
 
-  // Pools tab: filter by name, then cap how many render so a 1000+ pool list
-  // stays responsive. Search matches take priority over the cap.
-  const POOL_RENDER_CAP = 100;
+  // Pools tab: filter by name, then paginate so a 1000+ pool list stays
+  // responsive. Only one page (POOL_PAGE_SIZE) renders at a time.
+  const POOL_PAGE_SIZE = 100;
   const poolQuery = poolSearch.trim().toLowerCase();
-  const matchedPools = pools.filter((p) => !poolQuery || (p.name || "").toLowerCase().includes(poolQuery));
-  const visiblePools = sortPools(matchedPools).slice(0, POOL_RENDER_CAP);
+  const exactUsers = poolMinUsers.trim() === "" ? null : parseInt(poolMinUsers, 10);
+  const matchedPools = pools.filter((p) =>
+    (!poolQuery || (p.name || "").toLowerCase().includes(poolQuery)) &&
+    (exactUsers === null || Number.isNaN(exactUsers) || (p.user_count || 0) === exactUsers)
+  );
+  const poolPageCount = Math.max(1, Math.ceil(matchedPools.length / POOL_PAGE_SIZE));
+  const currentPoolPage = Math.min(poolPage, poolPageCount - 1);
+  const poolPageStart = currentPoolPage * POOL_PAGE_SIZE;
+  const visiblePools = sortPools(matchedPools).slice(poolPageStart, poolPageStart + POOL_PAGE_SIZE);
 
   // Group the visible pools by sport, then by tournament.
   const grouped = {};
@@ -306,11 +315,11 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
         <>
           <div className="admin-sort-row">
             <p className="select-subtitle">
-              {poolQuery
+              {poolQuery || (exactUsers !== null && !Number.isNaN(exactUsers))
                 ? `${matchedPools.length} match${matchedPools.length !== 1 ? "es" : ""} of ${pools.length}`
                 : `${pools.length} pool${pools.length !== 1 ? "s" : ""} · ${totalPoolUsers} total participant${totalPoolUsers !== 1 ? "s" : ""}`}
             </p>
-            <select className="admin-sort-select" value={poolSort} onChange={(e) => setPoolSort(e.target.value)}>
+            <select className="admin-sort-select" value={poolSort} onChange={(e) => { setPoolSort(e.target.value); setPoolPage(0); }}>
               <option value="recent">Recent</option>
               <option value="alpha">A &ndash; Z</option>
               <option value="users">Most Users</option>
@@ -321,12 +330,24 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
             className="admin-user-search"
             placeholder="Search pools by name…"
             value={poolSearch}
-            onChange={(e) => setPoolSearch(e.target.value)}
+            onChange={(e) => { setPoolSearch(e.target.value); setPoolPage(0); }}
+          />
+          <input
+            type="number"
+            min="0"
+            className="admin-user-search"
+            placeholder="Exact users in pool…"
+            value={poolMinUsers}
+            onChange={(e) => { setPoolMinUsers(e.target.value); setPoolPage(0); }}
           />
 
           {pools.length === 0 && <p className="notice">No pools created yet.</p>}
           {pools.length > 0 && matchedPools.length === 0 && (
-            <p className="notice">No pools match &ldquo;{poolSearch}&rdquo;.</p>
+            <p className="notice">
+              {poolQuery
+                ? <>No pools match &ldquo;{poolSearch}&rdquo;{exactUsers !== null && !Number.isNaN(exactUsers) ? ` with exactly ${exactUsers} user${exactUsers !== 1 ? "s" : ""}` : ""}.</>
+                : <>No pools with exactly {exactUsers} user{exactUsers !== 1 ? "s" : ""}.</>}
+            </p>
           )}
 
           {Object.entries(grouped).map(([sport, tournaments]) => {
@@ -377,10 +398,29 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
               </div>
             );
           })}
-          {matchedPools.length > POOL_RENDER_CAP && (
-            <p className="notice">
-              Showing first {POOL_RENDER_CAP} of {matchedPools.length}. Type in the search box to narrow it down.
-            </p>
+          {matchedPools.length > POOL_PAGE_SIZE && (
+            <div className="pool-pagination">
+              <button
+                className="pool-page-btn"
+                onClick={() => setPoolPage((n) => Math.max(0, n - 1))}
+                disabled={currentPoolPage === 0}
+                aria-label="Previous page"
+              >
+                &larr; Prev
+              </button>
+              <span className="pool-page-info">
+                {poolPageStart + 1}&ndash;{Math.min(poolPageStart + POOL_PAGE_SIZE, matchedPools.length)} of {matchedPools.length}
+                {" "}(page {currentPoolPage + 1} of {poolPageCount})
+              </span>
+              <button
+                className="pool-page-btn"
+                onClick={() => setPoolPage((n) => Math.min(poolPageCount - 1, n + 1))}
+                disabled={currentPoolPage >= poolPageCount - 1}
+                aria-label="Next page"
+              >
+                Next &rarr;
+              </button>
+            </div>
           )}
         </>
       )}
