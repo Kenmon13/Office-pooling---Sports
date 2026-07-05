@@ -718,6 +718,14 @@ app.put("/api/pools/:poolId/player-awards-lock", requirePoolAdmin, (req, res) =>
   res.json({ success: true, player_awards_locked: locked ? 1 : 0 });
 });
 
+// Void freezes the player-award picks AND makes the section score 0 points for the whole pool.
+app.put("/api/pools/:poolId/player-awards-void", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { voided } = req.body;
+  db.prepare("UPDATE pools SET player_awards_voided = ? WHERE id = ?").run(voided ? 1 : 0, poolId);
+  res.json({ success: true, player_awards_voided: voided ? 1 : 0 });
+});
+
 app.put("/api/pools/:poolId/name", requirePoolAdmin, (req, res) => {
   const poolId = req.params.poolId;
   const { name } = req.body;
@@ -739,9 +747,9 @@ app.put("/api/pools/:poolId/password", requirePoolAdmin, (req, res) => {
 
 app.get("/api/pools/:poolId/player-awards-lock", (req, res) => {
   const poolId = req.params.poolId;
-  const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(poolId);
+  const pool = db.prepare("SELECT player_awards_locked, player_awards_voided FROM pools WHERE id = ?").get(poolId);
   if (!pool) return res.status(404).json({ error: "Pool not found" });
-  res.json({ player_awards_locked: pool.player_awards_locked });
+  res.json({ player_awards_locked: pool.player_awards_locked, player_awards_voided: pool.player_awards_voided });
 });
 
 app.put("/api/pools/:poolId/exact-scores", requirePoolAdmin, (req, res) => {
@@ -1349,6 +1357,7 @@ app.get("/api/leaderboard", (req, res) => {
   const allChampionPicks = db.prepare("SELECT * FROM champion_picks").all();
   const allPlayerAwardPicks = db.prepare("SELECT * FROM player_award_picks").all();
   const awardResults = db.prepare("SELECT * FROM player_award_results").all();
+  const awardsVoidedPools = new Set(db.prepare("SELECT id FROM pools WHERE player_awards_voided = 1").all().map((r) => r.id));
 
   const koPointsMap = { R32: 3, R16: 5, QF: 7, SF: 10, F: 15 };
   const finalMatch = koMatches.find((m) => m.id === "F" && m.winner_team_id);
@@ -1440,13 +1449,16 @@ app.get("/api/leaderboard", (req, res) => {
     const awardPointsMap = { golden_ball: 5, golden_boot: 5, golden_glove: 5, young_player: 2, fair_play: 2 };
     const myAwardPicks = allPlayerAwardPicks.filter((ap) => ap.participant_id === p.id);
     let player_awards_points = 0;
-    for (const ap of myAwardPicks) {
-      const result = awardResults.find((r) => r.award_category === ap.award_category);
-      if (!result) continue;
-      if (ap.award_category === "fair_play") {
-        if (ap.team_id && String(ap.team_id) === String(result.team_id)) player_awards_points += awardPointsMap.fair_play;
-      } else {
-        if (ap.player_id && String(ap.player_id) === String(result.player_id)) player_awards_points += awardPointsMap[ap.award_category];
+    // When the pool admin has voided player awards, the section scores 0 for everyone (picks are kept, not wiped).
+    if (!awardsVoidedPools.has(p.pool_id)) {
+      for (const ap of myAwardPicks) {
+        const result = awardResults.find((r) => r.award_category === ap.award_category);
+        if (!result) continue;
+        if (ap.award_category === "fair_play") {
+          if (ap.team_id && String(ap.team_id) === String(result.team_id)) player_awards_points += awardPointsMap.fair_play;
+        } else {
+          if (ap.player_id && String(ap.player_id) === String(result.player_id)) player_awards_points += awardPointsMap[ap.award_category];
+        }
       }
     }
     points += player_awards_points;
@@ -1990,8 +2002,9 @@ app.get("/api/player-award-picks/:participantId", (req, res) => {
   const { participantId } = req.params;
   const { pool_id } = req.query;
 
-  const pool = pool_id ? db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(pool_id) : null;
-  const locked = !!(pool && pool.player_awards_locked);
+  const pool = pool_id ? db.prepare("SELECT player_awards_locked, player_awards_voided FROM pools WHERE id = ?").get(pool_id) : null;
+  const voided = !!(pool && pool.player_awards_voided);
+  const locked = !!(pool && pool.player_awards_locked) || voided;
 
   const picks = db.prepare(`
     SELECT pap.award_category, pap.player_id, pap.team_id,
@@ -2012,7 +2025,7 @@ app.get("/api/player-award-picks/:participantId", (req, res) => {
     LEFT JOIN teams t ON par.team_id = t.id
   `).all();
 
-  res.json({ picks, results, locked });
+  res.json({ picks, results, locked, voided });
 });
 
 app.post("/api/player-award-picks", (req, res) => {
@@ -2025,8 +2038,8 @@ app.post("/api/player-award-picks", (req, res) => {
   // Check lock
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
   if (participant) {
-    const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(participant.pool_id);
-    if (pool && pool.player_awards_locked) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
+    const pool = db.prepare("SELECT player_awards_locked, player_awards_voided FROM pools WHERE id = ?").get(participant.pool_id);
+    if (pool && (pool.player_awards_locked || pool.player_awards_voided)) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
   }
 
   if (award_category === "fair_play") {
@@ -2178,8 +2191,9 @@ app.get("/api/history/:participantId", (req, res) => {
   const { participantId } = req.params;
   const { pool_id } = req.query;
   const events = [];
-  const poolRowH = pool_id ? db.prepare("SELECT exact_scores_disabled FROM pools WHERE id = ?").get(pool_id) : null;
+  const poolRowH = pool_id ? db.prepare("SELECT exact_scores_disabled, player_awards_voided FROM pools WHERE id = ?").get(pool_id) : null;
   const exactScoresDisabledH = !!(poolRowH && poolRowH.exact_scores_disabled);
+  const awardsVoidedH = !!(poolRowH && poolRowH.player_awards_voided);
 
   const groups = db.prepare("SELECT * FROM groups").all();
   const teams = db.prepare("SELECT * FROM teams").all();
@@ -2324,10 +2338,11 @@ app.get("/api/history/:participantId", (req, res) => {
       const isCorrect = ap.award_category === "fair_play"
         ? ap.team_id && String(ap.team_id) === String(result.team_id)
         : ap.player_id && String(ap.player_id) === String(result.player_id);
-      const pts = isCorrect ? awardPointsMap[ap.award_category] : 0;
+      // Voided by the pool admin: keep showing the pick, but it scores 0.
+      const pts = (isCorrect && !awardsVoidedH) ? awardPointsMap[ap.award_category] : 0;
       const winnerName = ap.award_category === "fair_play" ? result.team_name : result.player_name;
       const desc = isCorrect
-        ? `${label}: ${pickName} ✓`
+        ? `${label}: ${pickName} ✓${awardsVoidedH ? " (voided — 0 pts)" : ""}`
         : `${label}: picked ${pickName}, winner was ${winnerName} ✗`;
       events.push({ event_date: result.set_at, type: "player_award", description: desc, pts_change: pts });
     }
@@ -3079,6 +3094,7 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
   if (!poolId) return res.status(400).json({ error: "pool_id required" });
 
   const participants = db.prepare("SELECT p.* FROM participants p JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND u.is_admin = 0 ORDER BY p.name").all(poolId);
+  const awardsVoided = !!db.prepare("SELECT player_awards_voided FROM pools WHERE id = ?").get(poolId)?.player_awards_voided;
   const finishedMatches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status = 'finished'").all(code);
   const allMatchPreds = db.prepare("SELECT mp.* FROM league_match_predictions mp JOIN league_matches m ON mp.match_id = m.id WHERE m.league = ?").all(code);
   const teams = db.prepare("SELECT * FROM league_teams WHERE league = ?").all(code);
@@ -3156,13 +3172,16 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
     }
 
     let awardPoints = 0;
-    for (const ap of (awardPicksByParticipant[part.id] || [])) {
-      const r = awardResults.find((x) => x.award_category === ap.award_category);
-      if (!r) continue;
-      if (managerKeys.has(ap.award_category)) {
-        if (ap.team_id && String(ap.team_id) === String(r.team_id)) awardPoints += S.award;
-      } else {
-        if (ap.player_id && String(ap.player_id) === String(r.player_id)) awardPoints += S.award;
+    // Voided by the pool admin: award section scores 0 for everyone (picks are kept, not wiped).
+    if (!awardsVoided) {
+      for (const ap of (awardPicksByParticipant[part.id] || [])) {
+        const r = awardResults.find((x) => x.award_category === ap.award_category);
+        if (!r) continue;
+        if (managerKeys.has(ap.award_category)) {
+          if (ap.team_id && String(ap.team_id) === String(r.team_id)) awardPoints += S.award;
+        } else {
+          if (ap.player_id && String(ap.player_id) === String(r.player_id)) awardPoints += S.award;
+        }
       }
     }
 
@@ -3183,8 +3202,9 @@ app.get("/api/league/:code/players", resolveLeague, (req, res) => {
 app.get("/api/league/:code/player-award-picks/:participantId", resolveLeague, (req, res) => {
   const { code } = req.params;
   const { pool_id } = req.query;
-  const pool = pool_id ? db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(pool_id) : null;
-  const lockedByAdmin = !!(pool && pool.player_awards_locked);
+  const pool = pool_id ? db.prepare("SELECT player_awards_locked, player_awards_voided FROM pools WHERE id = ?").get(pool_id) : null;
+  const voided = !!(pool && pool.player_awards_voided);
+  const lockedByAdmin = !!(pool && pool.player_awards_locked) || voided;
   const deadline = leaguePoolSeasonDeadline(code, pool_id);
   const locked = lockedByAdmin || leagueSeasonLocked(code, pool_id);
 
@@ -3206,7 +3226,7 @@ app.get("/api/league/:code/player-award-picks/:participantId", resolveLeague, (r
     LEFT JOIN league_teams t2 ON par.team_id = t2.id
     WHERE par.league = ?`).all(code);
 
-  res.json({ picks, results, locked, lockedByAdmin, deadline });
+  res.json({ picks, results, locked, lockedByAdmin, voided, deadline });
 });
 
 app.post("/api/league/:code/player-award-picks", resolveLeague, authenticateToken, (req, res) => {
@@ -3220,8 +3240,8 @@ app.post("/api/league/:code/player-award-picks", resolveLeague, authenticateToke
 
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
   if (participant) {
-    const pool = db.prepare("SELECT player_awards_locked FROM pools WHERE id = ?").get(participant.pool_id);
-    if (pool && pool.player_awards_locked) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
+    const pool = db.prepare("SELECT player_awards_locked, player_awards_voided FROM pools WHERE id = ?").get(participant.pool_id);
+    if (pool && (pool.player_awards_locked || pool.player_awards_voided)) return res.status(403).json({ error: "Player awards have been locked by your pool admin" });
     if (leagueSeasonLocked(code, participant.pool_id)) return res.status(403).json({ error: "Player awards are locked — the entry window for this pool has closed" });
   }
 

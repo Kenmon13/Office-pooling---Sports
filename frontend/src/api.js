@@ -546,6 +546,14 @@ export async function updatePlayerAwardsLock(poolId, locked) {
   });
   return res.json();
 }
+export async function updatePlayerAwardsVoid(poolId, voided) {
+  const res = await fetch(`${API}/pools/${poolId}/player-awards-void`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ voided }),
+  });
+  return res.json();
+}
 
 export async function fetchExactScoresSetting(poolId) {
   return (await fetch(`${API}/pools/${poolId}/exact-scores`)).json();
