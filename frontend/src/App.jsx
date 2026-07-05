@@ -26,7 +26,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
 import PollPrompt from "./components/PollModal";
@@ -314,6 +314,7 @@ function App() {
   const [championW2Locked, setChampionW2Locked] = useState(false);
   const [championUnlocked, setChampionUnlocked] = useState(false);
   const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
+  const [playerAwardsVoided, setPlayerAwardsVoided] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [editingPoolName, setEditingPoolName] = useState(false);
@@ -352,6 +353,9 @@ function App() {
       fetchPlayerAwardsLock(pool.id).then((data) => {
         if (data && typeof data.player_awards_locked !== "undefined") {
           setPlayerAwardsLocked(!!data.player_awards_locked);
+        }
+        if (data && typeof data.player_awards_voided !== "undefined") {
+          setPlayerAwardsVoided(!!data.player_awards_voided);
         }
       }).catch(() => {});
       fetchExactScoresSetting(pool.id).then((data) => {
@@ -1161,9 +1165,11 @@ function App() {
               {isPoolAdmin && (
                 <div className="pool-settings-row">
                   <span className="pool-settings-label">Player Award Picks</span>
-                  <span className="pool-settings-value">
+                  <span className="pool-settings-value" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       className={`btn-small ${playerAwardsLocked ? "btn-danger" : ""}`}
+                      disabled={playerAwardsVoided}
+                      title={playerAwardsVoided ? "Awards are voided (already frozen)" : ""}
                       onClick={async () => {
                         const newVal = !playerAwardsLocked;
                         const res = await updatePlayerAwardsLock(pool.id, newVal);
@@ -1171,6 +1177,18 @@ function App() {
                       }}
                     >
                       {playerAwardsLocked ? "Locked — Unlock" : "Open — Lock"}
+                    </button>
+                    <button
+                      className={`btn-small ${playerAwardsVoided ? "btn-danger" : ""}`}
+                      title="Voiding freezes the picks and makes the whole section score 0 points. Picks are kept, not deleted."
+                      onClick={async () => {
+                        const newVal = !playerAwardsVoided;
+                        if (newVal && !window.confirm("Void player awards? Picks are kept, but this section will score 0 points for everyone in the pool.")) return;
+                        const res = await updatePlayerAwardsVoid(pool.id, newVal);
+                        if (!res.error) setPlayerAwardsVoided(newVal);
+                      }}
+                    >
+                      {playerAwardsVoided ? "Voided (0 pts) — Restore" : "Void (0 pts)"}
                     </button>
                   </span>
                 </div>

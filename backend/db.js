@@ -915,6 +915,9 @@ db.exec(`
 // Admin lock for player awards section
 try { db.exec("ALTER TABLE pools ADD COLUMN player_awards_locked INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 
+// Admin void for player awards: freezes picks AND makes the section score 0 for the whole pool
+try { db.exec("ALTER TABLE pools ADD COLUMN player_awards_voided INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+
 // Pool admin toggle to disable exact score predictions
 try { db.exec("ALTER TABLE pools ADD COLUMN exact_scores_disabled INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 
