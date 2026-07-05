@@ -41,6 +41,7 @@ const TOURNAMENT_META = {
   wc2022: { id: "wc2022", name: "World Cup 2022", emoji: "🏆" },
   epl2627: { id: "epl2627", name: "Premier League 26/27", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
   laliga2627: { id: "laliga2627", name: "La Liga 26/27", emoji: "🇪🇸" },
+  seriea2627: { id: "seriea2627", name: "Serie A 26/27", emoji: "🇮🇹" },
 };
 
 function App() {

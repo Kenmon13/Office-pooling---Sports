@@ -51,6 +51,24 @@ export const LEAGUES = {
       { key: "best_coach", label: "Best Coach",         emoji: "\u{1F9D1}‍\u{1F4BC}", pts: 5, type: "team", desc: "Awarded to the best coach of the season." },
     ],
   },
+
+  seriea2627: {
+    code: "seriea2627",
+    name: "Serie A 26/27",
+    shortName: "Serie A",
+    emoji: "🇮🇹",
+    teamCount: 20,
+    matchdays: 38,
+    zones: ZONES_20,
+    zoneLabels: ZONE_LABELS_EU,
+    awards: [
+      { key: "capocannoniere", label: "Capocannoniere",       emoji: "\u{1F45F}", pts: 5, type: "player", desc: "Awarded to the top goalscorer of the season." },
+      { key: "best_gk",        label: "Best Goalkeeper",       emoji: "\u{1F9E4}", pts: 5, type: "player", posFilter: "GK", desc: "Awarded to the best goalkeeper of the season." },
+      { key: "mvp",            label: "MVP",                   emoji: "\u{1F947}", pts: 5, type: "player", desc: "Awarded to the best overall player of the season." },
+      { key: "best_young",     label: "Best Young Player",     emoji: "\u{1F31F}", pts: 5, type: "player", desc: "Awarded to the best player aged 23 or younger." },
+      { key: "best_coach",     label: "Coach of the Season",   emoji: "\u{1F9D1}‍\u{1F4BC}", pts: 5, type: "team", desc: "Awarded to the best coach of the season." },
+    ],
+  },
 };
 
 export function isLeague(code) {

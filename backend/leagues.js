@@ -16,6 +16,7 @@
 
 const EPL_SQUADS = require("./epl-squad-data");
 const LALIGA_SQUADS = require("./laliga-squad-data");
+const SERIEA_SQUADS = require("./seriea-squad-data");
 
 const DEFAULT_SCORING = {
   matchOutcome: 2,   // correct result (home/draw/away)
@@ -72,6 +73,29 @@ const leagues = {
       { key: "mvp", label: "MVP", type: "player" },
       { key: "best_young", label: "Best Young Player", type: "player" },
       { key: "best_coach", label: "Best Coach", type: "manager" },
+    ],
+    scoring: DEFAULT_SCORING,
+  },
+
+  seriea2627: {
+    code: "seriea2627",
+    name: "Serie A 26/27",
+    shortName: "Serie A",
+    emoji: "🇮🇹",
+    fdCompetition: "SA",
+    // No live Serie A squad feed exists; squads are file-seeded from seriea-squad-data.js and
+    // refreshed manually. Team codes are football-data.org TLAs, so fixtures need no code mapping.
+    squadSource: "none",
+    squadData: SERIEA_SQUADS,
+    teamCount: 20,
+    matchdays: 38,
+    zones: ZONES_20,
+    awards: [
+      { key: "capocannoniere", label: "Capocannoniere", type: "player" }, // top scorer
+      { key: "best_gk", label: "Best Goalkeeper", type: "player" },
+      { key: "mvp", label: "MVP", type: "player" },
+      { key: "best_young", label: "Best Young Player", type: "player" },
+      { key: "best_coach", label: "Coach of the Season", type: "manager" },
     ],
     scoring: DEFAULT_SCORING,
   },
