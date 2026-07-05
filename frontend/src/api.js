@@ -16,11 +16,11 @@ export async function fetchUserPools() {
   return res.json();
 }
 
-export async function signUp(username, password, display_name) {
+export async function signUp(username, password, display_name, email) {
   const res = await fetch(`${API}/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password, display_name }),
+    body: JSON.stringify({ username, password, display_name, email }),
   });
   const data = await res.json();
   if (data.token) localStorage.setItem("auth_token", data.token);

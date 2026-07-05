@@ -41,11 +41,11 @@ function Auth({ onAuth, initialView }) {
     setError("");
 
     if (mode === "signup") {
-      if (!username.trim() || !password.trim() || !displayName.trim()) {
+      if (!username.trim() || !password.trim() || !displayName.trim() || !email.trim()) {
         setError("All fields are required");
         return;
       }
-      const result = await signUp(username.trim(), password.trim(), displayName.trim());
+      const result = await signUp(username.trim(), password.trim(), displayName.trim(), email.trim());
       if (result.error) {
         setError(result.error);
         return;
@@ -178,6 +178,14 @@ function Auth({ onAuth, initialView }) {
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Display name"
             autoFocus
+          />
+        )}
+        {mode === "signup" && (
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
           />
         )}
         <input
