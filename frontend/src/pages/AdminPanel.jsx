@@ -796,7 +796,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                   handleAdminReply();
                 }
               }}
-              rows={1}
+              rows={4}
               autoFocus
             />
             <button className="btn-submit" onClick={handleAdminReply} disabled={replySending || !replyText.trim()}>

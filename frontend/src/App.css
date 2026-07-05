@@ -4034,6 +4034,12 @@ nav a.active {
   font-family: inherit;
   resize: none;
 }
+/* Reply box: show several rows and let the admin drag it taller. */
+.issue-chat-input textarea {
+  resize: vertical;
+  min-height: 5rem;
+  line-height: 1.4;
+}
 .issue-chat-input input:focus,
 .issue-chat-input textarea:focus {
   outline: none;
