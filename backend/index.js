@@ -29,14 +29,22 @@ app.use(express.static(path.join(__dirname, "public")));
 // --- Auth ---
 
 app.post("/api/auth/signup", (req, res) => {
-  const { username, password, display_name } = req.body;
+  const { username, password, display_name, email } = req.body;
   if (!username || !username.trim()) return res.status(400).json({ error: "Username is required" });
   if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });
   if (!display_name || !display_name.trim()) return res.status(400).json({ error: "Display name is required" });
+  if (!email || !email.trim()) return res.status(400).json({ error: "Email is required" });
+  const normEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail)) return res.status(400).json({ error: "Invalid email format" });
+  const normUsername = username.trim().toLowerCase();
   try {
+    // Reject if the email is already registered. Without this, a password account with no
+    // matching email later blocks Google sign-in from linking, spawning duplicate accounts.
+    const emailTaken = db.prepare("SELECT id FROM users WHERE lower(email) = ?").get(normEmail);
+    if (emailTaken) return res.status(409).json({ error: "An account with this email already exists. Try signing in, or use \"Continue with Google\"." });
     const hashed = bcrypt.hashSync(password.trim(), 10);
-    const result = db.prepare("INSERT INTO users (username, password, display_name) VALUES (?, ?, ?)").run(username.trim().toLowerCase(), hashed, display_name.trim());
-    const user = { id: result.lastInsertRowid, username: username.trim().toLowerCase(), display_name: display_name.trim(), is_admin: 0 };
+    const result = db.prepare("INSERT INTO users (username, password, display_name, email) VALUES (?, ?, ?, ?)").run(normUsername, hashed, display_name.trim(), normEmail);
+    const user = { id: result.lastInsertRowid, username: normUsername, display_name: display_name.trim(), email: normEmail, is_admin: 0 };
     const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
     res.json({ ...user, token });
   } catch (err) {
@@ -74,9 +82,12 @@ app.post("/api/auth/google", async (req, res) => {
     // Check if user already exists with this google_id
     let row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE google_id = ?").get(googleId);
 
-    if (!row && email) {
-      // Check if a user with this email already exists (link accounts)
-      row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE email = ?").get(email);
+    const normEmail = email ? email.trim().toLowerCase() : null;
+
+    if (!row && normEmail) {
+      // Check if a user with this email already exists (link accounts). Matched case-insensitively
+      // so a Google login always links to the existing password account instead of duplicating it.
+      row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE lower(email) = ?").get(normEmail);
       if (row) {
         // Link Google to existing account
         db.prepare("UPDATE users SET google_id = ? WHERE id = ?").run(googleId, row.id);
@@ -86,11 +97,11 @@ app.post("/api/auth/google", async (req, res) => {
     if (!row) {
       // Create new user
       const username = `g_${googleId.slice(0, 12)}`;
-      const displayName = name || email || "Google User";
+      const displayName = name || normEmail || "Google User";
       const result = db.prepare(
         "INSERT INTO users (username, password, display_name, email, google_id) VALUES (?, ?, ?, ?, ?)"
-      ).run(username, "google-oauth-no-password", displayName, email || null, googleId);
-      row = { id: result.lastInsertRowid, username, display_name: displayName, email: email || null, is_admin: 0 };
+      ).run(username, "google-oauth-no-password", displayName, normEmail, googleId);
+      row = { id: result.lastInsertRowid, username, display_name: displayName, email: normEmail, is_admin: 0 };
     }
 
     const user = { id: row.id, username: row.username, display_name: row.display_name, email: row.email, is_admin: row.is_admin };
@@ -142,16 +153,18 @@ app.put("/api/auth/profile", authenticateToken, (req, res) => {
       return res.status(400).json({ error: "Invalid email format" });
     }
     if (email) {
-      const existing = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email.toLowerCase(), req.user.id);
+      const existing = db.prepare("SELECT id FROM users WHERE lower(email) = ? AND id != ?").get(email.toLowerCase(), req.user.id);
       if (existing) return res.status(409).json({ error: "Email already linked to another account" });
     }
-    db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email ? email.toLowerCase() : null, req.user.id);
+    db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email ? email.trim().toLowerCase() : null, req.user.id);
   }
   if (username !== undefined) {
     if (!username || !username.trim()) return res.status(400).json({ error: "Username cannot be empty" });
-    const existing = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username.trim(), req.user.id);
+    // Store and compare usernames lower-cased so casing variants can't create shadow accounts.
+    const normUsername = username.trim().toLowerCase();
+    const existing = db.prepare("SELECT id FROM users WHERE lower(username) = ? AND id != ?").get(normUsername, req.user.id);
     if (existing) return res.status(409).json({ error: "Username already taken" });
-    db.prepare("UPDATE users SET username = ? WHERE id = ?").run(username.trim(), req.user.id);
+    db.prepare("UPDATE users SET username = ? WHERE id = ?").run(normUsername, req.user.id);
   }
   if (display_name !== undefined) {
     if (!display_name || !display_name.trim()) return res.status(400).json({ error: "Display name cannot be empty" });
