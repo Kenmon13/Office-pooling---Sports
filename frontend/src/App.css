@@ -1701,13 +1701,21 @@ nav a.active {
   margin: 10px 0;
 }
 
+/* Two support options side by side; wrap to stacked on narrow screens. */
+.donate-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0;
+}
+
 .donate-paypal {
+  flex: 1 1 140px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  margin: 20px 0;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid #b5862a;
   border-radius: 8px;
   background: #2a200a40;
@@ -1728,16 +1736,24 @@ nav a.active {
   color: #b5862a;
 }
 
+/* PayPal brand logo sits on a white chip so the navy mark stays legible
+   against the dark modal, and lines up in height with the coffee label. */
+.donate-paypal-logo {
+  height: 20px;
+  width: auto;
+  object-fit: contain;
+  background: #fff;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+
 .donate-paypal-handle {
-  font-size: 30px;
+  font-size: 18px;
   font-weight: 700;
   color: #f0c46a;
 }
 
 /* Buy Me a Coffee variant — same layout, brand-yellow accents. */
-.donate-paypal + .donate-bmc {
-  margin-top: -6px;
-}
 .donate-bmc {
   border-color: #a8860b;
   background: #2a250a40;
