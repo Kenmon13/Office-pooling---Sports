@@ -507,7 +507,7 @@ function App() {
     : null;
 
   // Donate / support shortcut, shown next to Report Issue across the app.
-  const donateBtn = <button onClick={() => setShowDonate(true)} className="btn-small btn-donate">Donate</button>;
+  const donateBtn = <button onClick={() => setShowDonate(true)} className="btn-small btn-donate" aria-label="Support us">❤️</button>;
 
   const announcementBar = currentTournamentId && (announcements.length > 0 || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
