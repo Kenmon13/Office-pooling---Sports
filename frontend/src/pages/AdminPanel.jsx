@@ -8,7 +8,6 @@ const SPORT_LABELS = {
 };
 
 const TOURNAMENT_LABELS = {
-  wc2022: "World Cup 2022",
   wc2026: "World Cup 2026",
   ucl2627: "Champions League 26/27",
   epl2627: "English Premier League 26/27",

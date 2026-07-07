@@ -448,65 +448,8 @@ export async function fetchLeaderboard(poolId) {
   return res.json();
 }
 
-// ── WC2022 ────────────────────────────────────────────────────────────────────
-
-export async function fetchWC2022Groups() {
-  return (await fetch(`${API}/wc2022/groups`)).json();
-}
-export async function fetchWC2022Matches(poolId) {
-  return (await fetch(`${API}/wc2022/matches?pool_id=${poolId}`)).json();
-}
-export async function fetchWC2022Standings(poolId) {
-  return (await fetch(`${API}/wc2022/standings?pool_id=${poolId}`)).json();
-}
-export async function fetchWC2022KnockoutMatches(poolId) {
-  return (await fetch(`${API}/wc2022/knockout-matches?pool_id=${poolId}`)).json();
-}
-export async function fetchWC2022KnockoutDeadline(poolId) {
-  return (await fetch(`${API}/wc2022/knockout-deadline?pool_id=${poolId}`)).json();
-}
-export async function fetchWC2022GroupPredictions(participantId) {
-  return (await fetch(`${API}/wc2022/group-predictions/${participantId}`)).json();
-}
-export async function submitWC2022GroupPrediction(participant_id, group_id, team1_id, team2_id) {
-  const res = await fetch(`${API}/wc2022/group-predictions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participant_id, group_id, team1_id, team2_id }),
-  });
-  return res.json();
-}
-export async function fetchWC2022KnockoutPredictions(participantId) {
-  return (await fetch(`${API}/wc2022/knockout-predictions/${participantId}`)).json();
-}
-export async function submitWC2022KnockoutPrediction(participant_id, match_id, predicted_winner, predicted_home_score, predicted_away_score) {
-  const res = await fetch(`${API}/wc2022/knockout-predictions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participant_id, match_id, predicted_winner, predicted_home_score: predicted_home_score ?? null, predicted_away_score: predicted_away_score ?? null }),
-  });
-  return res.json();
-}
-export async function fetchWC2022Leaderboard(poolId) {
-  return (await fetch(`${API}/wc2022/leaderboard?pool_id=${poolId}`)).json();
-}
-export async function fetchWC2022PredictionDeadline(poolId) {
-  return (await fetch(`${API}/wc2022/prediction-deadline?pool_id=${poolId}`)).json();
-}
-
 // ── Champion Picks ────────────────────────────────────────────────────────────
 
-export async function fetchWC2022ChampionPick(participantId, poolId) {
-  return (await fetch(`${API}/wc2022/champion-pick/${participantId}?pool_id=${poolId}`)).json();
-}
-export async function submitWC2022ChampionPick(participant_id, team_id, pool_id) {
-  const res = await fetch(`${API}/wc2022/champion-pick`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participant_id, team_id, pool_id }),
-  });
-  return res.json();
-}
 export async function fetchChampionPick(participantId, poolId) {
   return (await fetch(`${API}/champion-pick/${participantId}?pool_id=${poolId}`)).json();
 }
@@ -580,9 +523,6 @@ export async function updateGroupStageUnlock(poolId, unlocked) {
 
 // ── History ───────────────────────────────────────────────────────────────────
 
-export async function fetchWC2022History(participantId, poolId) {
-  return (await fetch(`${API}/wc2022/history/${participantId}?pool_id=${poolId}`)).json();
-}
 export async function fetchHistory(participantId, poolId) {
   const url = poolId ? `${API}/history/${participantId}?pool_id=${poolId}` : `${API}/history/${participantId}`;
   return (await fetch(url)).json();

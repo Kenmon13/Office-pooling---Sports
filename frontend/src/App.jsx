@@ -26,7 +26,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchWC2022Leaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchWC2022History, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchWC2022KnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
 import PollPrompt from "./components/PollModal";
@@ -38,7 +38,6 @@ import "./App.css";
 
 const TOURNAMENT_META = {
   wc2026: { id: "wc2026", name: "World Cup 2026", emoji: "🏆" },
-  wc2022: { id: "wc2022", name: "World Cup 2022", emoji: "🏆" },
   epl2627: { id: "epl2627", name: "Premier League 26/27", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
   laliga2627: { id: "laliga2627", name: "La Liga 26/27", emoji: "🇪🇸" },
   seriea2627: { id: "seriea2627", name: "Serie A 26/27", emoji: "🇮🇹" },
@@ -110,10 +109,9 @@ function App() {
     }
   }, []);
 
-  // Auto-join pool when user and pool are both set.
-  // Admin is a spectator on live pools but can join WC2022 for testing predictions.
+  // Auto-join pool when user and pool are both set. Admin is a spectator on live pools.
   useEffect(() => {
-    if (user && pool && (!user.is_admin || pool.tournament === "wc2022")) {
+    if (user && pool && !user.is_admin) {
       autoJoinPool(user.id, pool.id).then((p) => {
         if (!p.error) setParticipant(p);
       });
@@ -140,8 +138,7 @@ function App() {
   // Refresh points whenever participant or pool changes
   useEffect(() => {
     if (participant && pool) {
-      const fetchFn = pool.tournament === "wc2022" ? fetchWC2022Leaderboard : fetchLeaderboard;
-      fetchFn(pool.id).then((data) => {
+      fetchLeaderboard(pool.id).then((data) => {
         const me = data.find((p) => p.id === participant.id);
         setPoints(me ? me.points : 0);
       });
@@ -198,8 +195,7 @@ function App() {
   useEffect(() => {
     if (!participant || !pool) return;
     const lastSeen = localStorage.getItem(`points_last_seen_ts_${pool.id}`) || "";
-    const fn = pool.tournament === "wc2022" ? fetchWC2022History : fetchHistory;
-    fn(participant.id, pool.id)
+    fetchHistory(participant.id, pool.id)
       .then((data) => {
         if (!Array.isArray(data)) return;
         const unread = lastSeen ? data.filter((e) => e.event_date > lastSeen).length : data.length;
@@ -216,8 +212,7 @@ function App() {
         if (!Array.isArray(pools) || pools.length === 0) return;
         const fetches = pools.map((p) => {
           const lastSeen = localStorage.getItem(`points_last_seen_ts_${p.id}`) || "";
-          const fn = p.tournament === "wc2022" ? fetchWC2022History : fetchHistory;
-          return fn(p.participant_id, p.id)
+          return fetchHistory(p.participant_id, p.id)
             .then((data) => (Array.isArray(data) ? data.filter((e) => !lastSeen || e.event_date > lastSeen).length : 0))
             .catch(() => 0);
         });
@@ -369,8 +364,7 @@ function App() {
           setGroupStageUnlocked(!!data.group_stage_unlocked);
         }
       }).catch(() => {});
-      const koFetch = pool.tournament === "wc2022" ? () => fetchWC2022KnockoutMatches(pool.id) : fetchKnockoutMatches;
-      koFetch().then((matches) => {
+      fetchKnockoutMatches().then((matches) => {
         setHasFinishedKoMatches(Array.isArray(matches) && matches.some((m) => m.status === "finished"));
       }).catch(() => {});
     }
@@ -507,7 +501,7 @@ function App() {
     : null;
 
   // Donate / support shortcut, shown next to Report Issue across the app.
-  const donateBtn = <button onClick={() => setShowDonate(true)} className="btn-small btn-donate" aria-label="Support us">❤️</button>;
+  const donateBtn = <button onClick={() => setShowDonate(true)} className="btn-small btn-donate">Support us ❤️</button>;
 
   const announcementBar = currentTournamentId && (announcements.length > 0 || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
@@ -861,7 +855,7 @@ function App() {
                       }} className="hamburger-item">Share Link</button>
                       <button onClick={() => { setShowQuitConfirm(true); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Quit Pool</button>
                       <hr className="hamburger-divider" />
-                      <button onClick={() => { setShowDonate(true); setMobileMenuOpen(false); }} className="hamburger-item">Donate ❤️</button>
+                      <button onClick={() => { setShowDonate(true); setMobileMenuOpen(false); }} className="hamburger-item">Support us ❤️</button>
                       <button onClick={() => { openIssueChat(); setMobileMenuOpen(false); }} className="hamburger-item">Report Issue</button>
                       <button onClick={() => { handleSignOut(); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Sign Out</button>
                     </div>

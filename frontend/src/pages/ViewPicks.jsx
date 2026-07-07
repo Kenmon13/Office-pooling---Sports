@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   fetchGroupPredictions, fetchKnockoutPredictions, fetchChampionPick,
-  fetchWC2022GroupPredictions, fetchWC2022KnockoutPredictions, fetchWC2022ChampionPick,
-  fetchGroups, fetchWC2022Groups, fetchKnockoutMatches, fetchWC2022KnockoutMatches,
-  fetchLeaderboard, fetchWC2022Leaderboard, fetchPlayerAwardPicks,
+  fetchGroups, fetchKnockoutMatches,
+  fetchLeaderboard, fetchPlayerAwardPicks,
 } from "../api";
 import { flag } from "../flags";
 
@@ -16,10 +15,9 @@ const AWARDS = [
   { key: "fair_play",    label: "FIFA Fair Play Trophy",  emoji: "🤝" },
 ];
 
-function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
+function ViewPicks({ poolId, currentUser }) {
   const { participantId } = useParams();
   const navigate = useNavigate();
-  const isWC2022 = tournament === "wc2022";
   const isViewingSelf = currentUser && String(currentUser.id) === String(participantId);
 
   const [participantName, setParticipantName] = useState("");
@@ -42,27 +40,20 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
   const [myLoaded, setMyLoaded] = useState(false);
 
   useEffect(() => {
-    const fetchFn = isWC2022 ? fetchWC2022Leaderboard : fetchLeaderboard;
-    fetchFn(poolId).then((data) => {
+    fetchLeaderboard(poolId).then((data) => {
       const p = data.find((entry) => String(entry.id) === String(participantId));
       if (p) setParticipantName(p.name);
     });
-  }, [participantId, poolId, isWC2022]);
+  }, [participantId, poolId]);
 
   useEffect(() => {
-    const groupsFn = isWC2022 ? fetchWC2022Groups : fetchGroups;
-    const groupPredsFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
-    const koPredsFn = isWC2022 ? fetchWC2022KnockoutPredictions : fetchKnockoutPredictions;
-    const koMatchesFn = isWC2022 ? fetchWC2022KnockoutMatches : fetchKnockoutMatches;
-    const champFn = isWC2022 ? fetchWC2022ChampionPick : fetchChampionPick;
-
     const promises = [
-      groupsFn(),
-      groupPredsFn(participantId),
-      koPredsFn(participantId),
-      isWC2022 ? koMatchesFn(poolId) : koMatchesFn(),
-      champFn(participantId, poolId),
-      !isWC2022 ? fetchPlayerAwardPicks(participantId, poolId) : Promise.resolve({ picks: [] }),
+      fetchGroups(),
+      fetchGroupPredictions(participantId),
+      fetchKnockoutPredictions(participantId),
+      fetchKnockoutMatches(),
+      fetchChampionPick(participantId, poolId),
+      fetchPlayerAwardPicks(participantId, poolId),
     ];
 
     Promise.all(promises).then(([groupsData, gPreds, kPreds, koData, champData, awardsData]) => {
@@ -95,20 +86,16 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
 
       setLoaded(true);
     });
-  }, [participantId, poolId, isWC2022]);
+  }, [participantId, poolId]);
 
   // Fetch my picks when compare mode is toggled on
   useEffect(() => {
     if (!comparing || !currentUser || myLoaded) return;
-    const groupPredsFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
-    const koPredsFn = isWC2022 ? fetchWC2022KnockoutPredictions : fetchKnockoutPredictions;
-    const champFn = isWC2022 ? fetchWC2022ChampionPick : fetchChampionPick;
-
     Promise.all([
-      groupPredsFn(currentUser.id),
-      koPredsFn(currentUser.id),
-      champFn(currentUser.id, poolId),
-      !isWC2022 ? fetchPlayerAwardPicks(currentUser.id, poolId) : Promise.resolve({ picks: [] }),
+      fetchGroupPredictions(currentUser.id),
+      fetchKnockoutPredictions(currentUser.id),
+      fetchChampionPick(currentUser.id, poolId),
+      fetchPlayerAwardPicks(currentUser.id, poolId),
     ]).then(([gPreds, kPreds, champData, awardsData]) => {
       const gMap = {};
       gPreds.forEach((p) => {
@@ -136,7 +123,7 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
 
       setMyLoaded(true);
     });
-  }, [comparing, currentUser, poolId, isWC2022, myLoaded]);
+  }, [comparing, currentUser, poolId, myLoaded]);
 
   if (!loaded) {
     return (
@@ -346,8 +333,7 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
       </section>
 
       {/* Award Picks */}
-      {!isWC2022 && (
-        <section className="view-picks-section">
+      <section className="view-picks-section">
           <h3>Award Picks</h3>
           {Object.keys(awardPicks).length === 0 && !showCompare && (
             <p className="notice">No award picks yet.</p>
@@ -394,7 +380,6 @@ function ViewPicks({ poolId, tournament = "wc2026", currentUser }) {
             </div>
           )}
         </section>
-      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchUserPools, fetchHistory, fetchWC2022History } from "../api";
+import { fetchUserPools, fetchHistory } from "../api";
 import {
   generateSections, countUnread, fetchWindowsForPool, dismissWindowCards, applyDismissals,
 } from "../windowsHelpers";
@@ -259,7 +259,6 @@ function PickRemindersTab({ sections, loaded, hasParticipant, isGlobal, poolSect
 
 function NotificationsModal({ onClose, participant, poolId, tournament, onReadPoints, onUnreadWindows, onNavigate, exactScoresDisabled = false }) {
   const isGlobal = !participant;
-  const isWC2022 = tournament === "wc2022";
 
   const [activeTab, setActiveTab] = useState("points");
 
@@ -283,8 +282,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
 
     // Points
     const pointsLastSeen = localStorage.getItem(`points_last_seen_ts_${poolId}`) || "";
-    const histFn = isWC2022 ? fetchWC2022History : fetchHistory;
-    histFn(participant.id, poolId)
+    fetchHistory(participant.id, poolId)
       .then((data) => {
         const evts = Array.isArray(data) ? data : [];
         setPointsEvents(
@@ -316,7 +314,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
       })
       .catch(() => {})
       .finally(() => setWindowsLoaded(true));
-  }, [isGlobal, participant, poolId, isWC2022, tournament, onUnreadWindows, exactScoresDisabled]);
+  }, [isGlobal, participant, poolId, tournament, onUnreadWindows, exactScoresDisabled]);
 
   // ── Global mode: fetch all pools then aggregate ───────────────────────────────
 
@@ -335,8 +333,7 @@ function NotificationsModal({ onClose, participant, poolId, tournament, onReadPo
         // Points: fetch per pool, combine and tag with pool name + unread state
         const pointsFetches = pools.map(async (p) => {
           const lastSeen = localStorage.getItem(`points_last_seen_ts_${p.id}`) || "";
-          const fn = p.tournament === "wc2022" ? fetchWC2022History : fetchHistory;
-          const data = await fn(p.participant_id, p.id).catch(() => []);
+          const data = await fetchHistory(p.participant_id, p.id).catch(() => []);
           return (Array.isArray(data) ? data : []).map((e) => ({
             ...e,
             poolId: p.id,

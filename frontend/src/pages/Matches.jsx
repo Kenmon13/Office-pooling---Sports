@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
   fetchMatches, fetchGroups, fetchGroupPredictions, submitGroupPredictions, fetchStandings, fetchPredictionDeadline,
-  fetchWC2022Matches, fetchWC2022Groups, fetchWC2022GroupPredictions, submitWC2022GroupPrediction, fetchWC2022Standings, fetchWC2022PredictionDeadline,
 } from "../api";
 import { flag } from "../flags";
 
@@ -64,8 +63,7 @@ function useCountdown(deadline) {
 
 const MAX_THIRD_PICKS = 8;
 
-function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset, groupStageUnlocked = false }) {
-  const isWC2022 = tournament === "wc2022";
+function Matches({ currentUser, poolId, mockDate, displayTzOffset, groupStageUnlocked = false }) {
   const [matches, setMatches] = useState([]);
   const [groups, setGroups] = useState([]);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -80,15 +78,9 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
 
   // Per-group lock check
   const isGroupLocked = (groupId) => {
-    // For WC2022, always use mock_date as effective time (real time is 2026 — everything would appear locked)
-    const effectiveNow = isWC2022 && mockDate ? new Date(mockDate.replace(" ", "T") + "Z") : new Date();
+    const effectiveNow = new Date();
     if (groupStageUnlocked) {
       const groupMatches = matches.filter((m) => m.group_id === groupId);
-      if (isWC2022) {
-        return groupMatches.length > 0 && groupMatches.every(
-          (m) => effectiveNow >= new Date(m.match_date.replace(" ", "T") + "Z")
-        );
-      }
       return groupMatches.length > 0 && groupMatches.every((m) => m.status === "finished");
     }
     const dl = groupDeadlines[groupId];
@@ -102,46 +94,27 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
   const lockedGroupNames = groups.filter((g) => isGroupLocked(g.id)).map((g) => g.name);
 
   useEffect(() => {
-    if (isWC2022) {
-      fetchWC2022Matches(poolId).then(setMatches);
-      fetchWC2022Groups().then(setGroups);
-      fetchWC2022Standings(poolId).then((data) => {
-        const map = {};
-        data.forEach((g) => { map[g.id] = g; });
-        setStandings(map);
-      });
-      fetchWC2022PredictionDeadline(poolId).then((data) => {
-        if (data.deadline) {
-          setDeadline(data.deadline);
-        }
-        if (data.groupDeadlines) {
-          setGroupDeadlines(data.groupDeadlines);
-        }
-      });
-    } else {
-      fetchMatches().then(setMatches);
-      fetchGroups().then(setGroups);
-      fetchStandings().then((data) => {
-        const map = {};
-        (data.groups || data).forEach((g) => { map[g.id] = g; });
-        setStandings(map);
-        if (data.thirdQualifiers) setThirdQualifiers(data.thirdQualifiers);
-      });
-      fetchPredictionDeadline().then((data) => {
-        if (data.deadline) {
-          setDeadline(data.deadline);
-        }
-        if (data.groupDeadlines) {
-          setGroupDeadlines(data.groupDeadlines);
-        }
-      });
-    }
-  }, [isWC2022, poolId, mockDate]);
+    fetchMatches().then(setMatches);
+    fetchGroups().then(setGroups);
+    fetchStandings().then((data) => {
+      const map = {};
+      (data.groups || data).forEach((g) => { map[g.id] = g; });
+      setStandings(map);
+      if (data.thirdQualifiers) setThirdQualifiers(data.thirdQualifiers);
+    });
+    fetchPredictionDeadline().then((data) => {
+      if (data.deadline) {
+        setDeadline(data.deadline);
+      }
+      if (data.groupDeadlines) {
+        setGroupDeadlines(data.groupDeadlines);
+      }
+    });
+  }, [poolId, mockDate]);
 
   useEffect(() => {
     if (currentUser) {
-      const fetchFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
-      fetchFn(currentUser.id).then((preds) => {
+      fetchGroupPredictions(currentUser.id).then((preds) => {
         const map = {};
         const sel = {};
         preds.forEach((p) => {
@@ -154,7 +127,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         setSelections(sel);
       });
     }
-  }, [currentUser, isWC2022]);
+  }, [currentUser]);
 
   const toggleGroup = (groupName) => {
     setExpandedGroups((prev) => {
@@ -184,14 +157,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
       if (current.includes(teamId)) {
         return { ...prev, [groupId]: current.filter((id) => id !== teamId) };
       }
-      // For WC2022: max 2 picks per group
-      if (isWC2022) {
-        if (current.length >= 2) {
-          return { ...prev, [groupId]: [current[1], teamId] };
-        }
-        return { ...prev, [groupId]: [...current, teamId] };
-      }
-      // For WC2026: allow up to 3 picks per group
+      // Allow up to 3 picks per group
       if (current.length < 2) {
         return { ...prev, [groupId]: [...current, teamId] };
       }
@@ -231,47 +197,29 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
     setSaving(true);
     setSaveError("");
 
-    if (isWC2022) {
-      const errors = [];
-      for (const g of groups) {
-        if (isGroupLocked(g.id)) continue;
-        const picked = selections[g.id] || [];
-        if (picked.length >= 2) {
-          const res = await submitWC2022GroupPrediction(currentUser.id, g.id, picked[0], picked[1]);
-          if (res.error) errors.push(`Group ${g.name}: ${res.error}`);
-        }
-      }
-      if (errors.length > 0) {
-        setSaveError(errors.join(" · "));
-        setSaving(false);
-        return;
-      }
-    } else {
-      const preds = groups
-        .filter((g) => (selections[g.id] || []).length >= 2)
-        .map((g) => {
-          const picked = selections[g.id];
-          return {
-            group_id: g.id,
-            team1_id: picked[0],
-            team2_id: picked[1],
-            team3_id: picked[2] || null,
-          };
-        });
-      const res = await submitGroupPredictions(currentUser.id, preds);
-      if (res.error) {
-        setSaveError(res.error);
-        setSaving(false);
-        return;
-      }
-      if (res.warning) {
-        setSaveError(res.warning);
-      }
+    const predsToSave = groups
+      .filter((g) => (selections[g.id] || []).length >= 2)
+      .map((g) => {
+        const picked = selections[g.id];
+        return {
+          group_id: g.id,
+          team1_id: picked[0],
+          team2_id: picked[1],
+          team3_id: picked[2] || null,
+        };
+      });
+    const res = await submitGroupPredictions(currentUser.id, predsToSave);
+    if (res.error) {
+      setSaveError(res.error);
+      setSaving(false);
+      return;
+    }
+    if (res.warning) {
+      setSaveError(res.warning);
     }
 
     // Refresh predictions from server
-    const fetchFn = isWC2022 ? fetchWC2022GroupPredictions : fetchGroupPredictions;
-    const preds = await fetchFn(currentUser.id);
+    const preds = await fetchGroupPredictions(currentUser.id);
     const map = {};
     const sel = {};
     preds.forEach((p) => {
@@ -316,7 +264,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
 
   // Find the next upcoming group deadline (earliest unlocked group's first match)
   const nextGroupInfo = (() => {
-    if (isWC2022 || Object.keys(groupDeadlines).length === 0) return { deadline, groupName: null };
+    if (Object.keys(groupDeadlines).length === 0) return { deadline, groupName: null };
     const now = new Date();
     const upcoming = Object.entries(groupDeadlines)
       .filter(([, dl]) => new Date(dl.replace(" ", "T") + "Z") > now)
@@ -339,8 +287,8 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
 
   // Third-place alert: count saved 3rd picks
   const savedThirdCount = Object.values(predictions).filter((p) => p.team3_id).length;
-  const thirdAlertDone = isWC2022 || savedThirdCount >= MAX_THIRD_PICKS;
-  const thirdAlertRed = !isWC2022 && !thirdAlertDone && !allLocked;
+  const thirdAlertDone = savedThirdCount >= MAX_THIRD_PICKS;
+  const thirdAlertRed = !thirdAlertDone && !allLocked;
   const thirdAlertMsg = !thirdAlertDone
     ? (savedThirdCount === 0 ? "No 3rd-place picks made" : `${savedThirdCount}/${MAX_THIRD_PICKS} saved`)
     : null;
@@ -352,10 +300,10 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
       <div className="ko-rules">
         <p className="ko-rules-title">How predictions work</p>
         <ul>
-          <li>Pick the 2 teams you think will qualify from each group (order does not matter).{!isWC2022 && <> You can also pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will qualify for the knockouts. All 3 correct = 10 pts &middot; 2 correct = 5 pts &middot; 1 correct = 2 pts.</>}</li>
+          <li>Pick the 2 teams you think will qualify from each group (order does not matter). You can also pick a 3rd-place team in up to {MAX_THIRD_PICKS} groups that you think will qualify for the knockouts. All 3 correct = 10 pts &middot; 2 correct = 5 pts &middot; 1 correct = 2 pts.</li>
           {groupStageUnlocked
             ? <li>The pool admin has re-opened group predictions — you can update picks for any group until <strong>all</strong> of that group's matches are finished.</li>
-            : <li>Each group locks when its first match kicks off — you can update picks for other groups until their matches start. <em>Pool admins can re-open predictions for all groups in Pool Settings{isWC2022 ? ", useful for backtesting with time simulation" : " as long as not all of a group's matches are finished"}.</em></li>
+            : <li>Each group locks when its first match kicks off — you can update picks for other groups until their matches start. <em>Pool admins can re-open predictions for all groups in Pool Settings as long as not all of a group's matches are finished.</em></li>
           }
         </ul>
       </div>
@@ -458,7 +406,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
         </div>
       )}
 
-      {!isWC2022 && currentUser && !allLocked && (
+      {currentUser && !allLocked && (
         <div className="third-place-counter">
           3rd-place picks: {thirdPickCount}/{MAX_THIRD_PICKS} groups
         </div>
@@ -535,7 +483,7 @@ function Matches({ currentUser, tournament = "wc2026", poolId, mockDate, display
                   {picked.length < 2 && (
                     <span className="pick-hint">Pick {2 - picked.length} more</span>
                   )}
-                  {picked.length === 2 && !isWC2022 && thirdPickCount < MAX_THIRD_PICKS && (
+                  {picked.length === 2 && thirdPickCount < MAX_THIRD_PICKS && (
                     <span className="pick-hint">Pick a 3rd-place team (optional)</span>
                   )}
                 </div>
