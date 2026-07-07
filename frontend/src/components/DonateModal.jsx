@@ -1,5 +1,3 @@
-import paypalLogo from "../assets/paypal-logo.png";
-
 // Donors hall of fame — add a new { user } entry here as donations come in.
 const DONORS = [
   { user: "Jamie Vejar" },
@@ -23,8 +21,8 @@ function DonateModal({ onClose }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <img className="donate-paypal-logo" src={paypalLogo} alt="PayPal" />
-            <span className="donate-paypal-handle">@kenmon13</span>
+            <span className="donate-paypal-label">PayPal</span>
+            <span className="donate-paypal-handle">💳 @kenmon13</span>
           </a>
 
           <a
