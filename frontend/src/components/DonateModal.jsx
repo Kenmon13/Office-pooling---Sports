@@ -13,7 +13,6 @@ function DonateModal({ onClose }) {
 
         <p>Thank you for using sportspooling. We hope you enjoy this, and we aim to constantly add more pools for you guys to enjoy further.</p>
         <p>If you want to show support, you may donate to me at my PayPal account. This goes into resources such as maintaining the website and the domain name.</p>
-        <p>If you choose to do so, please also make sure you have enough for yourself as well — after all, this is a pet project and your wellbeing is more important.</p>
 
         <a
           className="donate-paypal"
