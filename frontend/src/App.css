@@ -1736,6 +1736,17 @@ nav a.active {
   color: #b5862a;
 }
 
+/* PayPal brand logo sits on a white chip so the navy mark stays legible
+   against the dark modal, and lines up in height with the coffee label. */
+.donate-paypal-logo {
+  height: 20px;
+  width: auto;
+  object-fit: contain;
+  background: #fff;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+
 .donate-paypal-handle {
   font-size: 18px;
   font-weight: 700;

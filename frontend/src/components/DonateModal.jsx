@@ -1,3 +1,5 @@
+import paypalLogo from "../assets/paypal-logo.png";
+
 // Donors hall of fame — add a new { user } entry here as donations come in.
 const DONORS = [
   { user: "Jamie Vejar" },
@@ -12,7 +14,7 @@ function DonateModal({ onClose }) {
         </div>
 
         <p>Thank you for using sportspooling. We hope you enjoy this, and we aim to constantly add more pools for you guys to enjoy further.</p>
-        <p>If you want to show support, you can donate via PayPal or Buy Me a Coffee. This goes into resources such as maintaining the website and the domain name.</p>
+        <p>If you'd like to support the site, you can do so via PayPal or Buy Me a Coffee. This goes into resources such as maintaining the website and the domain name.</p>
 
         <div className="donate-options">
           <a
@@ -21,8 +23,8 @@ function DonateModal({ onClose }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <span className="donate-paypal-label">PayPal</span>
-            <span className="donate-paypal-handle">💳 @kenmon13</span>
+            <img className="donate-paypal-logo" src={paypalLogo} alt="PayPal" />
+            <span className="donate-paypal-handle">@kenmon13</span>
           </a>
 
           <a
