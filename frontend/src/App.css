@@ -1734,6 +1734,25 @@ nav a.active {
   color: #f0c46a;
 }
 
+/* Buy Me a Coffee variant — same layout, brand-yellow accents. */
+.donate-paypal + .donate-bmc {
+  margin-top: -6px;
+}
+.donate-bmc {
+  border-color: #a8860b;
+  background: #2a250a40;
+}
+.donate-bmc:hover {
+  background: #3a340a80;
+  border-color: #ffdd00;
+}
+.donate-bmc .donate-paypal-label {
+  color: #a8860b;
+}
+.donate-bmc .donate-paypal-handle {
+  color: #ffdd00;
+}
+
 .donate-hof {
   margin-top: 20px;
 }
