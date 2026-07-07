@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { fetchWC2022ChampionPick, submitWC2022ChampionPick, fetchChampionPick, submitChampionPick } from "../api";
-import { fetchWC2022Groups, fetchGroups } from "../api";
+import { fetchChampionPick, submitChampionPick } from "../api";
+import { fetchGroups } from "../api";
 import { flag } from "../flags";
 
-function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
-  const isWC2022 = tournament === "wc2022";
+function Champion({ currentUser, poolId, mockDate }) {
   const [status, setStatus] = useState(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [groups, setGroups] = useState([]);
@@ -14,17 +13,15 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    const fetchGroups2 = isWC2022 ? fetchWC2022Groups : fetchGroups;
-    fetchGroups2().then(setGroups);
-  }, [isWC2022]);
+    fetchGroups().then(setGroups);
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
-    const fetchFn = isWC2022 ? fetchWC2022ChampionPick : fetchChampionPick;
-    fetchFn(currentUser.id, poolId)
+    fetchChampionPick(currentUser.id, poolId)
       .then((data) => { setStatus(data); setStatusLoaded(true); })
       .catch(() => setStatusLoaded(true));
-  }, [currentUser, isWC2022, poolId, mockDate]);
+  }, [currentUser, poolId, mockDate]);
 
   const canPick = !!status?.canInitialPick;
   const canChange = !!status?.canChange;
@@ -56,15 +53,11 @@ function Champion({ currentUser, tournament = "wc2026", poolId, mockDate }) {
     setSaving(true);
     setMsg("");
     setConfirming(false);
-    const submitFn = isWC2022 ? submitWC2022ChampionPick : submitChampionPick;
-    const result = await (isWC2022
-      ? submitFn(currentUser.id, selectedTeam.id, poolId)
-      : submitFn(currentUser.id, selectedTeam.id));
+    const result = await submitChampionPick(currentUser.id, selectedTeam.id);
     if (result.error) {
       setMsg(result.error);
     } else {
-      const fetchFn = isWC2022 ? fetchWC2022ChampionPick : fetchChampionPick;
-      const newStatus = await fetchFn(currentUser.id, poolId);
+      const newStatus = await fetchChampionPick(currentUser.id, poolId);
       setStatus(newStatus);
       setSelectedTeam(null);
       setMsg("Winner pick saved!");

@@ -1,16 +1,13 @@
 import { useState, useEffect } from "react";
 import {
   fetchKnockoutMatches, fetchKnockoutPredictions, submitKnockoutPrediction, fetchKnockoutDeadline,
-  fetchWC2022KnockoutMatches, fetchWC2022KnockoutPredictions, submitWC2022KnockoutPrediction, fetchWC2022KnockoutDeadline,
   fetchPoolKnockoutMatchPredictions,
 } from "../api";
 import Bracket from "../components/Bracket";
-import Bracket2022 from "../components/Bracket2022";
 import { ROUND_ORDER } from "../windowsHelpers";
 import { flag } from "../flags";
 
-function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displayTzOffset, exactScoresDisabled = false }) {
-  const isWC2022 = tournament === "wc2022";
+function Knockouts({ currentUser, poolId, mockDate, displayTzOffset, exactScoresDisabled = false }) {
   const [koMatches, setKoMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
   const [scores, setScores] = useState({});
@@ -26,29 +23,18 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
   const [poolPredsLoading, setPoolPredsLoading] = useState(false);
 
   useEffect(() => {
-    if (isWC2022) {
-      fetchWC2022KnockoutMatches(poolId).then(setKoMatches);
-      fetchWC2022KnockoutDeadline(poolId).then((data) => {
-        setOpenMatchIds(new Set(data.openMatchIds));
-        setGroupStageComplete(data.groupStageComplete);
-        setKoStageComplete(data.koStageComplete || false);
-        setMatchMeta(data.matchMeta || {});
-      });
-    } else {
-      fetchKnockoutMatches().then(setKoMatches);
-      fetchKnockoutDeadline().then((data) => {
-        setOpenMatchIds(new Set(data.openMatchIds));
-        setGroupStageComplete(data.groupStageComplete);
-        setKoStageComplete(data.koStageComplete || false);
-        setMatchMeta(data.matchMeta || {});
-      });
-    }
-  }, [isWC2022, poolId, mockDate]);
+    fetchKnockoutMatches().then(setKoMatches);
+    fetchKnockoutDeadline().then((data) => {
+      setOpenMatchIds(new Set(data.openMatchIds));
+      setGroupStageComplete(data.groupStageComplete);
+      setKoStageComplete(data.koStageComplete || false);
+      setMatchMeta(data.matchMeta || {});
+    });
+  }, [poolId, mockDate]);
 
   useEffect(() => {
     if (currentUser) {
-      const fetchFn = isWC2022 ? fetchWC2022KnockoutPredictions : fetchKnockoutPredictions;
-      fetchFn(currentUser.id).then((preds) => {
+      fetchKnockoutPredictions(currentUser.id).then((preds) => {
         const map = {};
         const scoreMap = {};
         preds.forEach((p) => {
@@ -61,28 +47,27 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
         setScores(scoreMap);
       });
     }
-  }, [currentUser, isWC2022]);
+  }, [currentUser]);
 
   // Load every pool member's prediction for the chosen match on demand.
   useEffect(() => {
-    if (isWC2022 || !poolId || !poolPredMatchId) return;
+    if (!poolId || !poolPredMatchId) return;
     let cancelled = false;
     fetchPoolKnockoutMatchPredictions(poolId, poolPredMatchId)
       .then((rows) => { if (!cancelled) setPoolPreds(Array.isArray(rows) ? rows : []); })
       .catch(() => { if (!cancelled) setPoolPreds([]); })
       .finally(() => { if (!cancelled) setPoolPredsLoading(false); });
     return () => { cancelled = true; };
-  }, [isWC2022, poolId, poolPredMatchId]);
+  }, [poolId, poolPredMatchId]);
 
   const handlePick = async (matchId, teamId, draftHome, draftAway) => {
     if (!currentUser) return;
     setSaving(matchId);
     setPredictions((prev) => ({ ...prev, [matchId]: teamId }));
-    const submitFn = isWC2022 ? submitWC2022KnockoutPrediction : submitKnockoutPrediction;
 
-    // WC2026 bracket passes the live score inputs, so a just-typed score is KEPT when it
+    // The bracket passes the live score inputs, so a just-typed score is KEPT when it
     // now agrees with the new winner (and dropped when it contradicts — ties stay valid).
-    // WC2022 omits them → fall back to the persisted score.
+    // If no score inputs were passed, fall back to the persisted score.
     let sh, sa;
     if (draftHome !== undefined || draftAway !== undefined) {
       const hv = (draftHome === "" || draftHome == null) ? null : parseInt(draftHome, 10);
@@ -102,7 +87,7 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
       else next[matchId] = { home: sh, away: sa };
       return next;
     });
-    await submitFn(currentUser.id, matchId, teamId, sh, sa);
+    await submitKnockoutPrediction(currentUser.id, matchId, teamId, sh, sa);
     setSaving(null);
     window.dispatchEvent(new CustomEvent("picks-saved"));
   };
@@ -112,15 +97,13 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
     const winner = predictions[matchId];
     if (winner === undefined || winner === null) return;
     setSaving(matchId);
-    const submitFn = isWC2022 ? submitWC2022KnockoutPrediction : submitKnockoutPrediction;
-    await submitFn(currentUser.id, matchId, winner, home, away);
+    await submitKnockoutPrediction(currentUser.id, matchId, winner, home, away);
     setScores((prev) => ({ ...prev, [matchId]: { home, away } }));
     setSaving(null);
     window.dispatchEvent(new CustomEvent("picks-saved"));
   };
 
   const pointsMap2026 = { "Round of 32": 3, "Round of 16": 5, "Quarter-Finals": 7, "Semi-Finals": 10, "Final": 15 };
-  const pointsMap2022 = { "Round of 16": 5, "Quarter-Finals": 7, "Semi-Finals": 10, "Final": 15 };
 
   const openKoMatches = koMatches.filter((m) => openMatchIds.has(m.id) && m.home_team_name && m.away_team_name);
   const missingPickMatches = openKoMatches
@@ -255,61 +238,6 @@ function Knockouts({ currentUser, tournament = "wc2026", poolId, mockDate, displ
       )}
     </section>
   );
-
-  if (isWC2022) {
-    return (
-      <div className="page">
-        <h2>Knockout Stage</h2>
-
-        <div className="ko-rules">
-          <p className="ko-rules-title">How predictions work</p>
-          <ul>
-            <li>Round of 16 opens once all group stage matches are complete.</li>
-            <li>Each match unlocks as soon as both teams are confirmed from the previous round — no need to wait for the entire round to finish.</li>
-            <li>Predictions lock automatically when each match kicks off — check the closing time shown on each match.</li>
-            {!exactScoresDisabled && <li><strong>Score prediction bonus:</strong> also predict the score at full time (extra time and penalties in the event of a draw do not count). If you get both the winner <em>and</em> the exact score correct, you earn <strong>double points</strong>. <em>Pool admins can disable this in Pool Settings.</em></li>}
-            {exactScoresDisabled && <li><strong>Score prediction bonus is disabled</strong> — the pool admin has turned off exact score predictions for this pool.</li>}
-            <li>Points for each correct winner prediction:
-              <div className="ko-points-grid">
-                <span>Round of 16</span><span>{exactScoresDisabled ? "5 pts" : "5 pts (10 if correct score)"}</span>
-                <span>Quarter-Finals</span><span>{exactScoresDisabled ? "7 pts" : "7 pts (14 if correct score)"}</span>
-                <span>Semi-Finals</span><span>{exactScoresDisabled ? "10 pts" : "10 pts (20 if correct score)"}</span>
-                <span>Final</span><span>{exactScoresDisabled ? "15 pts" : "15 pts (30 if correct score)"}</span>
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        {koAlerts}
-
-        {koStageComplete && (
-          <div className="deadline-banner" style={{ marginBottom: 16 }}>
-            <span className="deadline-locked-text">Knockout stage complete — Argentina are the 2022 World Cup champions!</span>
-          </div>
-        )}
-        {!groupStageComplete && !koStageComplete && (
-          <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
-            <span className="deadline-locked-text">Knockout predictions open once the group stage is complete</span>
-          </div>
-        )}
-        {!currentUser && <p className="notice">Join the pool to make knockout predictions.</p>}
-
-        <Bracket2022
-          predictions={predictions}
-          scores={scores}
-          onPick={currentUser ? handlePick : null}
-          onScore={currentUser ? handleScore : null}
-          saving={saving}
-          koMatches={koMatches}
-          pointsMap={pointsMap2022}
-          openMatchIds={openMatchIds}
-          matchMeta={matchMeta}
-          displayTzOffset={displayTzOffset}
-          exactScoresDisabled={exactScoresDisabled}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="page">

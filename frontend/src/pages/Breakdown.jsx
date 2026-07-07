@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  fetchLeaderboard, fetchWC2022Leaderboard, fetchLeagueLeaderboard,
-  fetchHistory, fetchWC2022History,
+  fetchLeaderboard, fetchLeagueLeaderboard,
+  fetchHistory,
 } from "../api";
 import { isLeague } from "../leagues";
 
@@ -73,7 +73,6 @@ function Category({ cat, expanded, onToggle }) {
 function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   const navigate = useNavigate();
   const isEPL = isLeague(tournament); // any domestic league (EPL, La Liga, …) shares this shape
-  const isWC2022 = tournament === "wc2022";
   const [participants, setParticipants] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -82,14 +81,12 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   const [expanded, setExpanded] = useState({});
 
   useEffect(() => {
-    const fetchFn = isWC2022
-      ? fetchWC2022Leaderboard
-      : isEPL ? (pid) => fetchLeagueLeaderboard(tournament, pid) : fetchLeaderboard;
+    const fetchFn = isEPL ? (pid) => fetchLeagueLeaderboard(tournament, pid) : fetchLeaderboard;
     fetchFn(poolId)
       .then((data) => setParticipants(Array.isArray(data) ? data : []))
       .catch(() => setParticipants([]))
       .finally(() => setLoaded(true));
-  }, [poolId, tournament, isEPL, isWC2022, mockDate]);
+  }, [poolId, tournament, isEPL, mockDate]);
 
   // Participants sorted by name for the picker (leaderboard comes back ranked by points).
   const sortedForPicker = useMemo(
@@ -112,12 +109,11 @@ function Breakdown({ currentUser, poolId, tournament = "wc2026", mockDate }) {
   // Itemized point history for the selected player (EPL has no history endpoint).
   useEffect(() => {
     if (isEPL || effectiveId == null) return;
-    const fetchFn = isWC2022 ? fetchWC2022History : fetchHistory;
     const id = effectiveId;
-    fetchFn(id, poolId)
+    fetchHistory(id, poolId)
       .then((data) => setEventsData({ id, events: Array.isArray(data) ? data : [] }))
       .catch(() => setEventsData({ id, events: [] }));
-  }, [effectiveId, poolId, isEPL, isWC2022, mockDate]);
+  }, [effectiveId, poolId, isEPL, mockDate]);
 
   // Only trust the fetched events if they belong to the currently-selected player.
   const eventsLoading = !isEPL && effectiveId != null && eventsData.id !== effectiveId;

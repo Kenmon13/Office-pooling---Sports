@@ -1,12 +1,12 @@
 import {
   fetchUserPools,
-  fetchGroupPredictions, fetchWC2022GroupPredictions,
-  fetchGroups, fetchWC2022Groups,
-  fetchPredictionDeadline, fetchWC2022PredictionDeadline,
-  fetchKnockoutMatches, fetchWC2022KnockoutMatches,
-  fetchKnockoutDeadline, fetchWC2022KnockoutDeadline,
-  fetchKnockoutPredictions, fetchWC2022KnockoutPredictions,
-  fetchChampionPick, fetchWC2022ChampionPick,
+  fetchGroupPredictions,
+  fetchGroups,
+  fetchPredictionDeadline,
+  fetchKnockoutMatches,
+  fetchKnockoutDeadline,
+  fetchKnockoutPredictions,
+  fetchChampionPick,
   fetchPlayerAwardPicks,
   fetchExactScoresSetting,
 } from "./api";
@@ -408,33 +408,17 @@ export function countUnread(sections) {
 }
 
 export async function fetchWindowsForPool(p) {
-  const isWC22 = p.tournament === "wc2022";
-  const fetchDeadline = isWC22 ? () => fetchWC2022PredictionDeadline(p.id) : fetchPredictionDeadline;
-  const fetchKoMatchesFn = isWC22 ? () => fetchWC2022KnockoutMatches(p.id) : fetchKnockoutMatches;
-  const fetchGroupsFn = isWC22 ? fetchWC2022Groups : fetchGroups;
-  const fetchKoDeadlineFn = isWC22 ? () => fetchWC2022KnockoutDeadline(p.id) : fetchKnockoutDeadline;
-  const fetchGroupPreds = isWC22
-    ? () => fetchWC2022GroupPredictions(p.participant_id)
-    : () => fetchGroupPredictions(p.participant_id);
-  const fetchKoPreds = isWC22
-    ? () => fetchWC2022KnockoutPredictions(p.participant_id)
-    : () => fetchKnockoutPredictions(p.participant_id);
-  const fetchChamp = isWC22
-    ? () => fetchWC2022ChampionPick(p.participant_id, p.id)
-    : () => fetchChampionPick(p.participant_id, p.id);
-  const awardFetch = isWC22
-    ? Promise.resolve(undefined)
-    : fetchPlayerAwardPicks(p.participant_id, p.id).catch(() => ({ picks: [], locked: false }));
+  const awardFetch = fetchPlayerAwardPicks(p.participant_id, p.id).catch(() => ({ picks: [], locked: false }));
 
   const [predDeadline, koMatches, groups, koDeadline, groupPreds, koPreds, champStatus, awardData, exactScoresData] =
     await Promise.all([
-      fetchDeadline(),
-      fetchKoMatchesFn(),
-      fetchGroupsFn().catch(() => []),
-      fetchKoDeadlineFn().catch(() => ({})),
-      fetchGroupPreds(),
-      fetchKoPreds(),
-      fetchChamp(),
+      fetchPredictionDeadline(),
+      fetchKnockoutMatches(),
+      fetchGroups().catch(() => []),
+      fetchKnockoutDeadline().catch(() => ({})),
+      fetchGroupPredictions(p.participant_id),
+      fetchKnockoutPredictions(p.participant_id),
+      fetchChampionPick(p.participant_id, p.id),
       awardFetch,
       fetchExactScoresSetting(p.id).catch(() => ({ exact_scores_disabled: 0 })),
     ]);
