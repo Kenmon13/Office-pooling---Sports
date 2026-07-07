@@ -1206,13 +1206,24 @@ app.post("/api/knockout-predictions", (req, res) => {
   if (!participant_id || !match_id || !predicted_winner) {
     return res.status(400).json({ error: "All fields are required" });
   }
+  const m = db.prepare("SELECT home_team_id, away_team_id, status, match_date FROM knockout_matches WHERE id = ?").get(match_id);
+  if (!m) return res.status(404).json({ error: "Match not found" });
+  // Lock the pick once the match has kicked off. The UI already disables the inputs at
+  // kickoff, but the lock must be enforced here too — otherwise a stale bracket tab or a
+  // direct API call can overwrite a pick mid-match. We check both the status (flipped to
+  // 'live'/'finished' by the scores sync) AND the scheduled kickoff time, because the sync
+  // only flips status on its next poll, leaving a window after real kickoff where the match
+  // is still 'upcoming'. match_date is stored as "YYYY-MM-DD HH:MM" in UTC.
+  const kickoff = m.match_date ? new Date(m.match_date.replace(" ", "T") + "Z") : null;
+  if (m.status !== "upcoming" || (kickoff && new Date() >= kickoff)) {
+    return res.status(403).json({ error: "Predictions are locked — this match has started" });
+  }
   // Reject a scoreline that contradicts the picked winner. A regulation draw is allowed
   // (the winner is then decided on penalties); only a score where the picked winner has
   // strictly fewer goals than the loser is inconsistent. predicted_winner is "home"/"away"
   // (or a team id for older rows). Mirrors the frontend "winner can't score fewer goals"
   // guard — enforced here too so the API itself can't store a contradictory pick.
   if (predicted_home_score != null && predicted_away_score != null) {
-    const m = db.prepare("SELECT home_team_id, away_team_id FROM knockout_matches WHERE id = ?").get(match_id);
     const winnerSide = predicted_winner === "home" ? "home"
       : predicted_winner === "away" ? "away"
       : m && String(predicted_winner) === String(m.home_team_id) ? "home"
