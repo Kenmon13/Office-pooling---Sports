@@ -520,6 +520,18 @@ export async function updateGroupStageUnlock(poolId, unlocked) {
   });
   return res.json();
 }
+// League pools: lock/unlock the whole Season Predictions section (incl. champion pick).
+export async function fetchSeasonLock(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/season-lock`)).json();
+}
+export async function updateSeasonLock(poolId, locked) {
+  const res = await fetch(`${API}/pools/${poolId}/season-lock`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ locked }),
+  });
+  return res.json();
+}
 
 // ── History ───────────────────────────────────────────────────────────────────
 

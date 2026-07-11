@@ -78,13 +78,18 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
   const [savedTable, setSavedTable] = useState([]);
   const [standings, setStandings] = useState([]); // live table, sorted (index+1 = position)
   const [deadline, setDeadline] = useState(null);
+  const [serverLocked, setServerLocked] = useState(null); // admin-override-aware lock from the server
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [dragIdx, setDragIdx] = useState(null);
   const [selectingIdx, setSelectingIdx] = useState(null);
 
   const countdown = useCountdown(deadline);
-  const isLocked = deadline ? new Date() >= new Date(deadline.replace(" ", "T") + "Z") : false;
+  // Prefer the server's effective lock (which honours a pool admin's manual override);
+  // fall back to the raw deadline for older responses.
+  const isLocked = serverLocked !== null
+    ? serverLocked
+    : (deadline ? new Date() >= new Date(deadline.replace(" ", "T") + "Z") : false);
 
   useEffect(() => {
     Promise.all([
@@ -96,6 +101,7 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
       registerCrests(standingsData);
       setTeams(teamData);
       setDeadline(dlData.deadline || null);
+      setServerLocked(typeof dlData.locked === "boolean" ? dlData.locked : null);
       setStandings(Array.isArray(standingsData) ? standingsData : []);
       if (table.length === 0 && teamData.length > 0) {
         setTable(teamData.map((t) => t.id));

@@ -1407,4 +1407,12 @@ try {
   console.log("pools name-uniqueness migration skipped:", err.message);
 }
 
+// NOTE: add any new `ALTER TABLE pools ADD COLUMN` *below* the rebuild above — the rebuild
+// recreates pools from a fixed column list and would drop columns added before it.
+
+// League pools: admin override of the season-prediction lock. NULL = follow the auto
+// deadline (first matchday); 1 = force locked; 0 = force open. Lets a league pool admin
+// lock the champion/season picks early or reopen them after the deadline.
+try { db.exec("ALTER TABLE pools ADD COLUMN season_locked_override INTEGER"); } catch (_) {}
+
 module.exports = db;
