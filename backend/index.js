@@ -462,10 +462,11 @@ app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
   res.json(pools);
 });
 
-// Every table with a participant_id column. Cleared for all of the user's participants
-// before the participants themselves are deleted. Hardcoded whitelist (not user input),
-// so safe to interpolate. Keep in sync with new participant-scoped tables.
-const USER_PARTICIPANT_TABLES = [
+// Every table with a participant_id column. Single source of truth for the three admin
+// ops that touch participant-scoped data: delete-user + delete-pool (DELETE these first,
+// they FK to participants) and merge-participants (reassign them). Hardcoded whitelist
+// (not user input), so safe to interpolate. Keep in sync with new participant-scoped tables.
+const PARTICIPANT_SCOPED_TABLES = [
   "wc2022_champion_picks",
   "wc2022_group_predictions",
   "wc2022_knockout_predictions",
@@ -494,7 +495,7 @@ app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
   try {
     const deleteUser = db.transaction(() => {
       // Participant-scoped rows first (they FK to participants).
-      for (const t of USER_PARTICIPANT_TABLES) {
+      for (const t of PARTICIPANT_SCOPED_TABLES) {
         db.prepare(`DELETE FROM ${t} WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)`).run(targetId);
       }
       db.prepare("DELETE FROM participants WHERE user_id = ?").run(targetId);
@@ -529,17 +530,22 @@ app.get("/api/admin/pools", requireAdminToken, (req, res) => {
 
 app.delete("/api/admin/pools/:id", requireAdminToken, (req, res) => {
   const poolId = req.params.id;
-  db.prepare("DELETE FROM wc2022_champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM wc2022_knockout_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM wc2022_group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM knockout_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM score_adjustments WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
-  db.prepare("DELETE FROM participants WHERE pool_id = ?").run(poolId);
-  db.prepare("DELETE FROM pool_admins WHERE pool_id = ?").run(poolId);
-  db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
+  // All-or-nothing, and clear every table that FKs to this pool's participants (or the pool
+  // itself) — an un-cleared table would FK-block the delete and leave the pool half-removed.
+  try {
+    const deletePool = db.transaction(() => {
+      for (const t of PARTICIPANT_SCOPED_TABLES) {
+        db.prepare(`DELETE FROM ${t} WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)`).run(poolId);
+      }
+      db.prepare("DELETE FROM participants WHERE pool_id = ?").run(poolId);
+      db.prepare("DELETE FROM messages WHERE pool_id = ?").run(poolId);
+      db.prepare("DELETE FROM pool_admins WHERE pool_id = ?").run(poolId);
+      db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
+    });
+    deletePool();
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to delete pool", detail: err.message });
+  }
   res.json({ success: true });
 });
 
@@ -896,23 +902,9 @@ app.post("/api/admin/merge-participants", requireAdminToken, (req, res) => {
     return res.status(400).json({ error: `participants are in different pools (${from.pool_id} vs ${into.pool_id})` });
   }
 
-  // Hardcoded whitelist — every table with a participant_id column. Not user input, so
-  // safe to interpolate into the statements below.
-  const tables = [
-    "champion_picks",
-    "player_award_picks",
-    "group_predictions",
-    "predictions",
-    "knockout_predictions",
-    "third_place_predictions",
-    "wc2022_champion_picks",
-    "wc2022_group_predictions",
-    "wc2022_knockout_predictions",
-    "pl2627_match_predictions",
-    "pl2627_player_award_picks",
-    "pl2627_season_predictions",
-    "score_adjustments",
-  ];
+  // Every table with a participant_id column — shared with delete-user/delete-pool so a new
+  // participant-scoped table is handled by all three at once.
+  const tables = PARTICIPANT_SCOPED_TABLES;
 
   const moved = {};
   for (const t of tables) {
