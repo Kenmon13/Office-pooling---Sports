@@ -26,7 +26,7 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchSeasonLock, updateSeasonLock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
 import PollPrompt from "./components/PollModal";
@@ -311,6 +311,7 @@ function App() {
   const [championUnlocked, setChampionUnlocked] = useState(false);
   const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
   const [playerAwardsVoided, setPlayerAwardsVoided] = useState(false);
+  const [seasonLocked, setSeasonLocked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [editingPoolName, setEditingPoolName] = useState(false);
@@ -364,6 +365,11 @@ function App() {
           setGroupStageUnlocked(!!data.group_stage_unlocked);
         }
       }).catch(() => {});
+      if (isLeague(pool.tournament)) {
+        fetchSeasonLock(pool.id).then((data) => {
+          if (data && typeof data.locked !== "undefined") setSeasonLocked(!!data.locked);
+        }).catch(() => {});
+      }
       fetchKnockoutMatches().then((matches) => {
         setHasFinishedKoMatches(Array.isArray(matches) && matches.some((m) => m.status === "finished"));
       }).catch(() => {});
@@ -1116,7 +1122,28 @@ function App() {
                 </div>
               )}
 
-              {isPoolAdmin && (
+              {isPoolAdmin && isLeague(pool.tournament) && (
+                <div className="pool-settings-row">
+                  <span className="pool-settings-label">Champion Pick</span>
+                  <span className="pool-settings-value">
+                    <button
+                      className={`btn-small ${seasonLocked ? "btn-danger" : ""}`}
+                      onClick={async () => {
+                        const newVal = !seasonLocked;
+                        const res = await updateSeasonLock(pool.id, newVal);
+                        if (!res.error) setSeasonLocked(newVal);
+                      }}
+                    >
+                      {seasonLocked ? "Locked — Unlock" : "Open — Lock"}
+                    </button>
+                    <span style={{ fontSize: "0.72rem", color: "#8aa88a", marginTop: 4, display: "block", textAlign: "right" }}>
+                      Locks all season predictions, including the title winner
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {isPoolAdmin && !isLeague(pool.tournament) && (
                 <div className="pool-settings-row">
                   <span className="pool-settings-label">Champion Pick (During Groups)</span>
                   <span className="pool-settings-value">
@@ -1139,7 +1166,7 @@ function App() {
                 </div>
               )}
 
-              {isPoolAdmin && (
+              {isPoolAdmin && !isLeague(pool.tournament) && (
                 <div className="pool-settings-row">
                   <span className="pool-settings-label">Champion Pick (Window 2)</span>
                   <span className="pool-settings-value">
@@ -1189,7 +1216,7 @@ function App() {
                 </div>
               )}
 
-              {isPoolAdmin && (
+              {isPoolAdmin && !isLeague(pool.tournament) && (
                 <div className="pool-settings-row">
                   <span className="pool-settings-label">Exact Score Bonus</span>
                   <span className="pool-settings-value">
@@ -1212,7 +1239,7 @@ function App() {
                 </div>
               )}
 
-              {isPoolAdmin && (
+              {isPoolAdmin && !isLeague(pool.tournament) && (
                 <div className="pool-settings-row">
                   <span className="pool-settings-label">Group Stage Predictions</span>
                   <span className="pool-settings-value">

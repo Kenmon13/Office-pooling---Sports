@@ -2591,13 +2591,34 @@ function leaguePoolSeasonDeadline(code, poolId) {
 }
 
 function leagueSeasonLocked(code, poolId) {
+  // Admin override wins over the auto-deadline in both directions (1 = force locked, 0 = force open).
+  if (poolId) {
+    const ov = db.prepare("SELECT season_locked_override FROM pools WHERE id = ?").get(poolId);
+    if (ov && ov.season_locked_override !== null) return !!ov.season_locked_override;
+  }
   const deadline = leaguePoolSeasonDeadline(code, poolId);
   if (deadline) return new Date() >= new Date(deadline.replace(" ", "T") + "Z");
   return !!db.prepare("SELECT 1 FROM league_matches WHERE league = ? AND match_date IS NOT NULL LIMIT 1").get(code);
 }
 
 app.get("/api/league/:code/season-deadline", resolveLeague, (req, res) => {
-  res.json({ deadline: leaguePoolSeasonDeadline(req.params.code, req.query.pool_id) });
+  const { code } = req.params;
+  const poolId = req.query.pool_id;
+  res.json({ deadline: leaguePoolSeasonDeadline(code, poolId), locked: leagueSeasonLocked(code, poolId) });
+});
+
+// League pool admin: lock/unlock the whole Season Predictions section (incl. the title
+// winner), overriding the auto-deadline. `locked` is the desired effective state.
+app.get("/api/pools/:poolId/season-lock", (req, res) => {
+  const pool = db.prepare("SELECT tournament, season_locked_override FROM pools WHERE id = ?").get(req.params.poolId);
+  if (!pool) return res.status(404).json({ error: "Pool not found" });
+  res.json({ locked: leagueSeasonLocked(pool.tournament, req.params.poolId), override: pool.season_locked_override });
+});
+
+app.put("/api/pools/:poolId/season-lock", requirePoolAdmin, (req, res) => {
+  const { locked } = req.body;
+  db.prepare("UPDATE pools SET season_locked_override = ? WHERE id = ?").run(locked ? 1 : 0, req.params.poolId);
+  res.json({ success: true, locked: !!locked });
 });
 
 app.get("/api/league/:code/match-predictions/:participantId", resolveLeague, (req, res) => {
