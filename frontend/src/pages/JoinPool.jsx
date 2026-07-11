@@ -49,7 +49,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
   const handleJoinPublicPool = async (pool) => {
     setJoiningPoolId(pool.id);
     setError("");
-    const result = await joinPool(pool.name, "");
+    const result = await joinPool(pool.name, "", tournament.id);
     if (result.error) {
       setError(result.error);
       setJoiningPoolId(null);
@@ -84,7 +84,7 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
       setError("Pool name and password are required");
       return;
     }
-    const result = await joinPool(poolName.trim(), password.trim());
+    const result = await joinPool(poolName.trim(), password.trim(), tournament.id);
     if (result.error) {
       setError(result.error);
       return;

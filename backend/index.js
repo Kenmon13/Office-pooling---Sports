@@ -556,16 +556,20 @@ app.post("/api/pools", authenticateToken, (req, res) => {
     res.json({ id: poolId, name: name.trim(), sport: sport || "soccer", tournament: tournament || "wc2026", is_public: is_public ? 1 : 0 });
   } catch (err) {
     if (err.message.includes("UNIQUE")) {
-      return res.status(409).json({ error: "Pool name already taken" });
+      return res.status(409).json({ error: "A pool with that name already exists in this tournament" });
     }
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/api/pools/join", (req, res) => {
-  const { name, password } = req.body;
+  const { name, password, tournament } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Pool name is required" });
-  const pool = db.prepare("SELECT * FROM pools WHERE name = ?").get(name.trim());
+  // Names are unique per tournament, so scope the lookup by tournament when the client
+  // provides it (the join screen always knows it). Fall back to name-only for older clients.
+  const pool = tournament
+    ? db.prepare("SELECT * FROM pools WHERE name = ? AND tournament = ?").get(name.trim(), tournament)
+    : db.prepare("SELECT * FROM pools WHERE name = ?").get(name.trim());
   if (!pool) return res.status(404).json({ error: "Pool not found" });
   if (!pool.is_public) {
     if (!password || !password.trim()) return res.status(400).json({ error: "Password is required" });

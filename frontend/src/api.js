@@ -261,11 +261,11 @@ export async function createPool(name, sport, tournament, password, is_public) {
   return res.json();
 }
 
-export async function joinPool(name, password) {
+export async function joinPool(name, password, tournament) {
   const res = await fetch(`${API}/pools/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, password }),
+    body: JSON.stringify({ name, password, tournament }),
   });
   return res.json();
 }

@@ -21,11 +21,12 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS pools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     sport TEXT NOT NULL DEFAULT 'soccer',
     tournament TEXT NOT NULL DEFAULT 'wc2026',
     password TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(name, tournament)
   );
 
   CREATE TABLE IF NOT EXISTS participants (
@@ -1335,6 +1336,75 @@ try {
   }
 } catch (err) {
   console.log("EPL migration skipped:", err.message);
+}
+
+// One-time migration: pool names are unique *per tournament* rather than globally, so
+// e.g. an EPL pool and a World Cup pool may share a name. SQLite can't drop the original
+// column-level `name UNIQUE`, so we rebuild the table with UNIQUE(name, tournament).
+// Guarded by a settings flag (idempotent). foreign_keys must be toggled OUTSIDE the
+// transaction (the pragma is a no-op mid-transaction); participants/messages/pool_admins
+// FK into pools by id, and ids are copied verbatim, so no child rows are orphaned. An
+// in-transaction foreign_key_check rolls the whole thing back if anything is off.
+try {
+  const alreadyDone = db.prepare("SELECT value FROM settings WHERE key = 'pools_name_unique_per_tournament'").get();
+  if (!alreadyDone) {
+    const fkWasOn = db.pragma("foreign_keys", { simple: true });
+    db.pragma("foreign_keys = OFF");
+    try {
+      const rebuildPools = db.transaction(() => {
+        db.exec(`
+          CREATE TABLE pools_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            sport TEXT NOT NULL DEFAULT 'soccer',
+            tournament TEXT NOT NULL DEFAULT 'wc2026',
+            password TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            is_test INTEGER NOT NULL DEFAULT 0,
+            mock_date TEXT,
+            is_public INTEGER NOT NULL DEFAULT 0,
+            chat_closed INTEGER NOT NULL DEFAULT 0,
+            champion_w2_locked INTEGER NOT NULL DEFAULT 0,
+            player_awards_locked INTEGER NOT NULL DEFAULT 0,
+            exact_scores_disabled INTEGER NOT NULL DEFAULT 0,
+            group_stage_unlocked INTEGER NOT NULL DEFAULT 0,
+            champion_unlocked INTEGER NOT NULL DEFAULT 0,
+            player_awards_voided INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(name, tournament)
+          )
+        `);
+        db.exec(`
+          INSERT INTO pools_new
+            (id, name, sport, tournament, password, created_at, is_test, mock_date, is_public,
+             chat_closed, champion_w2_locked, player_awards_locked, exact_scores_disabled,
+             group_stage_unlocked, champion_unlocked, player_awards_voided)
+          SELECT
+            id, name, sport, tournament, password, created_at, is_test, mock_date, is_public,
+            chat_closed, champion_w2_locked, player_awards_locked, exact_scores_disabled,
+            group_stage_unlocked, champion_unlocked, player_awards_voided
+          FROM pools
+        `);
+
+        const before = db.prepare("SELECT COUNT(*) c FROM pools").get().c;
+        const after = db.prepare("SELECT COUNT(*) c FROM pools_new").get().c;
+        if (before !== after) throw new Error(`pools row count mismatch (${before} -> ${after}); aborting`);
+
+        db.exec("DROP TABLE pools");
+        db.exec("ALTER TABLE pools_new RENAME TO pools");
+
+        const violations = db.pragma("foreign_key_check", { simple: false });
+        if (violations && violations.length) throw new Error("foreign_key_check failed: " + JSON.stringify(violations));
+
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('pools_name_unique_per_tournament', ?)").run(new Date().toISOString());
+      });
+      rebuildPools();
+      console.log("pools: migrated to UNIQUE(name, tournament) — names are now unique per tournament");
+    } finally {
+      if (fkWasOn) db.pragma("foreign_keys = ON");
+    }
+  }
+} catch (err) {
+  console.log("pools name-uniqueness migration skipped:", err.message);
 }
 
 module.exports = db;
