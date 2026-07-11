@@ -64,7 +64,7 @@ function PoolSettings({ pool, user, onRenamed }) {
 
   return (
     <div className="page pool-settings-page">
-      <h2>Pool Settings</h2>
+      <h2>Admin Settings</h2>
 
       <div className="pool-settings-row">
         <span className="pool-settings-label">Pool name</span>

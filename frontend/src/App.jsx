@@ -830,9 +830,8 @@ function App() {
                       {!!user.is_admin && (
                         <button className="hamburger-item" onClick={() => { setShowAdmin(true); setMobileMenuOpen(false); }}>Admin Dashboard</button>
                       )}
+                      {!isLeague(pool.tournament) && (
                       <button className="hamburger-item" onClick={async () => {
-                        // Leagues use a dedicated Settings tab instead of the modal.
-                        if (isLeague(pool.tournament)) { setPendingNavigation("/settings"); setMobileMenuOpen(false); return; }
                         if (!pool.is_public && !poolPassword) {
                           const pwRes = await fetchPoolPassword(pool.id);
                           if (!pwRes.error) setPoolPassword(pwRes.password);
@@ -849,6 +848,7 @@ function App() {
                         setShowPoolSettings(true);
                         setMobileMenuOpen(false);
                       }}>Pool Settings</button>
+                      )}
                       <button onClick={(e) => {
                         const url = `${window.location.origin}/join/${pool.id}`;
                         navigator.clipboard.writeText(url);
@@ -883,9 +883,8 @@ function App() {
                 }} className="btn-small btn-share">
                   Share Link
                 </button>
+                {!isLeague(pool.tournament) && (
                 <button className="btn-small" onClick={async () => {
-                  // Leagues use a dedicated Settings tab instead of the modal.
-                  if (isLeague(pool.tournament)) { setPendingNavigation("/settings"); return; }
                   if (!pool.is_public && !poolPassword) {
                     const pwRes = await fetchPoolPassword(pool.id);
                     if (!pwRes.error) setPoolPassword(pwRes.password);
@@ -903,6 +902,7 @@ function App() {
                 }}>
                   Pool Settings
                 </button>
+                )}
               </p>
             </div>
             <div className="header-right">
@@ -958,7 +958,7 @@ function App() {
             <NavLink to="/leaderboard">Leaderboard</NavLink>
             <NavLink to="/breakdown">Breakdown</NavLink>
             <NavLink to="/chat">Chat</NavLink>
-            {isLeague(pool.tournament) && <NavLink to="/settings">Settings</NavLink>}
+            {isLeague(pool.tournament) && <NavLink to="/settings">Admin Settings</NavLink>}
           </nav>
         </header>
 
