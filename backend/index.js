@@ -462,19 +462,56 @@ app.get("/api/admin/users/:id/pools", requireAdminToken, (req, res) => {
   res.json(pools);
 });
 
+// Every table with a participant_id column. Cleared for all of the user's participants
+// before the participants themselves are deleted. Hardcoded whitelist (not user input),
+// so safe to interpolate. Keep in sync with new participant-scoped tables.
+const USER_PARTICIPANT_TABLES = [
+  "wc2022_champion_picks",
+  "wc2022_group_predictions",
+  "wc2022_knockout_predictions",
+  "champion_picks",
+  "knockout_predictions",
+  "group_predictions",
+  "predictions",
+  "third_place_predictions",
+  "player_award_picks",
+  "league_award_picks",
+  "league_match_predictions",
+  "league_season_predictions",
+  "pl2627_match_predictions",
+  "pl2627_player_award_picks",
+  "pl2627_season_predictions",
+];
+
 app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
   const targetId = req.params.id;
   // Don't allow deleting yourself
   if (String(targetId) === String(req.user.id)) return res.status(400).json({ error: "Cannot delete yourself" });
 
-  // Delete all their data
-  db.prepare("DELETE FROM wc2022_champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
-  db.prepare("DELETE FROM champion_picks WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
-  db.prepare("DELETE FROM knockout_predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
-  db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
-  db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)").run(targetId);
-  db.prepare("DELETE FROM participants WHERE user_id = ?").run(targetId);
-  db.prepare("DELETE FROM users WHERE id = ?").run(targetId);
+  // All-or-nothing: without a transaction a failure partway (e.g. an un-cleared FK)
+  // leaves half the user's data deleted and a ghost account behind.
+  try {
+    const deleteUser = db.transaction(() => {
+      // Participant-scoped rows first (they FK to participants).
+      for (const t of USER_PARTICIPANT_TABLES) {
+        db.prepare(`DELETE FROM ${t} WHERE participant_id IN (SELECT id FROM participants WHERE user_id = ?)`).run(targetId);
+      }
+      db.prepare("DELETE FROM participants WHERE user_id = ?").run(targetId);
+
+      // User-scoped rows that FK to users. issue_replies also FK to issues, so clear both
+      // the user's own replies and any replies left on the user's issues before the issues.
+      db.prepare("DELETE FROM issue_replies WHERE user_id = ? OR issue_id IN (SELECT id FROM issues WHERE user_id = ?)").run(targetId, targetId);
+      db.prepare("DELETE FROM issues WHERE user_id = ?").run(targetId);
+      db.prepare("DELETE FROM messages WHERE user_id = ?").run(targetId);
+      db.prepare("DELETE FROM poll_responses WHERE user_id = ?").run(targetId);
+      db.prepare("DELETE FROM pool_admins WHERE user_id = ?").run(targetId);
+
+      db.prepare("DELETE FROM users WHERE id = ?").run(targetId);
+    });
+    deleteUser();
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to delete user", detail: err.message });
+  }
   res.json({ success: true });
 });
 
