@@ -56,6 +56,7 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                   <th>Match</th>
                   <th>Season</th>
                   <th>Awards</th>
+                  <th>Adj</th>
                 </>) : (<>
                   <th>Group</th>
                   <th>KO</th>
@@ -80,6 +81,9 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                       <td className="pts-sub">{p.season_points || 0}</td>
                       <td className={`pts-sub ${(p.award_points || 0) > 0 ? "pts-champ-win" : ""}`}>
                         {(p.award_points || 0) > 0 ? `+${p.award_points}` : "—"}
+                      </td>
+                      <td className={`pts-sub ${(p.adjustment_points || 0) > 0 ? "pts-champ-win" : (p.adjustment_points || 0) < 0 ? "pts-champ-loss" : ""}`}>
+                        {(p.adjustment_points || 0) > 0 ? `+${p.adjustment_points}` : (p.adjustment_points || 0) < 0 ? p.adjustment_points : "—"}
                       </td>
                       <td className="points">{p.points || 0}</td>
                     </tr>
@@ -140,6 +144,12 @@ function Leaderboard({ poolId, tournament = "wc2026", mockDate }) {
                         <span className="lb-breakdown-label">Awards</span>
                         <span className={`lb-breakdown-val ${(p.award_points || 0) > 0 ? "pts-champ-win" : ""}`}>
                           {(p.award_points || 0) > 0 ? `+${p.award_points}` : "—"}
+                        </span>
+                      </div>
+                      <div className="lb-breakdown-row">
+                        <span className="lb-breakdown-label">Adjustment</span>
+                        <span className={`lb-breakdown-val ${(p.adjustment_points || 0) > 0 ? "pts-champ-win" : (p.adjustment_points || 0) < 0 ? "pts-champ-loss" : ""}`}>
+                          {(p.adjustment_points || 0) > 0 ? `+${p.adjustment_points}` : (p.adjustment_points || 0) < 0 ? p.adjustment_points : "—"}
                         </span>
                       </div>
                     </div>

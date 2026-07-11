@@ -481,6 +481,7 @@ const USER_PARTICIPANT_TABLES = [
   "pl2627_match_predictions",
   "pl2627_player_award_picks",
   "pl2627_season_predictions",
+  "score_adjustments",
 ];
 
 app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
@@ -535,6 +536,7 @@ app.delete("/api/admin/pools/:id", requireAdminToken, (req, res) => {
   db.prepare("DELETE FROM knockout_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM group_predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM predictions WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
+  db.prepare("DELETE FROM score_adjustments WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)").run(poolId);
   db.prepare("DELETE FROM participants WHERE pool_id = ?").run(poolId);
   db.prepare("DELETE FROM pool_admins WHERE pool_id = ?").run(poolId);
   db.prepare("DELETE FROM pools WHERE id = ?").run(poolId);
@@ -909,6 +911,7 @@ app.post("/api/admin/merge-participants", requireAdminToken, (req, res) => {
     "pl2627_match_predictions",
     "pl2627_player_award_picks",
     "pl2627_season_predictions",
+    "score_adjustments",
   ];
 
   const moved = {};
@@ -2621,6 +2624,44 @@ app.put("/api/pools/:poolId/season-lock", requirePoolAdmin, (req, res) => {
   res.json({ success: true, locked: !!locked });
 });
 
+// Manual score adjustments (itemized). Readable by anyone (shown on the leaderboard);
+// only a pool admin can add or remove entries. Adjustments are scoped to the pool's participants.
+app.get("/api/pools/:poolId/score-adjustments", (req, res) => {
+  const rows = db.prepare(`
+    SELECT sa.id, sa.participant_id, sa.points, sa.reason, sa.created_at, p.name AS participant_name
+    FROM score_adjustments sa
+    JOIN participants p ON p.id = sa.participant_id
+    WHERE p.pool_id = ?
+    ORDER BY sa.created_at DESC, sa.id DESC
+  `).all(req.params.poolId);
+  res.json(rows);
+});
+
+app.post("/api/pools/:poolId/score-adjustments", requirePoolAdmin, (req, res) => {
+  const poolId = req.params.poolId;
+  const { participant_id, points, reason } = req.body;
+  const pts = Number(points);
+  if (!participant_id || !Number.isInteger(pts) || pts === 0) {
+    return res.status(400).json({ error: "participant_id and a non-zero whole-number points value are required" });
+  }
+  // Participant must belong to this pool — don't let an admin adjust someone in another pool.
+  const part = db.prepare("SELECT id FROM participants WHERE id = ? AND pool_id = ?").get(participant_id, poolId);
+  if (!part) return res.status(404).json({ error: "Participant not found in this pool" });
+  const info = db.prepare(
+    "INSERT INTO score_adjustments (participant_id, points, reason, created_by) VALUES (?, ?, ?, ?)"
+  ).run(participant_id, pts, (reason || "").trim() || null, req.user.id);
+  res.json({ success: true, id: info.lastInsertRowid });
+});
+
+app.delete("/api/pools/:poolId/score-adjustments/:id", requirePoolAdmin, (req, res) => {
+  // Scope the delete to this pool's participants so an admin can only remove their own pool's entries.
+  db.prepare(`
+    DELETE FROM score_adjustments
+    WHERE id = ? AND participant_id IN (SELECT id FROM participants WHERE pool_id = ?)
+  `).run(req.params.id, req.params.poolId);
+  res.json({ success: true });
+});
+
 app.get("/api/league/:code/match-predictions/:participantId", resolveLeague, (req, res) => {
   const { participantId, code } = req.params;
   const { matchday } = req.query;
@@ -2739,6 +2780,12 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
   for (const ap of allAwardPicks) (awardPicksByParticipant[ap.participant_id] ||= []).push(ap);
   const managerKeys = new Set(L.awards.filter((a) => a.type === "manager").map((a) => a.key));
 
+  // Manual admin adjustments (itemized) — summed per participant and added to the total.
+  const adjustmentByParticipant = {};
+  for (const a of db.prepare(
+    "SELECT participant_id, SUM(points) AS s FROM score_adjustments WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?) GROUP BY participant_id"
+  ).all(poolId)) adjustmentByParticipant[a.participant_id] = a.s;
+
   const [clFrom, clTo] = Z.cl, [relFrom, relTo] = Z.relegation;
 
   const result = participants.map((part) => {
@@ -2790,8 +2837,9 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
       }
     }
 
-    const totalPoints = matchPoints + seasonPoints + awardPoints;
-    return { id: part.id, name: part.name, points: totalPoints, match_points: matchPoints, match_correct: matchCorrect, match_exact: matchExact, season_points: seasonPoints, award_points: awardPoints };
+    const adjustmentPoints = adjustmentByParticipant[part.id] || 0;
+    const totalPoints = matchPoints + seasonPoints + awardPoints + adjustmentPoints;
+    return { id: part.id, name: part.name, points: totalPoints, match_points: matchPoints, match_correct: matchCorrect, match_exact: matchExact, season_points: seasonPoints, award_points: awardPoints, adjustment_points: adjustmentPoints };
   });
 
   result.sort((a, b) => b.points - a.points || b.match_correct - a.match_correct || a.name.localeCompare(b.name));

@@ -532,6 +532,25 @@ export async function updateSeasonLock(poolId, locked) {
   });
   return res.json();
 }
+// Manual score adjustments (itemized). Read is open; add/delete require pool admin.
+export async function fetchScoreAdjustments(poolId) {
+  return (await fetch(`${API}/pools/${poolId}/score-adjustments`)).json();
+}
+export async function addScoreAdjustment(poolId, participant_id, points, reason) {
+  const res = await fetch(`${API}/pools/${poolId}/score-adjustments`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ participant_id, points, reason }),
+  });
+  return res.json();
+}
+export async function deleteScoreAdjustment(poolId, id) {
+  const res = await fetch(`${API}/pools/${poolId}/score-adjustments/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
 
 // ── History ───────────────────────────────────────────────────────────────────
 
