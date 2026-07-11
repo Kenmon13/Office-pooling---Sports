@@ -26,7 +26,8 @@ import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
-import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchSeasonLock, updateSeasonLock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
+import PoolSettings from "./pages/PoolSettings";
+import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
 import PollPrompt from "./components/PollModal";
@@ -311,7 +312,6 @@ function App() {
   const [championUnlocked, setChampionUnlocked] = useState(false);
   const [playerAwardsLocked, setPlayerAwardsLocked] = useState(false);
   const [playerAwardsVoided, setPlayerAwardsVoided] = useState(false);
-  const [seasonLocked, setSeasonLocked] = useState(false);
   const [kickConfirmUserId, setKickConfirmUserId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [editingPoolName, setEditingPoolName] = useState(false);
@@ -365,11 +365,6 @@ function App() {
           setGroupStageUnlocked(!!data.group_stage_unlocked);
         }
       }).catch(() => {});
-      if (isLeague(pool.tournament)) {
-        fetchSeasonLock(pool.id).then((data) => {
-          if (data && typeof data.locked !== "undefined") setSeasonLocked(!!data.locked);
-        }).catch(() => {});
-      }
       fetchKnockoutMatches().then((matches) => {
         setHasFinishedKoMatches(Array.isArray(matches) && matches.some((m) => m.status === "finished"));
       }).catch(() => {});
@@ -836,6 +831,8 @@ function App() {
                         <button className="hamburger-item" onClick={() => { setShowAdmin(true); setMobileMenuOpen(false); }}>Admin Dashboard</button>
                       )}
                       <button className="hamburger-item" onClick={async () => {
+                        // Leagues use a dedicated Settings tab instead of the modal.
+                        if (isLeague(pool.tournament)) { setPendingNavigation("/settings"); setMobileMenuOpen(false); return; }
                         if (!pool.is_public && !poolPassword) {
                           const pwRes = await fetchPoolPassword(pool.id);
                           if (!pwRes.error) setPoolPassword(pwRes.password);
@@ -887,6 +884,8 @@ function App() {
                   Share Link
                 </button>
                 <button className="btn-small" onClick={async () => {
+                  // Leagues use a dedicated Settings tab instead of the modal.
+                  if (isLeague(pool.tournament)) { setPendingNavigation("/settings"); return; }
                   if (!pool.is_public && !poolPassword) {
                     const pwRes = await fetchPoolPassword(pool.id);
                     if (!pwRes.error) setPoolPassword(pwRes.password);
@@ -959,6 +958,7 @@ function App() {
             <NavLink to="/leaderboard">Leaderboard</NavLink>
             <NavLink to="/breakdown">Breakdown</NavLink>
             <NavLink to="/chat">Chat</NavLink>
+            {isLeague(pool.tournament) && <NavLink to="/settings">Settings</NavLink>}
           </nav>
         </header>
 
@@ -979,6 +979,9 @@ function App() {
             {/* History was merged into Breakdown; redirect old links. */}
             <Route path="/history" element={<Navigate to="/breakdown" replace />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
+            {isLeague(pool.tournament) && (
+              <Route path="/settings" element={<PoolSettings pool={pool} user={user} onRenamed={(name) => setPool({ ...pool, name })} />} />
+            )}
             <Route path="/picks/:participantId" element={
               isLeague(pool.tournament)
                 ? <ViewEPLPicks poolId={pool.id} currentUser={participant} league={pool.tournament} />
@@ -987,7 +990,7 @@ function App() {
           </Routes>
         </main>
 
-        {showPoolSettings && (
+        {showPoolSettings && !isLeague(pool.tournament) && (
           <div className="modal-overlay" onClick={() => { setShowPoolSettings(false); setRevealPassword(false); setKickConfirmUserId(null); setShowChangePassword(false); setNewPoolPassword(""); setChangePasswordError(""); setChangingPassword(false); setChangePasswordSuccess(false); setEditingPoolName(false); setRenameError(""); }}>
             <div className="modal-box pool-settings-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Pool Settings</h3>
@@ -1118,27 +1121,6 @@ function App() {
                     >
                       {chatClosed ? "Chat Closed — Reopen" : "Open — Close Chat"}
                     </button>
-                  </span>
-                </div>
-              )}
-
-              {isPoolAdmin && isLeague(pool.tournament) && (
-                <div className="pool-settings-row">
-                  <span className="pool-settings-label">Champion Pick</span>
-                  <span className="pool-settings-value">
-                    <button
-                      className={`btn-small ${seasonLocked ? "btn-danger" : ""}`}
-                      onClick={async () => {
-                        const newVal = !seasonLocked;
-                        const res = await updateSeasonLock(pool.id, newVal);
-                        if (!res.error) setSeasonLocked(newVal);
-                      }}
-                    >
-                      {seasonLocked ? "Locked — Unlock" : "Open — Lock"}
-                    </button>
-                    <span style={{ fontSize: "0.72rem", color: "#8aa88a", marginTop: 4, display: "block", textAlign: "right" }}>
-                      Locks all season predictions, including the title winner
-                    </span>
                   </span>
                 </div>
               )}

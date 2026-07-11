@@ -934,6 +934,19 @@ try { db.exec("ALTER TABLE pools ADD COLUMN group_stage_unlocked INTEGER NOT NUL
 // Pool admin toggle to unlock champion picks during group stage
 try { db.exec("ALTER TABLE pools ADD COLUMN champion_unlocked INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
 
+// Manual score adjustments a pool admin can apply to a participant (league pools).
+// Itemized: each row is one +/- adjustment with a reason; the participant's total gets the sum.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS score_adjustments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    points INTEGER NOT NULL,
+    reason TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT DEFAULT (datetime('now'))
+  )
+`);
+
 // Add dob column to wc_players
 try { db.exec("ALTER TABLE wc_players ADD COLUMN dob TEXT"); } catch (_) {}
 
