@@ -117,7 +117,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
         <div className="deadline-banner locked" style={{ marginBottom: 16 }}>
           <span className="deadline-locked-text">
             {lockedByAdmin || !isLeagueMode
-              ? "Player award picks have been locked by your pool admin"
+              ? "This section is locked by the pool admin"
               : "Player award picks are locked — the entry window has closed"}
           </span>
         </div>
