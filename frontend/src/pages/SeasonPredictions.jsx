@@ -7,7 +7,7 @@ import {
   fetchLeagueStandings,
 } from "../api";
 import { plCrest, registerCrests } from "../flags";
-import { getLeague, zoneForPosition } from "../leagues";
+import { getLeague, zoneForPosition, isNFL } from "../leagues";
 
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"];
@@ -71,11 +71,16 @@ function zoneDividerLabels(league) {
 }
 
 function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
-  const teamCount = getLeague(league)?.teamCount || 20;
+  const L = getLeague(league);
+  const nfl = isNFL(league);
+  const teamCount = L?.teamCount || 20;
+  const slots = L?.seasonSlots || [];
   const ZONE_LABELS = zoneDividerLabels(league);
   const [teams, setTeams] = useState([]);
-  const [table, setTable] = useState([]); // array of team IDs in order (pos 1-20)
+  const [table, setTable] = useState([]); // soccer: array of team IDs in order (pos 1-20)
   const [savedTable, setSavedTable] = useState([]);
+  const [picks, setPicks] = useState({}); // nfl: { [slot.pos]: team_id }
+  const [savedPicks, setSavedPicks] = useState({});
   const [standings, setStandings] = useState([]); // live table, sorted (index+1 = position)
   const [deadline, setDeadline] = useState(null);
   const [serverLocked, setServerLocked] = useState(null); // admin-override-aware lock from the server
@@ -103,23 +108,30 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
       setDeadline(dlData.deadline || null);
       setServerLocked(typeof dlData.locked === "boolean" ? dlData.locked : null);
       setStandings(Array.isArray(standingsData) ? standingsData : []);
-      if (table.length === 0 && teamData.length > 0) {
+      // Soccer starts from the team list as a default running order; NFL starts empty (every slot
+      // is an explicit choice, and pre-filling one would silently become a real pick on save).
+      if (!nfl && table.length === 0 && teamData.length > 0) {
         setTable(teamData.map((t) => t.id));
       }
     });
   }, [league]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (currentUser) {
-      fetchLeagueSeasonPredictions(league, currentUser.id).then((preds) => {
-        if (preds.length === teamCount) {
-          const ordered = preds.sort((a, b) => a.position - b.position).map((p) => p.team_id);
-          setTable(ordered);
-          setSavedTable(ordered);
-        }
-      });
-    }
-  }, [league, currentUser, teamCount]);
+    if (!currentUser) return;
+    fetchLeagueSeasonPredictions(league, currentUser.id).then((preds) => {
+      if (nfl) {
+        if (preds.length === 0) return;
+        const byPos = {};
+        for (const p of preds) byPos[p.position] = p.team_id;
+        setPicks(byPos);
+        setSavedPicks(byPos);
+      } else if (preds.length === teamCount) {
+        const ordered = preds.sort((a, b) => a.position - b.position).map((p) => p.team_id);
+        setTable(ordered);
+        setSavedTable(ordered);
+      }
+    });
+  }, [league, currentUser, teamCount, nfl]);
 
   const teamMap = {};
   teams.forEach((t) => { teamMap[t.id] = t; });
@@ -130,7 +142,18 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
   // The season has kicked off once at least one match has been played.
   const hasStarted = standings.some((t) => t.played > 0);
 
-  const hasChanges = table.length === teamCount && JSON.stringify(table) !== JSON.stringify(savedTable);
+  // Who currently tops each division (standings are pre-sorted, so first seen wins).
+  const divisionLeader = {};
+  if (nfl) {
+    for (const t of standings) {
+      if (t.division && !divisionLeader[t.division]) divisionLeader[t.division] = t;
+    }
+  }
+
+  const allSlotsFilled = slots.every((s) => picks[s.pos]);
+  const hasChanges = nfl
+    ? allSlotsFilled && JSON.stringify(picks) !== JSON.stringify(savedPicks)
+    : table.length === teamCount && JSON.stringify(table) !== JSON.stringify(savedTable);
 
   const moveTeam = (fromIdx, toIdx) => {
     if (isLocked) return;
@@ -159,18 +182,20 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
   };
 
   const handleSave = async () => {
-    if (!currentUser || table.length !== teamCount) return;
+    if (!currentUser) return;
+    if (nfl ? !allSlotsFilled : table.length !== teamCount) return;
     setSaving(true);
     setSaveError("");
 
-    const predictions = table.map((teamId, idx) => ({
-      position: idx + 1,
-      team_id: teamId,
-    }));
+    const predictions = nfl
+      ? slots.map((s) => ({ position: s.pos, team_id: picks[s.pos] }))
+      : table.map((teamId, idx) => ({ position: idx + 1, team_id: teamId }));
 
     const res = await submitLeagueSeasonPredictions(league, currentUser.id, predictions);
     if (res.error) {
       setSaveError(res.error);
+    } else if (nfl) {
+      setSavedPicks({ ...picks });
     } else {
       setSavedTable([...table]);
     }
@@ -178,20 +203,34 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
     window.dispatchEvent(new CustomEvent("picks-saved"));
   };
 
+  const savedAny = nfl ? Object.keys(savedPicks).length > 0 : savedTable.length > 0;
+
   return (
     <div className="page">
       <h2>Season Predictions</h2>
 
       <div className="ko-rules">
         <p className="ko-rules-title">How scoring works</p>
-        <ul>
-          <li>Champion correct: <strong>25 pts</strong></li>
-          <li>Each correct team in top 4 (CL): <strong>5 pts</strong></li>
-          <li>Correct Europa League spot (5th): <strong>2 pts</strong></li>
-          <li>Correct Conference League spot (6th): <strong>2 pts</strong></li>
-          <li>Each correct team in bottom 3 (relegation): <strong>5 pts</strong></li>
-          <li>Each team in exact correct position: <strong>1 pt</strong></li>
-        </ul>
+        {nfl ? (
+          <ul>
+            <li>Each correct division winner (×8): <strong>5 pts</strong></li>
+            <li>Each correct conference champion (×2): <strong>10 pts</strong></li>
+            <li>Correct Super Bowl winner: <strong>25 pts</strong></li>
+            <li className="rules-note">
+              Division winners score once the regular season ends; the conference and Super Bowl
+              picks score after those games are played.
+            </li>
+          </ul>
+        ) : (
+          <ul>
+            <li>Champion correct: <strong>25 pts</strong></li>
+            <li>Each correct team in top 4 (CL): <strong>5 pts</strong></li>
+            <li>Correct Europa League spot (5th): <strong>2 pts</strong></li>
+            <li>Correct Conference League spot (6th): <strong>2 pts</strong></li>
+            <li>Each correct team in bottom 3 (relegation): <strong>5 pts</strong></li>
+            <li>Each team in exact correct position: <strong>1 pt</strong></li>
+          </ul>
+        )}
       </div>
 
       {deadline && !isLocked && countdown && (
@@ -232,6 +271,17 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
 
       {teams.length === 0 ? (
         <p className="pick-hint">Loading teams...</p>
+      ) : nfl ? (
+        <NFLSlotPicks
+          slots={slots}
+          teams={teams}
+          picks={picks}
+          setPicks={setPicks}
+          isLocked={isLocked}
+          hasStarted={hasStarted}
+          divisionLeader={divisionLeader}
+          standings={standings}
+        />
       ) : (
         <>
           <p className="pick-hint">
@@ -337,20 +387,158 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
       {currentUser && !isLocked && (
         <div className="save-all-footer">
           {saveError && <p className="error">{saveError}</p>}
+          {nfl && !allSlotsFilled && (
+            <span className="saved-label">
+              Fill all {slots.length} picks to save ({slots.filter((s) => picks[s.pos]).length}/{slots.length} done)
+            </span>
+          )}
           {hasChanges && (
             <button
               className="btn-submit btn-save-all"
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? "Saving..." : savedTable.length > 0 ? "Update Predictions" : "Save Predictions"}
+              {saving ? "Saving..." : savedAny ? "Update Predictions" : "Save Predictions"}
             </button>
           )}
-          {!hasChanges && savedTable.length > 0 && (
+          {!hasChanges && savedAny && (
             <span className="saved-label">Predictions saved</span>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// NFL picks: a team per named slot rather than a full 1..N ordering. Each slot only offers the
+// teams that could actually fill it (a division slot lists that division's four), which mirrors
+// the same rule the backend enforces on save.
+function NFLSlotPicks({ slots, teams, picks, setPicks, isLocked, hasStarted, divisionLeader, standings }) {
+  const eligibleFor = (slot) => {
+    if (slot.scope === "division") return teams.filter((t) => t.division === slot.division);
+    if (slot.scope === "conference") return teams.filter((t) => t.conference === slot.conference);
+    return teams;
+  };
+
+  const bySlotScope = (scope) => slots.filter((s) => s.scope === scope);
+  const standingFor = (teamId) => standings.find((s) => s.team_id === teamId);
+
+  const renderSlot = (slot) => {
+    const eligible = eligibleFor(slot).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const pickedId = picks[slot.pos];
+    const picked = teams.find((t) => t.id === pickedId);
+    const leader = slot.scope === "division" ? divisionLeader[slot.division] : null;
+    const pickedStanding = pickedId ? standingFor(pickedId) : null;
+
+    return (
+      <div key={slot.key} className={`nfl-slot ${slot.scope}`}>
+        <div className="nfl-slot-head">
+          <span className="nfl-slot-label">
+            <span className="nfl-slot-emoji">{slot.emoji}</span>
+            {slot.label}
+          </span>
+          <span className="nfl-slot-pts">{slot.pts} pts</span>
+        </div>
+
+        <div className="nfl-slot-pick">
+          {picked && plCrest(picked.code, picked.crest_url)}
+          <select
+            className="nfl-slot-select"
+            value={pickedId || ""}
+            disabled={isLocked}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPicks((prev) => ({ ...prev, [slot.pos]: v ? Number(v) : undefined }));
+            }}
+          >
+            <option value="">— pick a team —</option>
+            {eligible.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {hasStarted && (
+          <div className="nfl-slot-live">
+            {slot.scope === "division" && leader && (
+              <span className={leader.team_id === pickedId ? "nfl-live-ok" : "nfl-live-off"}>
+                {leader.team_id === pickedId ? "✓ your pick leads" : `Leading: ${leader.short_name || leader.name}`}
+              </span>
+            )}
+            {slot.scope !== "division" && pickedStanding && (
+              <span className="nfl-live-off">
+                {pickedStanding.short_name || pickedStanding.name}: {pickedStanding.won}-{pickedStanding.lost}
+                {pickedStanding.tied > 0 ? `-${pickedStanding.tied}` : ""}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <p className="pick-hint">
+        {hasStarted
+          ? "The season is underway — each division shows who's currently leading it, so you can see how your picks are holding up."
+          : "Pick a winner for each of the eight divisions, then each conference champion and the Super Bowl winner."}
+      </p>
+
+      <div className="nfl-slots">
+        {["AFC", "NFC"].map((conf) => (
+          <div key={conf} className="nfl-conf-block">
+            <h3 className="nfl-conf-title">{conf}</h3>
+            {bySlotScope("division").filter((s) => s.conference === conf).map(renderSlot)}
+            {bySlotScope("conference").filter((s) => s.conference === conf).map(renderSlot)}
+          </div>
+        ))}
+      </div>
+
+      <div className="nfl-slots-final">
+        {bySlotScope("champion").map(renderSlot)}
+      </div>
+
+      {hasStarted && <NFLStandings standings={standings} />}
+    </>
+  );
+}
+
+// Live W-L-T table, grouped the way the NFL is actually read: by division, within each conference.
+function NFLStandings({ standings }) {
+  const divisions = [...new Set(standings.map((t) => t.division).filter(Boolean))].sort();
+  if (divisions.length === 0) return null;
+
+  return (
+    <div className="nfl-standings">
+      <h3 className="nfl-standings-title">Current Standings</h3>
+      <div className="nfl-standings-grid">
+        {divisions.map((div) => (
+          <div key={div} className="nfl-division">
+            <div className="nfl-division-head">
+              <span className="nfl-division-name">{div}</span>
+              <span className="nfl-division-cols">
+                <span className="nfl-stat">W</span>
+                <span className="nfl-stat">L</span>
+                <span className="nfl-stat">T</span>
+                <span className="nfl-stat pct">PCT</span>
+              </span>
+            </div>
+            {standings.filter((t) => t.division === div).map((t, i) => (
+              <div key={t.team_id} className={`nfl-division-row ${i === 0 ? "leader" : ""}`}>
+                {plCrest(t.code, t.crest_url)}
+                <span className="nfl-division-team">{t.short_name || t.name}</span>
+                <span className="nfl-division-cols">
+                  <span className="nfl-stat">{t.won}</span>
+                  <span className="nfl-stat">{t.lost}</span>
+                  <span className="nfl-stat">{t.tied}</span>
+                  <span className="nfl-stat pct">{t.played > 0 ? t.pct.toFixed(3).replace(/^0/, "") : "—"}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -127,8 +127,24 @@ function ensureLeagueMatchIndexes() {
   try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_league_matches_unique ON league_matches(league, matchday, home_team_id, away_team_id)"); } catch (_) {}
 }
 
-// Sync one league's fixtures from football-data.org into league_matches (WHERE league=code).
+// Sync one league's fixtures into league_matches, dispatching to whichever feed owns it.
 async function syncLeagueFixtures(leagueCode) {
+  const cfg = LEAGUE_CONFIG[leagueCode];
+  if (!cfg) return { ok: false, reason: "unknown_league" };
+  if (cfg.feed === "espn") return syncEspnFixtures(leagueCode);
+  return syncFootballDataFixtures(leagueCode);
+}
+
+// Refresh one league's live/finished scores, dispatching to whichever feed owns it.
+async function syncLeagueScores(leagueCode) {
+  const cfg = LEAGUE_CONFIG[leagueCode];
+  if (!cfg) return;
+  if (cfg.feed === "espn") return syncEspnScores(leagueCode);
+  return syncFootballDataScores(leagueCode);
+}
+
+// Sync one league's fixtures from football-data.org into league_matches (WHERE league=code).
+async function syncFootballDataFixtures(leagueCode) {
   const cfg = LEAGUE_CONFIG[leagueCode];
   if (!cfg) return { ok: false, reason: "unknown_league" };
   const apiKey = process.env.FOOTBALL_API_KEY;
@@ -246,7 +262,7 @@ async function syncLeagueFixtures(leagueCode) {
 }
 
 // Refresh one league's live/finished scores from football-data.org into league_matches.
-async function syncLeagueScores(leagueCode) {
+async function syncFootballDataScores(leagueCode) {
   const cfg = LEAGUE_CONFIG[leagueCode];
   if (!cfg) return;
   const apiKey = process.env.FOOTBALL_API_KEY;
@@ -290,16 +306,206 @@ async function syncLeagueScores(leagueCode) {
   }
 }
 
+// ── ESPN fixture & score sync (NFL) ─────────────────────────────────────────────
+// ESPN's public scoreboard is free and needs no key. Our league_teams.code IS ESPN's team
+// abbreviation (nfl-squad-data.js is generated from this same feed), so there's no code mapping.
+//
+// ESPN splits the season into `seasontype`s, each with its own week numbering. We flatten both
+// onto league_matches.matchday so the whole season is one continuous 1..22 sequence:
+//
+//   seasontype=2 (regular)   weeks 1..18  -> matchday 1..18
+//   seasontype=3 (postseason) week 1 Wild Card    -> 19
+//                             week 2 Divisional   -> 20
+//                             week 3 Conference   -> 21   (resolves the conf-champion slots)
+//                             week 4 Pro Bowl     -> skipped: an exhibition whose "teams" are
+//                                                    AFC/NFC, not franchises
+//                             week 5 Super Bowl   -> 22   (resolves the Super Bowl slot)
+const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports";
+const ESPN_PLAYOFF_WEEK_TO_MATCHDAY = { 1: 19, 2: 20, 3: 21, 5: 22 };
+
+async function espnScoreboard(cfg, params) {
+  const qs = new URLSearchParams({ dates: String(cfg.espnSeason), ...params });
+  const res = await fetch(`${ESPN_SITE}/${cfg.espnPath}/scoreboard?${qs}`);
+  if (!res.ok) throw new Error(`ESPN scoreboard responded ${res.status}`);
+  return res.json();
+}
+
+// Flatten one ESPN event into the columns league_matches wants, or null if it isn't usable.
+function normalizeEspnEvent(ev, matchday) {
+  const comp = ev.competitions?.[0];
+  if (!comp) return null;
+  const home = comp.competitors?.find((c) => c.homeAway === "home");
+  const away = comp.competitors?.find((c) => c.homeAway === "away");
+  if (!home || !away) return null;
+
+  const state = comp.status?.type?.state; // pre | in | post
+  const status = state === "post" ? "finished" : state === "in" ? "live" : "upcoming";
+  // Scores come back as strings, and are "0" (not null) before kickoff — only trust them once
+  // the game is actually under way, otherwise every upcoming fixture looks like a 0-0 draw.
+  const hs = status === "upcoming" ? null : Number(home.score ?? 0);
+  const as_ = status === "upcoming" ? null : Number(away.score ?? 0);
+
+  return {
+    apiId: Number(ev.id),
+    matchday,
+    homeCode: home.team?.abbreviation,
+    awayCode: away.team?.abbreviation,
+    // "2026-09-13T17:00Z" -> "2026-09-13 17:00", matching the football-data path.
+    matchDate: ev.date ? ev.date.replace("T", " ").replace("Z", "").slice(0, 16) : null,
+    homeScore: Number.isFinite(hs) ? hs : null,
+    awayScore: Number.isFinite(as_) ? as_ : null,
+    status,
+  };
+}
+
+// Pull the full season (regular + playoffs) from ESPN. Runs on boot and daily.
+async function syncEspnFixtures(leagueCode) {
+  const cfg = LEAGUE_CONFIG[leagueCode];
+  if (!cfg) return { ok: false, reason: "unknown_league" };
+
+  try {
+    const events = [];
+    for (let week = 1; week <= cfg.matchdays; week++) {
+      const data = await espnScoreboard(cfg, { seasontype: "2", week: String(week) });
+      for (const ev of data.events || []) events.push([ev, week]);
+    }
+    for (const [espnWeek, matchday] of Object.entries(ESPN_PLAYOFF_WEEK_TO_MATCHDAY)) {
+      const data = await espnScoreboard(cfg, { seasontype: "3", week: espnWeek });
+      for (const ev of data.events || []) events.push([ev, matchday]);
+    }
+
+    if (events.length === 0) {
+      console.log(`${leagueCode} fixtures: no events returned from ESPN yet.`);
+      return { ok: false, reason: "api_empty", apiCount: 0 };
+    }
+
+    const teamByCode = {};
+    for (const t of db.prepare("SELECT id, code FROM league_teams WHERE league = ?").all(leagueCode)) teamByCode[t.code] = t.id;
+
+    ensureLeagueMatchIndexes();
+    const findByApiId = db.prepare("SELECT id, matchday FROM league_matches WHERE league = ? AND api_match_id = ?");
+    const updateRow = db.prepare(`UPDATE league_matches
+      SET matchday = ?, home_team_id = ?, away_team_id = ?, match_date = ?,
+        home_score = COALESCE(?, home_score), away_score = COALESCE(?, away_score),
+        status = ?, api_match_id = ? WHERE id = ?`);
+    const insertRow = db.prepare(`INSERT INTO league_matches
+      (league, matchday, home_team_id, away_team_id, match_date, home_score, away_score, status, api_match_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
+    let inserted = 0, updated = 0, remapped = 0, skipped = 0;
+    const unknownCodes = new Set();
+
+    db.transaction(() => {
+      for (const [ev, matchday] of events) {
+        const m = normalizeEspnEvent(ev, matchday);
+        if (!m || !m.apiId) { skipped++; continue; }
+
+        const homeId = teamByCode[m.homeCode];
+        const awayId = teamByCode[m.awayCode];
+        if (!homeId || !awayId) {
+          if (!homeId) unknownCodes.add(m.homeCode);
+          if (!awayId) unknownCodes.add(m.awayCode);
+          skipped++;
+          continue;
+        }
+
+        const existing = findByApiId.get(leagueCode, m.apiId);
+        if (existing) {
+          updateRow.run(m.matchday, homeId, awayId, m.matchDate, m.homeScore, m.awayScore, m.status, m.apiId, existing.id);
+          if (existing.matchday !== m.matchday) remapped++; else updated++;
+          continue;
+        }
+        insertRow.run(leagueCode, m.matchday, homeId, awayId, m.matchDate, m.homeScore, m.awayScore, m.status, m.apiId);
+        inserted++;
+      }
+    })();
+
+    console.log(`${leagueCode} fixture sync (ESPN): ${inserted} inserted, ${updated} updated, ${remapped} remapped, ${skipped} skipped (${events.length} events).`);
+    return { ok: true, apiCount: events.length, inserted, updated, remapped, skipped, unknownCodes: [...unknownCodes] };
+  } catch (err) {
+    console.log(`${leagueCode} fixture sync error (ESPN):`, err.message);
+    return { ok: false, reason: "exception", message: err.message };
+  }
+}
+
+// Refresh live/finished scores. Unlike the fixture sync this only asks for the current slate —
+// ESPN's bare scoreboard returns whatever week is in play, so it's one request, not 22.
+async function syncEspnScores(leagueCode) {
+  const cfg = LEAGUE_CONFIG[leagueCode];
+  if (!cfg) return;
+
+  try {
+    const res = await fetch(`${ESPN_SITE}/${cfg.espnPath}/scoreboard`);
+    if (!res.ok) return;
+    const events = (await res.json()).events || [];
+
+    // Matched on ESPN's event id, so a fixture that got rescheduled to another week still lands.
+    const update = db.prepare(
+      "UPDATE league_matches SET home_score = ?, away_score = ?, status = ? WHERE league = ? AND api_match_id = ? AND status IN ('upcoming', 'live')"
+    );
+
+    let finished = 0, live = 0;
+    for (const ev of events) {
+      const m = normalizeEspnEvent(ev, null);
+      if (!m || !m.apiId || m.status === "upcoming") continue;
+      if (update.run(m.homeScore, m.awayScore, m.status, leagueCode, m.apiId).changes > 0) {
+        if (m.status === "finished") finished++; else live++;
+      }
+    }
+    if (finished > 0 || live > 0) console.log(`${leagueCode} score update (ESPN): ${finished} finished, ${live} live.`);
+  } catch (err) {
+    console.log(`${leagueCode} score fetch error (ESPN):`, err.message);
+  }
+}
+
 // Back-compat alias for the admin "sync PL fixtures" button.
 async function syncPLFixtures() { return syncLeagueFixtures("epl2627"); }
 
 // ── Start all refresh loops ────────────────────────────────────────────────────
 
-// Check for new results every 5 minutes
+// Start the sync loops for one league: live/finished scores every 5 min, plus a fixture sync
+// (immediately, or scheduled to the release date if it's still in the future) and a daily re-sync
+// afterwards to pick up date/time changes.
+function startLeagueSync(code) {
+  const cfg = LEAGUE_CONFIG[code];
+
+  syncLeagueScores(code);
+  setInterval(() => syncLeagueScores(code), 5 * 60 * 1000);
+
+  const dailyFixtureSync = () => {
+    syncLeagueFixtures(code);
+    setInterval(() => syncLeagueFixtures(code), 24 * 60 * 60 * 1000);
+  };
+
+  const release = cfg.fixtureRelease ? new Date(cfg.fixtureRelease) : null;
+  const msUntilRelease = release ? release.getTime() - Date.now() : 0;
+
+  if (msUntilRelease > 0) {
+    console.log(`${code} fixture sync scheduled for ${cfg.fixtureRelease} (in ${Math.round(msUntilRelease / 3600000)}h).`);
+    setTimeout(() => {
+      console.log(`${code} fixture release time reached — syncing fixtures now.`);
+      dailyFixtureSync();
+    }, msUntilRelease);
+  } else {
+    const existingMatches = db.prepare("SELECT COUNT(*) as c FROM league_matches WHERE league = ?").get(code).c;
+    console.log(existingMatches === 0
+      ? `${code} fixtures: none in DB — syncing now.`
+      : `${code} fixtures: ${existingMatches} matches in DB. Daily re-sync enabled.`);
+    dailyFixtureSync();
+  }
+}
+
+// Check for new results every 5 minutes.
 function startScoreRefresh() {
+  // ESPN-fed leagues (NFL) need no API key, so they sync regardless of how football-data.org is
+  // configured. Only the football-data.org-fed work below is gated on FOOTBALL_API_KEY.
+  const espnLeagues = Object.keys(LEAGUE_CONFIG).filter((c) => LEAGUE_CONFIG[c].feed === "espn");
+  for (const code of espnLeagues) startLeagueSync(code);
+  if (espnLeagues.length > 0) console.log(`ESPN sync enabled for: ${espnLeagues.join(", ")}.`);
+
   const apiKey = process.env.FOOTBALL_API_KEY;
   if (!apiKey) {
-    console.log("FOOTBALL_API_KEY not set. Scores will not auto-update.");
+    console.log("FOOTBALL_API_KEY not set. Soccer scores will not auto-update.");
     console.log("Get a free key at https://www.football-data.org/client/register");
     return;
   }
@@ -313,37 +519,10 @@ function startScoreRefresh() {
   syncWCKnockouts();
   setInterval(syncWCKnockouts, 30 * 60 * 1000);
 
-  // Domestic leagues (EPL, La Liga, …), config-driven from LEAGUE_CONFIG. For each league:
-  //   • live/finished score refresh every 5 min, and
-  //   • a fixture sync (immediately, or scheduled to the release date if it's still in the
-  //     future) plus a daily re-sync afterwards to pick up date/time changes.
+  // Domestic leagues (EPL, La Liga, Serie A), config-driven from LEAGUE_CONFIG.
   for (const code of Object.keys(LEAGUE_CONFIG)) {
-    const cfg = LEAGUE_CONFIG[code];
-
-    syncLeagueScores(code);
-    setInterval(() => syncLeagueScores(code), 5 * 60 * 1000);
-
-    const dailyFixtureSync = () => {
-      syncLeagueFixtures(code);
-      setInterval(() => syncLeagueFixtures(code), 24 * 60 * 60 * 1000);
-    };
-
-    const release = cfg.fixtureRelease ? new Date(cfg.fixtureRelease) : null;
-    const msUntilRelease = release ? release.getTime() - Date.now() : 0;
-
-    if (msUntilRelease > 0) {
-      console.log(`${code} fixture sync scheduled for ${cfg.fixtureRelease} (in ${Math.round(msUntilRelease / 3600000)}h).`);
-      setTimeout(() => {
-        console.log(`${code} fixture release time reached — syncing fixtures now.`);
-        dailyFixtureSync();
-      }, msUntilRelease);
-    } else {
-      const existingMatches = db.prepare("SELECT COUNT(*) as c FROM league_matches WHERE league = ?").get(code).c;
-      console.log(existingMatches === 0
-        ? `${code} fixtures: none in DB — syncing now.`
-        : `${code} fixtures: ${existingMatches} matches in DB. Daily re-sync enabled.`);
-      dailyFixtureSync();
-    }
+    if (LEAGUE_CONFIG[code].feed === "espn") continue; // already started above
+    startLeagueSync(code);
   }
 
   // PL squad + manager sync from premierleague.com (Pulselive), daily. Self-guards so it stops

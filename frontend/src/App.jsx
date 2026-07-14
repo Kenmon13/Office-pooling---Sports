@@ -42,6 +42,15 @@ const TOURNAMENT_META = {
   epl2627: { id: "epl2627", name: "Premier League 26/27", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
   laliga2627: { id: "laliga2627", name: "La Liga 26/27", emoji: "🇪🇸" },
   seriea2627: { id: "seriea2627", name: "Serie A 26/27", emoji: "🇮🇹" },
+  nfl2627: { id: "nfl2627", name: "NFL 26/27", emoji: "🏈" },
+};
+
+// Used when a pool is joined directly (via code or a shared link) rather than through the sport
+// picker, so there's no selectedSport to carry over — keyed by pools.sport.
+const SPORT_META = {
+  soccer: { id: "soccer", name: "Soccer", emoji: "⚽" },
+  americanfootball: { id: "americanfootball", name: "American Football", emoji: "🏈" },
+  basketball: { id: "basketball", name: "Basketball", emoji: "🏀" },
 };
 
 function App() {
@@ -249,7 +258,7 @@ function App() {
   const handleJoinPool = (poolData) => {
     setPool(poolData);
     setShowAdmin(false);
-    const sport = selectedSport || { id: poolData.sport, name: poolData.sport, emoji: poolData.sport === "soccer" ? "\u26BD" : "\uD83C\uDFC0" };
+    const sport = selectedSport || SPORT_META[poolData.sport] || { id: poolData.sport, name: poolData.sport, emoji: "\uD83C\uDFC6" };
     setSelectedSport(sport);
     const tournament = selectedTournament || TOURNAMENT_META[poolData.tournament] || { id: poolData.tournament, name: poolData.tournament, emoji: "\uD83C\uDFC6" };
     setSelectedTournament(tournament);

@@ -2502,7 +2502,7 @@ app.get("/api/stats/award-picks", (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Domestic league API — config-driven (EPL, La Liga, …). See leagues.js.
 // ═══════════════════════════════════════════════════════════════════════════════
-const { getLeague } = require("./leagues");
+const { getLeague, marginBandFor } = require("./leagues");
 
 // Resolve :code -> league config; 404 for unknown leagues. Attaches req.league.
 function resolveLeague(req, res, next) {
@@ -2516,8 +2516,11 @@ app.get("/api/league/:code/config", resolveLeague, (req, res) => {
   const L = req.league;
   res.json({
     code: L.code, name: L.name, shortName: L.shortName, emoji: L.emoji,
-    teamCount: L.teamCount, matchdays: L.matchdays, zones: L.zones,
+    sport: L.sport, teamCount: L.teamCount, matchdays: L.matchdays, zones: L.zones,
     awards: L.awards, scoring: L.scoring,
+    // NFL-only; undefined for soccer leagues and omitted from the JSON.
+    divisions: L.divisions, seasonSlots: L.seasonSlots,
+    marginBands: L.marginBands, playoffRounds: L.playoffRounds,
   });
 });
 
@@ -2539,9 +2542,50 @@ app.get("/api/league/:code/matches", resolveLeague, (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
+// NFL regular-season table: W-L-T ordered by win percentage (a tie is half a win, as the NFL
+// computes it), then point differential, then points for. Playoff weeks are excluded — they don't
+// count toward division standings.
+//
+// The NFL's real tiebreakers (head-to-head, then division record, then common games, …) are far
+// more involved than this. Differential is a close-enough stand-in for a prediction pool, but it
+// means a division winner shown here can differ from the official one in a genuine tie.
+function nflStandings(L, teams, matches) {
+  const stats = {};
+  for (const t of teams) {
+    stats[t.id] = {
+      team_id: t.id, name: t.name, code: t.code, short_name: t.short_name, crest_url: t.crest_url,
+      conference: t.conference, division: t.division,
+      played: 0, won: 0, lost: 0, tied: 0, pf: 0, pa: 0,
+    };
+  }
+  for (const m of matches) {
+    if (m.matchday > L.matchdays) continue; // playoff game
+    const h = stats[m.home_team_id], a = stats[m.away_team_id];
+    if (!h || !a) continue;
+    h.played++; a.played++;
+    h.pf += m.home_score; h.pa += m.away_score;
+    a.pf += m.away_score; a.pa += m.home_score;
+    if (m.home_score > m.away_score) { h.won++; a.lost++; }
+    else if (m.away_score > m.home_score) { a.won++; h.lost++; }
+    else { h.tied++; a.tied++; }
+  }
+  const table = Object.values(stats);
+  for (const s of table) {
+    s.diff = s.pf - s.pa;
+    s.pct = s.played > 0 ? (s.won + s.tied / 2) / s.played : 0;
+  }
+  return table.sort((a, b) =>
+    b.pct - a.pct || b.diff - a.diff || b.pf - a.pf || a.name.localeCompare(b.name)
+  );
+}
+
 app.get("/api/league/:code/standings", resolveLeague, (req, res) => {
+  const L = req.league;
   const teams = db.prepare("SELECT * FROM league_teams WHERE league = ?").all(req.params.code);
   const matches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status IN ('finished', 'live')").all(req.params.code);
+
+  if (L.sport === "nfl") return res.json(nflStandings(L, teams, matches));
+
   const stats = {};
   for (const t of teams) {
     stats[t.id] = { team_id: t.id, name: t.name, code: t.code, short_name: t.short_name, crest_url: t.crest_url, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
@@ -2666,13 +2710,16 @@ app.get("/api/league/:code/match-predictions/:participantId", resolveLeague, (re
 
 app.post("/api/league/:code/match-predictions", resolveLeague, authenticateToken, (req, res) => {
   const { code } = req.params;
+  const L = req.league;
   const { participant_id, predictions } = req.body;
   if (!participant_id || !Array.isArray(predictions)) return res.status(400).json({ error: "participant_id and predictions array required" });
 
+  const bandKeys = new Set((L.marginBands || []).map((b) => b.key));
   const now = new Date();
-  const upsert = db.prepare(`INSERT INTO league_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score)
-    VALUES (?, ?, ?, ?, ?) ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_outcome = excluded.predicted_outcome,
-    predicted_home_score = excluded.predicted_home_score, predicted_away_score = excluded.predicted_away_score`);
+  const upsert = db.prepare(`INSERT INTO league_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score, predicted_margin_band)
+    VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(participant_id, match_id) DO UPDATE SET predicted_outcome = excluded.predicted_outcome,
+    predicted_home_score = excluded.predicted_home_score, predicted_away_score = excluded.predicted_away_score,
+    predicted_margin_band = excluded.predicted_margin_band`);
 
   let saved = 0;
   const errors = [];
@@ -2694,7 +2741,17 @@ app.post("/api/league/:code/match-predictions", resolveLeague, authenticateToken
         continue;
       }
     }
-    upsert.run(participant_id, p.match_id, p.predicted_outcome, p.predicted_home_score ?? null, p.predicted_away_score ?? null);
+    // NFL picks carry a margin band instead of a scoreline. Same rule, same layer: a "tie" band
+    // only makes sense with a drawn outcome, and vice versa.
+    const band = p.predicted_margin_band ?? null;
+    if (band != null) {
+      if (!bandKeys.has(band)) { errors.push(`Match ${p.match_id}: unknown margin band "${band}"`); continue; }
+      if ((band === "tie") !== (p.predicted_outcome === "draw")) {
+        errors.push(`Match ${p.match_id}: margin band "${band}" contradicts "${p.predicted_outcome}" pick`);
+        continue;
+      }
+    }
+    upsert.run(participant_id, p.match_id, p.predicted_outcome, p.predicted_home_score ?? null, p.predicted_away_score ?? null, band);
     saved++;
   }
   if (errors.length > 0 && saved === 0) return res.status(400).json({ error: errors.join("; ") });
@@ -2710,18 +2767,50 @@ app.get("/api/league/:code/season-predictions/:participantId", resolveLeague, (r
 
 app.post("/api/league/:code/season-predictions", resolveLeague, authenticateToken, (req, res) => {
   const { code } = req.params;
+  const L = req.league;
   const { participant_id, predictions } = req.body;
-  const n = req.league.teamCount;
+
+  // Soccer predicts every table position (1..N); NFL predicts a fixed set of slots (division
+  // winners, conference champions, Super Bowl) stored in the same `position` column.
+  const n = L.sport === "nfl" ? L.seasonSlots.length : L.teamCount;
   if (!participant_id || !Array.isArray(predictions) || predictions.length !== n) {
-    return res.status(400).json({ error: `Must predict all ${n} positions` });
+    return res.status(400).json({ error: L.sport === "nfl" ? `Must fill all ${n} picks` : `Must predict all ${n} positions` });
   }
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
-  if (leagueSeasonLocked(code, participant?.pool_id)) {
+  // Without this the upsert below trips an FK violation and 500s with a stack trace.
+  if (!participant) return res.status(400).json({ error: `Unknown participant ${participant_id}` });
+  if (leagueSeasonLocked(code, participant.pool_id)) {
     return res.status(400).json({ error: "Season predictions are locked — the entry window for this pool has closed" });
   }
+
+  // A division slot can only take a team from that division, a conference slot only a team from
+  // that conference. Enforced here and not just in the picker, so the API can't be posted around.
+  if (L.sport === "nfl") {
+    const teamById = {};
+    for (const t of db.prepare("SELECT id, name, conference, division FROM league_teams WHERE league = ?").all(code)) teamById[t.id] = t;
+    const slotByPos = {};
+    for (const s of L.seasonSlots) slotByPos[s.pos] = s;
+
+    for (const p of predictions) {
+      const slot = slotByPos[p.position];
+      if (!slot) return res.status(400).json({ error: `Unknown pick slot ${p.position}` });
+      const team = teamById[p.team_id];
+      if (!team) return res.status(400).json({ error: `Unknown team ${p.team_id}` });
+      if (slot.scope === "division" && team.division !== slot.division) {
+        return res.status(400).json({ error: `${team.name} is not in the ${slot.division}` });
+      }
+      if (slot.scope === "conference" && team.conference !== slot.conference) {
+        return res.status(400).json({ error: `${team.name} is not in the ${slot.conference}` });
+      }
+    }
+  }
+
   const upsert = db.prepare(`INSERT INTO league_season_predictions (participant_id, league, position, team_id)
     VALUES (?, ?, ?, ?) ON CONFLICT(participant_id, league, position) DO UPDATE SET team_id = excluded.team_id`);
-  for (const p of predictions) upsert.run(participant_id, code, p.position, p.team_id);
+  const saveAll = db.transaction(() => {
+    for (const p of predictions) upsert.run(participant_id, code, p.position, p.team_id);
+  });
+  saveAll();
   res.json({ success: true });
 });
 
@@ -2739,22 +2828,60 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
   const totalMatches = db.prepare("SELECT COUNT(*) as c FROM league_matches WHERE league = ?").get(code).c;
   const seasonComplete = totalMatches > 0 && finishedMatches.length === totalMatches;
 
-  const standings = {};
-  for (const t of teams) standings[t.id] = { team_id: t.id, points: 0, gf: 0, ga: 0 };
-  for (const m of finishedMatches) {
-    const h = standings[m.home_team_id], a = standings[m.away_team_id];
-    if (!h || !a) continue;
-    h.gf += m.home_score; h.ga += m.away_score;
-    a.gf += m.away_score; a.ga += m.home_score;
-    if (m.home_score > m.away_score) h.points += 3;
-    else if (m.away_score > m.home_score) a.points += 3;
-    else { h.points++; a.points++; }
-  }
-  const actualTable = Object.values(standings).sort((a, b) =>
-    b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf
-  );
   const actualPositions = {};
-  actualTable.forEach((t, i) => { actualPositions[t.team_id] = i + 1; });
+  if (L.sport !== "nfl") {
+    const standings = {};
+    for (const t of teams) standings[t.id] = { team_id: t.id, points: 0, gf: 0, ga: 0 };
+    for (const m of finishedMatches) {
+      const h = standings[m.home_team_id], a = standings[m.away_team_id];
+      if (!h || !a) continue;
+      h.gf += m.home_score; h.ga += m.away_score;
+      a.gf += m.away_score; a.ga += m.home_score;
+      if (m.home_score > m.away_score) h.points += 3;
+      else if (m.away_score > m.home_score) a.points += 3;
+      else { h.points++; a.points++; }
+    }
+    const actualTable = Object.values(standings).sort((a, b) =>
+      b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf
+    );
+    actualTable.forEach((t, i) => { actualPositions[t.team_id] = i + 1; });
+  }
+
+  // NFL season slots resolve at different moments rather than all at once at season's end:
+  // division winners once the 18-week regular season is complete, conference champions after the
+  // championship round, the Super Bowl winner after the final. Each scores as soon as it's known.
+  const nflSlotWinners = {}; // slot key -> winning team_id
+  if (L.sport === "nfl") {
+    const allMatches = db.prepare("SELECT * FROM league_matches WHERE league = ?").all(code);
+    const teamById = {};
+    for (const t of teams) teamById[t.id] = t;
+    const winnerOf = (m) => (m.home_score > m.away_score ? m.home_team_id : m.away_score > m.home_score ? m.away_team_id : null);
+
+    const regular = allMatches.filter((m) => m.matchday <= L.matchdays);
+    const regularDone = regular.filter((m) => m.status === "finished");
+    if (regular.length > 0 && regularDone.length === regular.length) {
+      const table = nflStandings(L, teams, regularDone);
+      for (const slot of L.seasonSlots) {
+        if (slot.scope !== "division") continue;
+        const winner = table.find((t) => t.division === slot.division); // table is already sorted
+        if (winner) nflSlotWinners[slot.key] = winner.team_id;
+      }
+    }
+
+    for (const m of allMatches) {
+      if (m.status !== "finished") continue;
+      const w = winnerOf(m);
+      if (!w) continue;
+      if (m.matchday === L.conferenceRoundMatchday) {
+        const conf = teamById[w]?.conference;
+        const slot = L.seasonSlots.find((s) => s.scope === "conference" && s.conference === conf);
+        if (slot) nflSlotWinners[slot.key] = w;
+      } else if (m.matchday === L.finalMatchday) {
+        const slot = L.seasonSlots.find((s) => s.scope === "champion");
+        if (slot) nflSlotWinners[slot.key] = w;
+      }
+    }
+  }
 
   const matchResults = {}, matchScores = {};
   for (const m of finishedMatches) {
@@ -2778,26 +2905,42 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
     "SELECT participant_id, SUM(points) AS s FROM score_adjustments WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?) GROUP BY participant_id"
   ).all(poolId)) adjustmentByParticipant[a.participant_id] = a.s;
 
-  const [clFrom, clTo] = Z.cl, [relFrom, relTo] = Z.relegation;
+  // Soccer-only zone bounds. NFL has no zones, so this must stay inside the guard.
+  const [clFrom, clTo] = Z?.cl ?? [], [relFrom, relTo] = Z?.relegation ?? [];
 
   const result = participants.map((part) => {
+    // matchExact counts bonus hits: an exact scoreline in soccer, a correct margin band in NFL.
     let matchPoints = 0, matchCorrect = 0, matchExact = 0;
     for (const p of (predsByParticipant[part.id] || [])) {
       const actual = matchResults[p.match_id];
       if (!actual) continue;
       if (p.predicted_outcome === actual) {
         const sc = matchScores[p.match_id];
-        if (p.predicted_home_score != null && p.predicted_away_score != null &&
-            p.predicted_home_score === sc.home && p.predicted_away_score === sc.away) { matchPoints += S.matchExact; matchExact++; }
-        else matchPoints += S.matchOutcome;
+        if (L.sport === "nfl") {
+          // Called the winner; the bonus rides on also calling how comfortably.
+          matchPoints += S.matchOutcome;
+          const actualBand = marginBandFor(L, Math.abs(sc.home - sc.away));
+          if (p.predicted_margin_band && p.predicted_margin_band === actualBand) { matchPoints += S.matchMargin; matchExact++; }
+        } else if (p.predicted_home_score != null && p.predicted_away_score != null &&
+            p.predicted_home_score === sc.home && p.predicted_away_score === sc.away) {
+          matchPoints += S.matchExact; matchExact++;
+        } else {
+          matchPoints += S.matchOutcome;
+        }
         matchCorrect++;
       }
     }
 
     let seasonPoints = 0;
-    if (seasonComplete) {
-      const predictedTeams = {};
-      for (const s of (seasonByParticipant[part.id] || [])) predictedTeams[s.position] = s.team_id;
+    const predictedTeams = {};
+    for (const s of (seasonByParticipant[part.id] || [])) predictedTeams[s.position] = s.team_id;
+
+    if (L.sport === "nfl") {
+      for (const slot of L.seasonSlots) {
+        const winner = nflSlotWinners[slot.key];
+        if (winner && predictedTeams[slot.pos] === winner) seasonPoints += slot.pts;
+      }
+    } else if (seasonComplete) {
       if (predictedTeams[Z.champion] && actualPositions[predictedTeams[Z.champion]] === Z.champion) seasonPoints += S.seasonChampion;
       for (let pos = clFrom; pos <= clTo; pos++) {
         const tid = predictedTeams[pos];

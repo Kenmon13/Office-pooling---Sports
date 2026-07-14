@@ -215,12 +215,19 @@ function PlayerPicker({ players, currentPick, onSelect, saving, crestFn }) {
       )
     : players;
 
+  // A soccer league's ~400 players render fine as one open list, but 32 NFL rosters are ~2,900 —
+  // dumping that into the dropdown makes it crawl. Past this size, ask for a search term first.
+  const TOO_MANY_TO_LIST = 600;
+  const mustSearch = search.length === 0 && players.length > TOO_MANY_TO_LIST;
+
   // Group by team
   const grouped = {};
-  for (const p of filtered) {
-    const tName = p.team_name || p.team_short || "Unknown";
-    if (!grouped[tName]) grouped[tName] = { code: p.team_code, players: [] };
-    grouped[tName].players.push(p);
+  if (!mustSearch) {
+    for (const p of filtered) {
+      const tName = p.team_name || p.team_short || "Unknown";
+      if (!grouped[tName]) grouped[tName] = { code: p.team_code, players: [] };
+      grouped[tName].players.push(p);
+    }
   }
 
   return (
@@ -236,7 +243,12 @@ function PlayerPicker({ players, currentPick, onSelect, saving, crestFn }) {
       />
       {open && (
         <div className="player-dropdown">
-          {Object.keys(grouped).length === 0 && (
+          {mustSearch && (
+            <div className="player-dropdown-empty">
+              Type to search {players.length.toLocaleString()} players
+            </div>
+          )}
+          {!mustSearch && Object.keys(grouped).length === 0 && (
             <div className="player-dropdown-empty">No players found</div>
           )}
           {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([teamName, data]) => (
