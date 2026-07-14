@@ -5,7 +5,7 @@ import {
   submitLeagueMatchPredictions,
 } from "../api";
 import { plCrest, registerCrests } from "../flags";
-import { getLeague } from "../leagues";
+import { getLeague, isNFL, marginBandFor } from "../leagues";
 
 // A predicted score must agree with the predicted outcome. Returns a message when both score
 // fields are filled and contradict the outcome, otherwise "". Unlike the WC knockout rule
@@ -16,6 +16,15 @@ function evalPLConflict(outcome, h, a) {
   if (outcome === "home" && !(h > a)) return "Home win — home score must be higher";
   if (outcome === "away" && !(a > h)) return "Away win — away score must be higher";
   if (outcome === "draw" && h !== a) return "Draw — scores must be equal";
+  return "";
+}
+
+// The NFL equivalent: instead of an exact scoreline you call the margin, so the only way a band
+// can contradict the pick is a "tie" band on a decided game (or vice versa).
+function evalNFLConflict(outcome, band) {
+  if (!band) return "";
+  if (band === "tie" && outcome !== "draw") return "Tie margin — pick Tie as the result";
+  if (band !== "tie" && outcome === "draw") return "Tie result — pick the Tie margin";
   return "";
 }
 
@@ -52,7 +61,15 @@ function formatDeadlineFull(dateStr) {
 }
 
 function PLMatchday({ currentUser, league = "epl2627" }) {
-  const matchdays = getLeague(league)?.matchdays || 38;
+  const L = getLeague(league);
+  const nfl = isNFL(league);
+  const bands = L?.marginBands || [];
+  const playoffRounds = L?.playoffRounds || {};
+  // NFL keeps going past the regular season: weeks 19-22 are the playoffs, and they're pickable.
+  const regularMatchdays = L?.matchdays || 38;
+  const matchdays = nfl
+    ? Math.max(regularMatchdays, ...Object.keys(playoffRounds).map(Number))
+    : regularMatchdays;
   const [matchday, setMatchday] = useState(1);
   const [matches, setMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
@@ -100,6 +117,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
             outcome: p.predicted_outcome,
             home_score: p.predicted_home_score,
             away_score: p.predicted_away_score,
+            band: p.predicted_margin_band ?? null,
           };
         });
         setPredictions(map);
@@ -126,6 +144,19 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
     }));
   };
 
+  // NFL: clicking the selected band again clears it, since the margin call is optional.
+  const setBand = (matchId, band) => {
+    if (lockedIds.has(matchId)) return;
+    setPredictions((prev) => ({
+      ...prev,
+      [matchId]: { ...prev[matchId], band: prev[matchId]?.band === band ? null : band },
+    }));
+  };
+
+  const conflictFor = (pred) => (nfl
+    ? evalNFLConflict(pred.outcome, pred.band)
+    : evalPLConflict(pred.outcome, pred.home_score, pred.away_score));
+
   // Only still-open matches can be saved, so changes/validation ignore locked ones.
   const hasChanges = (() => {
     for (const m of matches) {
@@ -135,23 +166,26 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
       if (!pred && !sv) continue;
       if (!pred || !sv) return true;
       if (pred.outcome !== sv.outcome || pred.home_score !== sv.home_score || pred.away_score !== sv.away_score) return true;
+      if ((pred.band ?? null) !== (sv.band ?? null)) return true;
     }
     return false;
   })();
 
   const anyPredictions = matches.some((m) => !isMatchLocked(m) && predictions[m.id]?.outcome);
 
-  // Matches whose entered score contradicts the chosen outcome — these block the save.
+  // Matches whose entered score/margin contradicts the chosen outcome — these block the save.
   const conflicts = matches
     .filter((m) => !isMatchLocked(m) && predictions[m.id]?.outcome)
-    .map((m) => ({ id: m.id, msg: evalPLConflict(predictions[m.id].outcome, predictions[m.id].home_score, predictions[m.id].away_score) }))
+    .map((m) => ({ id: m.id, msg: conflictFor(predictions[m.id]) }))
     .filter((c) => c.msg);
   const hasConflict = conflicts.length > 0;
 
   const handleSave = async () => {
     if (!currentUser || !anyPredictions) return;
     if (hasConflict) {
-      setSaveError("Each predicted score must match its Home / Draw / Away pick. Fix the highlighted matches to save.");
+      setSaveError(nfl
+        ? "Each predicted margin must match its Home / Tie / Away pick. Fix the highlighted games to save."
+        : "Each predicted score must match its Home / Draw / Away pick. Fix the highlighted matches to save.");
       return;
     }
     setSaving(true);
@@ -164,6 +198,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
         predicted_outcome: predictions[m.id].outcome,
         predicted_home_score: predictions[m.id].home_score ?? null,
         predicted_away_score: predictions[m.id].away_score ?? null,
+        predicted_margin_band: predictions[m.id].band ?? null,
       }));
 
     const res = await submitLeagueMatchPredictions(league, currentUser.id, preds);
@@ -193,23 +228,44 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
     if (m.status !== "finished" || !pred?.outcome) return null;
     const actualOutcome = m.home_score > m.away_score ? "home" : m.home_score < m.away_score ? "away" : "draw";
     const outcomeCorrect = pred.outcome === actualOutcome;
+
+    if (nfl) {
+      if (!outcomeCorrect) return { points: 0, label: "Wrong", cls: "wrong" };
+      const actualBand = marginBandFor(league, Math.abs(m.home_score - m.away_score));
+      if (pred.band && pred.band === actualBand) return { points: 4, label: "Winner + margin!", cls: "correct" };
+      return { points: 2, label: "Correct winner", cls: "half" };
+    }
+
     const exactCorrect = outcomeCorrect && pred.home_score === m.home_score && pred.away_score === m.away_score;
     if (exactCorrect) return { points: 4, label: "Exact score!", cls: "correct" };
     if (outcomeCorrect) return { points: 2, label: "Correct outcome", cls: "half" };
     return { points: 0, label: "Wrong", cls: "wrong" };
   };
 
+  // NFL weeks 19-22 are playoff rounds and get their real names; everything else is "Matchday N".
+  const matchdayLabel = (d) => (nfl
+    ? (playoffRounds[d] || `Week ${d}`)
+    : `Matchday ${d}`);
+
   return (
     <div className="page">
-      <h2>Matchday Predictions</h2>
+      <h2>{nfl ? "Weekly Picks" : "Matchday Predictions"}</h2>
 
       <div className="ko-rules">
         <p className="ko-rules-title">How predictions work</p>
-        <ul>
-          <li>Predict the outcome (Home / Draw / Away) for each match: <strong>2 pts</strong> for correct outcome.</li>
-          <li>Optionally predict the exact score: <strong>4 pts</strong> if correct score (replaces 2 pts).</li>
-          <li>Each match locks when it kicks off — you can keep editing later games in the same matchday.</li>
-        </ul>
+        {nfl ? (
+          <ul>
+            <li>Pick the winner (Home / Tie / Away) of each game: <strong>2 pts</strong> if correct.</li>
+            <li>Optionally call the winning margin: <strong>+2 pts</strong> if the final margin lands in your band.</li>
+            <li>Each game locks at kickoff — you can keep editing the later games in the same week.</li>
+          </ul>
+        ) : (
+          <ul>
+            <li>Predict the outcome (Home / Draw / Away) for each match: <strong>2 pts</strong> for correct outcome.</li>
+            <li>Optionally predict the exact score: <strong>4 pts</strong> if correct score (replaces 2 pts).</li>
+            <li>Each match locks when it kicks off — you can keep editing later games in the same matchday.</li>
+          </ul>
+        )}
       </div>
 
       <div className="matchday-nav">
@@ -220,7 +276,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
         >
           &larr;
         </button>
-        <span className="matchday-label">Matchday {matchday}</span>
+        <span className="matchday-label">{matchdayLabel(matchday)}</span>
         <button
           className="matchday-arrow"
           onClick={() => setMatchday((d) => Math.min(matchdays, d + 1))}
@@ -262,12 +318,16 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
 
       {allLocked && (
         <div className="deadline-banner locked">
-          <span className="deadline-locked-text">Matchday {matchday} is locked — all matches have started</span>
+          <span className="deadline-locked-text">{matchdayLabel(matchday)} is locked — all matches have started</span>
         </div>
       )}
 
       {matches.length === 0 ? (
-        <p className="pick-hint">No matches scheduled for Matchday {matchday}.</p>
+        <p className="pick-hint">
+          {nfl && matchday > regularMatchdays
+            ? `The ${matchdayLabel(matchday)} bracket isn't set yet — games appear here once the teams are decided.`
+            : `No matches scheduled for ${matchdayLabel(matchday)}.`}
+        </p>
       ) : (
         <div className="pl-match-list">
           {matches.map((m) => {
@@ -276,7 +336,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
             const isLive = m.status === "live";
             const isFinished = m.status === "finished";
             const locked = isMatchLocked(m);
-            const conflictMsg = !locked && !isFinished ? evalPLConflict(pred.outcome, pred.home_score, pred.away_score) : "";
+            const conflictMsg = !locked && !isFinished ? conflictFor(pred) : "";
 
             return (
               <div key={m.id} className={`pl-match-card ${isLive ? "live" : ""} ${isFinished ? "finished" : ""}`}>
@@ -313,7 +373,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
                       className={`outcome-btn ${pred.outcome === "draw" ? "selected" : ""}`}
                       onClick={() => setOutcome(m.id, "draw")}
                     >
-                      D
+                      {nfl ? "T" : "D"}
                     </button>
                     <button
                       className={`outcome-btn ${pred.outcome === "away" ? "selected" : ""}`}
@@ -327,12 +387,31 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
                 {locked && pred.outcome && !isFinished && (
                   <div className="pl-outcome-btns locked">
                     <span className={`outcome-btn ${pred.outcome === "home" ? "selected" : ""}`}>H</span>
-                    <span className={`outcome-btn ${pred.outcome === "draw" ? "selected" : ""}`}>D</span>
+                    <span className={`outcome-btn ${pred.outcome === "draw" ? "selected" : ""}`}>{nfl ? "T" : "D"}</span>
                     <span className={`outcome-btn ${pred.outcome === "away" ? "selected" : ""}`}>A</span>
                   </div>
                 )}
 
-                {currentUser && !locked && !isFinished && pred.outcome && (
+                {/* NFL calls the margin instead of the scoreline; a tie has only the one band. */}
+                {nfl && currentUser && !locked && !isFinished && pred.outcome && (
+                  <div className="pl-band-picker">
+                    {bands
+                      .filter((b) => (pred.outcome === "draw" ? b.key === "tie" : b.key !== "tie"))
+                      .map((b) => (
+                        <button
+                          key={b.key}
+                          className={`band-btn ${pred.band === b.key ? "selected" : ""}`}
+                          title={b.desc}
+                          onClick={() => setBand(m.id, b.key)}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                    <span className="score-label">Margin (optional, +2 pts)</span>
+                  </div>
+                )}
+
+                {!nfl && currentUser && !locked && !isFinished && pred.outcome && (
                   <div className="pl-score-inputs">
                     <input
                       type="number"
@@ -359,7 +438,14 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
                   <div className="pl-score-conflict">⚠ {conflictMsg}</div>
                 )}
 
-                {locked && pred.home_score != null && pred.away_score != null && !isFinished && (
+                {nfl && locked && pred.band && !isFinished && (
+                  <div className="pl-band-picker locked">
+                    <span className="band-btn selected">{bands.find((b) => b.key === pred.band)?.label}</span>
+                    <span className="score-label">Your predicted margin</span>
+                  </div>
+                )}
+
+                {!nfl && locked && pred.home_score != null && pred.away_score != null && !isFinished && (
                   <div className="pl-score-inputs locked">
                     <span className="locked-score">{pred.home_score} - {pred.away_score}</span>
                     <span className="score-label">Your predicted score</span>

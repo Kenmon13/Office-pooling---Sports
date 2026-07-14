@@ -6044,3 +6044,193 @@ nav a.active {
 .admin-poll-others h4 { color: #9bbf9b; font-size: 14px; margin-bottom: 8px; }
 .admin-poll-others ul { margin: 0; padding-left: 18px; color: #cdddcd; font-size: 13px; }
 .admin-poll-others li { margin-bottom: 4px; }
+
+/* ── NFL season predictions: named slots instead of a 1..N table ─────────────── */
+.rules-note { color: #5a8a5a; font-style: italic; margin-top: 4px; }
+
+.nfl-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.nfl-conf-block {
+  background: #0f240f;
+  border: 1px solid #1e3a1e;
+  border-radius: 8px;
+  padding: 12px;
+}
+.nfl-conf-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #7da67d;
+  margin: 0 0 10px;
+}
+.nfl-slots-final {
+  max-width: 760px;
+  margin: 16px auto 0;
+}
+
+.nfl-slot {
+  background: #0e1e0e;
+  border: 1px solid #1e3a1e;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.nfl-slot.conference { border-color: #2d5a2d; }
+.nfl-slot.champion {
+  border-color: #f5c518;
+  background: #1e1a08;
+}
+.nfl-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.nfl-slot-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #cdddcd;
+}
+.nfl-slot-emoji { font-size: 14px; }
+.nfl-slot-pts {
+  font-size: 11px;
+  font-weight: 700;
+  color: #3a8a3a;
+}
+.nfl-slot.champion .nfl-slot-pts { color: #f5c518; }
+
+.nfl-slot-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nfl-slot-select {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #1e3a1e;
+  background: #0a1a0a;
+  color: #cdddcd;
+  font-size: 13px;
+  cursor: pointer;
+}
+.nfl-slot-select:disabled { opacity: 0.6; cursor: default; }
+.nfl-slot-select:focus { outline: none; border-color: #2d7a2d; }
+
+.nfl-slot-live { margin-top: 6px; font-size: 11px; }
+.nfl-live-ok { color: #3a8a3a; font-weight: 600; }
+.nfl-live-off { color: #5a8a5a; }
+
+/* Live W-L-T standings, grouped by division */
+.nfl-standings { max-width: 760px; margin: 24px auto 0; }
+.nfl-standings-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #7da67d;
+  margin: 0 0 10px;
+}
+.nfl-standings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+.nfl-division {
+  background: #0f240f;
+  border: 1px solid #1e3a1e;
+  border-radius: 8px;
+  padding: 10px;
+}
+.nfl-division-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e3a1e;
+  margin-bottom: 4px;
+}
+.nfl-division-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9bbf9b;
+}
+.nfl-division-cols {
+  display: flex;
+  gap: 4px;
+}
+.nfl-division-head .nfl-stat {
+  font-size: 10px;
+  color: #5a8a5a;
+  font-weight: 700;
+}
+.nfl-stat {
+  width: 26px;
+  text-align: center;
+  font-size: 12px;
+  color: #cdddcd;
+}
+.nfl-stat.pct { width: 42px; }
+.nfl-division-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+}
+.nfl-division-row.leader .nfl-division-team { color: #f5c518; font-weight: 600; }
+.nfl-division-team {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #cdddcd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* NFL weekly picks: margin band instead of an exact scoreline */
+.pl-band-picker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.band-btn {
+  background: #1a3a1a;
+  border: 1px solid #2e5d2e;
+  color: #a0d8a0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.band-btn:hover { background: #235023; }
+.band-btn.selected {
+  background: #2e8b57;
+  color: #fff;
+  border-color: #3cb371;
+}
+.pl-band-picker.locked .band-btn { cursor: default; }
+.pl-band-picker.locked .band-btn:hover { background: #2e8b57; }
+.season-slot-label {
+  flex: 0 0 130px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7da67d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

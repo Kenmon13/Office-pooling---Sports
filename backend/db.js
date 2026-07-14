@@ -784,6 +784,12 @@ if (!existingSerieAPool) {
   db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("Serie A 26/27", "soccer", "seriea2627", "");
 }
 
+// Seed default public pool for NFL 26/27
+const existingNFLPool = db.prepare("SELECT id FROM pools WHERE name = 'NFL 26/27' AND is_public = 1").get();
+if (!existingNFLPool) {
+  db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("NFL 26/27", "americanfootball", "nfl2627", "");
+}
+
 // Migration: update WC2026 group stage match dates to official FIFA schedule
 const WC2026_MATCH_DATES = [
   // Group A
@@ -1155,10 +1161,16 @@ try {
   console.log("PL squad seed skipped:", err.message);
 }
 
-// ── Generalized league engine (EPL + La Liga + future domestic leagues) ──────────────
-// One config-driven set of tables shared by all round-robin domestic leagues (see leagues.js),
-// keyed by a `league` discriminator. EPL is migrated off pl2627_* below (one-time). WC2022/
-// WC2026 stay separate (knockout shape).
+// ── Generalized league engine (EPL + La Liga + Serie A + NFL + future leagues) ───────
+// One config-driven set of tables shared by every league (see leagues.js), keyed by a `league`
+// discriminator. EPL is migrated off pl2627_* below (one-time). WC2022/WC2026 stay separate
+// (knockout shape).
+//
+// The tables are sport-agnostic; the sport-specific meaning lives in leagues.js:
+//   league_teams.conference/division    — NFL only (AFC/NFC × 4). NULL for soccer.
+//   league_season_predictions.position  — soccer: finishing position 1..N.
+//                                         NFL:    the slot's `pos` (see NFL_SLOTS).
+//   league_match_predictions.predicted_margin_band — NFL only; soccer uses the score columns.
 db.exec(`
   CREATE TABLE IF NOT EXISTS league_teams (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1168,6 +1180,8 @@ db.exec(`
     short_name TEXT,
     manager    TEXT,
     crest_url  TEXT,
+    conference TEXT,
+    division   TEXT,
     UNIQUE(league, code)
   );
   CREATE TABLE IF NOT EXISTS league_matches (
@@ -1205,7 +1219,7 @@ db.exec(`
     league   TEXT NOT NULL,
     name     TEXT NOT NULL,
     team_id  INTEGER NOT NULL REFERENCES league_teams(id),
-    position TEXT NOT NULL CHECK(position IN ('GK','DF','MF','FW')),
+    position TEXT NOT NULL,
     UNIQUE(league, name, team_id)
   );
   CREATE TABLE IF NOT EXISTS league_award_picks (
@@ -1229,17 +1243,66 @@ db.exec(`
   );
 `);
 
-// Seed league_teams (idempotent) + refresh manager/crest/name, and reseed league_players
-// from each league's squad file whenever the roster count changes (mirrors the old PL logic).
+// Columns added after the tables shipped — idempotent, safe to re-run on an existing DB.
+try { db.exec("ALTER TABLE league_teams ADD COLUMN conference TEXT"); } catch (_) { /* exists */ }
+try { db.exec("ALTER TABLE league_teams ADD COLUMN division TEXT"); } catch (_) { /* exists */ }
+try { db.exec("ALTER TABLE league_match_predictions ADD COLUMN predicted_margin_band TEXT"); } catch (_) { /* exists */ }
+
+// league_players.position originally carried CHECK(position IN ('GK','DF','MF','FW')) — soccer's
+// four positions. NFL rosters use QB/WR/CB/…, which that CHECK rejects outright, and SQLite can't
+// drop a CHECK in place, so rebuild the table without it. Same shape as the pools rebuild below:
+// guarded by a settings flag, foreign_keys toggled OUTSIDE the transaction (the pragma is a no-op
+// mid-transaction), ids copied verbatim so award picks/results FKing into league_players survive,
+// and an in-transaction foreign_key_check rolls it all back if anything is off.
+try {
+  const hasCheck = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'league_players'").get()?.sql?.includes("CHECK");
+  if (hasCheck) {
+    // api_player_id is added later by scores.js, so it may or may not exist yet — carry it only if present.
+    const cols = db.prepare("PRAGMA table_info(league_players)").all().map((c) => c.name);
+    const hasApiId = cols.includes("api_player_id");
+    const fkWasOn = db.pragma("foreign_keys", { simple: true });
+    db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE league_players_new (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            league   TEXT NOT NULL,
+            name     TEXT NOT NULL,
+            team_id  INTEGER NOT NULL REFERENCES league_teams(id),
+            position TEXT NOT NULL,
+            ${hasApiId ? "api_player_id INTEGER," : ""}
+            UNIQUE(league, name, team_id)
+          );
+          INSERT INTO league_players_new (id, league, name, team_id, position${hasApiId ? ", api_player_id" : ""})
+            SELECT id, league, name, team_id, position${hasApiId ? ", api_player_id" : ""} FROM league_players;
+          DROP TABLE league_players;
+          ALTER TABLE league_players_new RENAME TO league_players;
+        `);
+        if (hasApiId) db.exec("CREATE INDEX IF NOT EXISTS idx_league_players_api ON league_players(league, api_player_id)");
+        const violations = db.pragma("foreign_key_check", { simple: false });
+        if (violations.length > 0) throw new Error(`foreign_key_check failed: ${JSON.stringify(violations.slice(0, 3))}`);
+      })();
+      console.log("Rebuilt league_players without the soccer-only position CHECK.");
+    } finally {
+      if (fkWasOn) db.pragma("foreign_keys = ON");
+    }
+  }
+} catch (err) {
+  console.log("league_players position-CHECK rebuild skipped:", err.message);
+}
+
+// Seed league_teams (idempotent) + refresh manager/crest/name/conference/division, and reseed
+// league_players from each league's squad file whenever the roster count changes.
 try {
   const { leagues: LEAGUE_CONFIG } = require("./leagues");
   for (const [code, cfg] of Object.entries(LEAGUE_CONFIG)) {
     const { teams: cfgTeams, squads: cfgSquads } = cfg.squadData;
-    const insertTeam = db.prepare("INSERT OR IGNORE INTO league_teams (league, name, code, short_name, manager, crest_url) VALUES (?, ?, ?, ?, ?, ?)");
-    const updateTeam = db.prepare("UPDATE league_teams SET name = ?, short_name = ?, manager = ?, crest_url = ? WHERE league = ? AND code = ?");
+    const insertTeam = db.prepare("INSERT OR IGNORE INTO league_teams (league, name, code, short_name, manager, crest_url, conference, division) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    const updateTeam = db.prepare("UPDATE league_teams SET name = ?, short_name = ?, manager = ?, crest_url = ?, conference = ?, division = ? WHERE league = ? AND code = ?");
     for (const t of cfgTeams) {
-      insertTeam.run(code, t.name, t.code, t.short_name, t.manager ?? null, t.crest ?? null);
-      updateTeam.run(t.name, t.short_name, t.manager ?? null, t.crest ?? null, code, t.code);
+      insertTeam.run(code, t.name, t.code, t.short_name, t.manager ?? null, t.crest ?? null, t.conference ?? null, t.division ?? null);
+      updateTeam.run(t.name, t.short_name, t.manager ?? null, t.crest ?? null, t.conference ?? null, t.division ?? null, code, t.code);
     }
     const teamIdByCode = {};
     for (const row of db.prepare("SELECT id, code FROM league_teams WHERE league = ?").all(code)) teamIdByCode[row.code] = row.id;

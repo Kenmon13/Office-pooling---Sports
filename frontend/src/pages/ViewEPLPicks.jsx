@@ -5,7 +5,7 @@ import {
   fetchLeagueSeasonPredictions, fetchLeaguePlayerAwardPicks, fetchLeagueStandings,
 } from "../api";
 import { plCrest, registerCrests } from "../flags";
-import { getLeague, zoneForPosition } from "../leagues";
+import { getLeague, zoneForPosition, isNFL } from "../leagues";
 
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"];
@@ -16,6 +16,15 @@ function ordinal(n) {
 function ViewEPLPicks({ poolId, currentUser, league = "epl2627" }) {
   const awards = getLeague(league)?.awards || [];
   const getZone = (pos) => zoneForPosition(league, pos) || "";
+
+  // NFL stores its season picks in the same `position` column, but the number is a slot index, not
+  // a table place — so show the slot's name ("AFC East Winner") rather than a meaningless "1".
+  const nfl = isNFL(league);
+  const slotByPos = {};
+  for (const s of getLeague(league)?.seasonSlots || []) slotByPos[s.pos] = s;
+  const posCell = (pos) => (nfl
+    ? <span className="season-slot-label">{slotByPos[pos]?.label || pos}</span>
+    : <span className="season-pos">{pos}</span>);
   const { participantId } = useParams();
   const navigate = useNavigate();
   const isViewingSelf = currentUser && String(currentUser.id) === String(participantId);
@@ -229,7 +238,7 @@ function ViewEPLPicks({ poolId, currentUser, league = "epl2627" }) {
                     <div className="season-table">
                       {seasonPreds.map((s) => (
                         <div key={s.position} className={`season-row ${getZone(s.position)}`}>
-                          <span className="season-pos">{s.position}</span>
+                          {posCell(s.position)}
                           <span className="season-team-name">{plCrest(s.team_code)} {s.short_name || s.team_name}</span>
                         </div>
                       ))}
@@ -244,7 +253,7 @@ function ViewEPLPicks({ poolId, currentUser, league = "epl2627" }) {
                         const theirSame = seasonPreds.find((t) => t.position === s.position && t.team_id === s.team_id);
                         return (
                           <div key={s.position} className={`season-row ${getZone(s.position)} ${theirSame ? "compare-match" : ""}`}>
-                            <span className="season-pos">{s.position}</span>
+                            {posCell(s.position)}
                             <span className="season-team-name">{plCrest(s.team_code)} {s.short_name || s.team_name}</span>
                           </div>
                         );
@@ -256,11 +265,12 @@ function ViewEPLPicks({ poolId, currentUser, league = "epl2627" }) {
             ) : (
               <div className="season-table">
                 {seasonPreds.map((s) => {
-                  const curPos = hasStarted ? currentPos[s.team_id] : null;
+                  // The "now Nth vs predicted Nth" delta only means something for a ranked table.
+                  const curPos = hasStarted && !nfl ? currentPos[s.team_id] : null;
                   const posDiff = curPos ? s.position - curPos : null; // >0 = higher than predicted
                   return (
                     <div key={s.position} className={`season-row ${getZone(s.position)}`}>
-                      <span className="season-pos">{s.position}</span>
+                      {posCell(s.position)}
                       <span className="season-team-name">{plCrest(s.team_code)} {s.short_name || s.team_name}</span>
                       {curPos && (
                         <span className="season-actual" title={`Currently ${ordinal(curPos)} · predicted ${ordinal(s.position)}`}>
