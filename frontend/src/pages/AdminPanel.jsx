@@ -955,7 +955,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
 
       {tab === "poll" && (
         <div className="admin-poll-tab">
-          <p className="select-subtitle">&ldquo;What should we build next?&rdquo; — results from the post-login poll.</p>
+          <p className="select-subtitle">&ldquo;What should we build next?&rdquo; — results from the retired post-login poll. It no longer runs (the new-pools announcement took its place), so these totals are final.</p>
           {!pollResults ? (
             <p className="notice">Loading…</p>
           ) : (

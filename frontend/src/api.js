@@ -193,25 +193,9 @@ export async function adminSetUserEmail(userId, email) {
   return res.json();
 }
 
-export async function fetchPollStatus() {
-  const res = await fetch(`${API}/poll/status`, { headers: authHeaders() });
-  return res.json();
-}
-
-export async function submitPollVote(choices, other) {
-  const res = await fetch(`${API}/poll/vote`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ choices, other }),
-  });
-  return res.json();
-}
-
-export async function dismissPoll() {
-  const res = await fetch(`${API}/poll/dismiss`, { method: "POST", headers: authHeaders() });
-  return res.json();
-}
-
+// The post-login poll was replaced by the new-pools announcement, so nothing votes any more.
+// Its results stay readable in the Admin Panel, hence this one survivor. The /api/poll/vote and
+// /api/poll/dismiss endpoints still exist server-side but are no longer called.
 export async function adminFetchPollResults() {
   const res = await fetch(`${API}/admin/poll/results`, { headers: authHeaders() });
   return res.json();

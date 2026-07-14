@@ -30,7 +30,7 @@ import PoolSettings from "./pages/PoolSettings";
 import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
 import NotificationsModal from "./components/NotificationsModal";
 import DonateModal from "./components/DonateModal";
-import PollPrompt from "./components/PollModal";
+import AnnouncementPrompt from "./components/AnnouncementModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
@@ -455,6 +455,19 @@ function App() {
     localStorage.removeItem("pool_session");
   };
 
+  // From the announcement modal: drop straight into a tournament's pool list. Clears any pool
+  // we're currently in (same teardown as Switch Pool) and pre-selects the sport + tournament, so
+  // the user lands on "create or join a pool" for the one they clicked.
+  const handleAnnouncementSelect = (p) => {
+    setPool(null);
+    setParticipant(null);
+    setPoolPassword(null);
+    setShowAdmin(false);
+    localStorage.removeItem("pool_session");
+    setSelectedSport(SPORT_META[p.sport] || null);
+    setSelectedTournament(TOURNAMENT_META[p.tournament] || null);
+  };
+
   const handleSwitchPool = () => {
     setPool(null);
     setParticipant(null);
@@ -697,7 +710,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
-        {user && <PollPrompt user={user} />}
+        {user && <AnnouncementPrompt user={user} onSelectPool={handleAnnouncementSelect} />}
       </div>
     );
   }
@@ -747,7 +760,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
-        {user && <PollPrompt user={user} />}
+        {user && <AnnouncementPrompt user={user} onSelectPool={handleAnnouncementSelect} />}
       </div>
     );
   }
@@ -798,7 +811,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
-        {user && <PollPrompt user={user} />}
+        {user && <AnnouncementPrompt user={user} onSelectPool={handleAnnouncementSelect} />}
       </div>
     );
   }
@@ -1342,7 +1355,7 @@ function App() {
           onSendReply={handleSendReply}
         />}
         {showDonate && <DonateModal onClose={() => setShowDonate(false)} />}
-        {user && <PollPrompt user={user} />}
+        {user && <AnnouncementPrompt user={user} onSelectPool={handleAnnouncementSelect} />}
 
         {showPatchNotes && (
           <NotificationsModal
