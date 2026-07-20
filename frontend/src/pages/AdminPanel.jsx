@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides, adminFetchPollResults } from "../api";
+import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides, adminFetchPollResults, adminFetchPlayerAwardResults, adminSetPlayerAwardResult, fetchWcPlayers } from "../api";
 import { POLL_OPTIONS } from "../pollOptions";
+
+// Tournament-wide award winners. Player awards pick from wc_players; Fair Play picks a team.
+const AWARD_DEFS = [
+  { key: "golden_ball",  label: "🥇 Golden Ball",   type: "player" },
+  { key: "golden_boot",  label: "👟 Golden Boot",   type: "player" },
+  { key: "golden_glove", label: "🧤 Golden Glove",  type: "player" },
+  { key: "young_player", label: "🌟 Young Player",  type: "player" },
+  { key: "fair_play",    label: "🤝 Fair Play",     type: "team" },
+];
 
 const SPORT_LABELS = {
   soccer: { name: "Soccer", emoji: "\u26BD" },
@@ -43,6 +52,11 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [koMismatches, setKoMismatches] = useState([]);
   const [koMismatchSaving, setKoMismatchSaving] = useState(null);
   const [pollResults, setPollResults] = useState(null);
+  const [awardResults, setAwardResults] = useState([]);
+  const [wcPlayers, setWcPlayers] = useState([]);
+  const [awardDrafts, setAwardDrafts] = useState({});
+  const [awardSaving, setAwardSaving] = useState(null);
+  const [awardMsg, setAwardMsg] = useState({});
   const fileInputRef = useRef(null);
 
   const refreshKoMismatches = () =>
@@ -50,6 +64,39 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
 
   const loadPollResults = () =>
     adminFetchPollResults().then((d) => { if (!d.error) setPollResults(d); });
+
+  const loadAwardResults = () =>
+    adminFetchPlayerAwardResults().then((d) => { if (Array.isArray(d)) setAwardResults(d); });
+
+  const loadAwards = () => {
+    loadAwardResults();
+    if (wcPlayers.length === 0) fetchWcPlayers().then((d) => { if (Array.isArray(d)) setWcPlayers(d); });
+  };
+
+  const saveAward = async (award) => {
+    const id = Number(awardDrafts[award.key]);
+    if (!id) return;
+    setAwardSaving(award.key);
+    setAwardMsg((m) => ({ ...m, [award.key]: "" }));
+    const res = await adminSetPlayerAwardResult(
+      award.key,
+      award.type === "player" ? id : null,
+      award.type === "team" ? id : null,
+    );
+    setAwardSaving(null);
+    if (res.error) { setAwardMsg((m) => ({ ...m, [award.key]: res.error })); return; }
+    await loadAwardResults();
+    setAwardMsg((m) => ({ ...m, [award.key]: "Saved ✓" }));
+  };
+
+  // Dropdown sources, derived from the single wc-players fetch (every team has players).
+  const playersByTeam = wcPlayers.reduce((acc, p) => {
+    (acc[p.team_name] = acc[p.team_name] || []).push(p);
+    return acc;
+  }, {});
+  const teamOptions = Object.values(
+    wcPlayers.reduce((acc, p) => { acc[p.team_id] = { team_id: p.team_id, team_name: p.team_name }; return acc; }, {})
+  ).sort((a, b) => a.team_name.localeCompare(b.team_name));
 
   const resolveMismatch = async (m, choice) => {
     const key = `${m.match_id}:${m.field}`;
@@ -307,6 +354,9 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
         </button>
         <button className={`admin-tab ${tab === "poll" ? "active" : ""}`} onClick={() => { setTab("poll"); loadPollResults(); }}>
           Poll
+        </button>
+        <button className={`admin-tab ${tab === "awards" ? "active" : ""}`} onClick={() => { setTab("awards"); loadAwards(); }}>
+          Awards
         </button>
       </div>
 
@@ -986,6 +1036,62 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+      {tab === "awards" && (
+        <div className="admin-awards-tab">
+          <p className="select-subtitle">
+            Tournament award winners. These are <strong>global</strong> — one set for all World Cup pools — and points recalculate
+            immediately once saved. Re-saving a category replaces the previous winner.
+          </p>
+          {wcPlayers.length === 0 ? (
+            <p className="notice">Loading players…</p>
+          ) : (
+            AWARD_DEFS.map((award) => {
+              const current = awardResults.find((r) => r.award_category === award.key);
+              const currentName = current
+                ? (award.type === "team" ? current.team_name : current.player_name)
+                : null;
+              const currentId = current ? (award.type === "team" ? current.team_id : current.player_id) : "";
+              const draft = awardDrafts[award.key] ?? (currentId ? String(currentId) : "");
+              return (
+                <div key={award.key} className="admin-award-row">
+                  <span className="admin-award-label">{award.label}</span>
+                  <span className={`admin-award-current ${currentName ? "" : "unset"}`}>
+                    {currentName ? `Winner: ${currentName}` : "Not set"}
+                  </span>
+                  <select
+                    className="admin-award-select"
+                    value={draft}
+                    onChange={(e) => setAwardDrafts((d) => ({ ...d, [award.key]: e.target.value }))}
+                  >
+                    <option value="">— select {award.type === "team" ? "team" : "player"} —</option>
+                    {award.type === "team"
+                      ? teamOptions.map((t) => <option key={t.team_id} value={t.team_id}>{t.team_name}</option>)
+                      : Object.keys(playersByTeam).sort().map((teamName) => (
+                          <optgroup key={teamName} label={teamName}>
+                            {playersByTeam[teamName].map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}{p.position ? ` (${p.position})` : ""}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                  </select>
+                  <button
+                    className="btn-primary"
+                    disabled={!draft || String(draft) === String(currentId) || awardSaving === award.key}
+                    onClick={() => saveAward(award)}
+                  >
+                    {awardSaving === award.key ? "Saving…" : "Save"}
+                  </button>
+                  {awardMsg[award.key] && (
+                    <span className={`admin-award-msg ${awardMsg[award.key].includes("✓") ? "ok" : "err"}`}>
+                      {awardMsg[award.key]}
+                    </span>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       )}

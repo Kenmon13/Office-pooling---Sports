@@ -201,6 +201,21 @@ export async function adminFetchPollResults() {
   return res.json();
 }
 
+// Tournament-wide award winners (one row per category, no pool scope) — site admin only.
+export async function adminFetchPlayerAwardResults() {
+  const res = await fetch(`${API}/admin/player-award-results`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function adminSetPlayerAwardResult(award_category, player_id, team_id) {
+  const res = await fetch(`${API}/admin/player-award-results`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ award_category, player_id, team_id }),
+  });
+  return res.json();
+}
+
 export async function adminFetchPools() {
   const res = await fetch(`${API}/admin/pools`, { headers: authHeaders() });
   return res.json();
