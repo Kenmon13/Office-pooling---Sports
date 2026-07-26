@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { createPool, joinPool, fetchPublicPools, fetchUserPools, fetchGlobalStats } from "../api";
-import { flag } from "../flags";
+import { createPool, joinPool, fetchPublicPools, fetchUserPools, fetchGlobalStats, fetchLeagueCommunityStats, fetchLeagueTeams } from "../api";
+import { flag, plCrest, registerCrests } from "../flags";
+import { isLeague } from "../leagues";
 import PasswordInput from "../components/PasswordInput";
 
 const SHORT_NAMES = {
@@ -26,16 +27,26 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
   const [joiningPoolId, setJoiningPoolId] = useState(null);
   const [myPools, setMyPools] = useState([]);
   const [globalStats, setGlobalStats] = useState(null);
+  const [leagueStats, setLeagueStats] = useState(null);
   const [showAllChampions, setShowAllChampions] = useState(false);
+  const league = isLeague(tournament.id);
 
   useEffect(() => {
     fetchUserPools().then((data) => {
       if (Array.isArray(data)) setMyPools(data.filter((p) => p.tournament === tournament.id));
     }).catch(() => {});
-    fetchGlobalStats(tournament.id).then((data) => {
-      if (!data.error) setGlobalStats(data);
-    }).catch(() => {});
-  }, [tournament.id]);
+    if (league) {
+      // League community stats come from the config-driven league engine (EPL / La Liga / Serie A / NFL).
+      fetchLeagueTeams(tournament.id).then((teams) => registerCrests(teams)).catch(() => {});
+      fetchLeagueCommunityStats(tournament.id).then((data) => {
+        if (data && !data.error) setLeagueStats(data);
+      }).catch(() => {});
+    } else {
+      fetchGlobalStats(tournament.id).then((data) => {
+        if (!data.error) setGlobalStats(data);
+      }).catch(() => {});
+    }
+  }, [tournament.id, league]);
 
   const handlePublicBrowse = async () => {
     setMode("public");
@@ -140,6 +151,113 @@ function JoinPool({ sport, tournament, onJoin, onBack }) {
           </div>
         )}
 
+      </div>
+    );
+  }
+
+  if (mode === "stats" && league) {
+    const winner = leagueStats?.winner;
+    const groups = leagueStats?.groups || [];
+    const awards = leagueStats?.awards || [];
+    const hasAnyAwardPicks = awards.some((a) => (a.picks || []).length > 0);
+    const isEmpty = leagueStats && (!winner || winner.teams.length === 0) && groups.every((g) => g.teams.length === 0) && !hasAnyAwardPicks;
+    return (
+      <div className="select-page">
+        <button className="back-btn" onClick={resetMode}>&larr; Back</button>
+        <h2>Community Predictions</h2>
+        <p className="select-subtitle">
+          Based on {leagueStats?.totalPlayers || 0} player{leagueStats?.totalPlayers !== 1 ? "s" : ""} across all pools
+        </p>
+
+        {(!leagueStats || isEmpty) && (
+          <p className="notice">No predictions yet — stats will appear once players start picking.</p>
+        )}
+
+        {winner && winner.teams.length > 0 && (
+          <div className="global-stats-section">
+            <h4>{winner.label || "Predicted Winner"}</h4>
+            <div className="stats-list">
+              {(showAllChampions ? winner.teams : winner.teams.slice(0, 10)).map((t, i) => (
+                <div key={t.team_id} className="stats-row">
+                  <span className="stats-rank">#{i + 1}</span>
+                  <span className="stats-team">
+                    {plCrest(t.team_code, t.crest_url)}
+                    {t.short_name || t.team_name}
+                  </span>
+                  <div className="stats-bar-wrapper">
+                    <div className="stats-bar" style={{ width: `${t.percentage}%` }} />
+                  </div>
+                  <span className="stats-pct">{t.percentage}%</span>
+                  <span className="stats-count">({t.pick_count})</span>
+                </div>
+              ))}
+            </div>
+            {winner.teams.length > 10 && (
+              <button className="btn-show-more" onClick={() => setShowAllChampions(!showAllChampions)}>
+                {showAllChampions ? "Show Less" : `Show All (${winner.teams.length})`}
+              </button>
+            )}
+          </div>
+        )}
+
+        {groups.some((g) => g.teams.length > 0) && (
+          <div className="global-stats-section">
+            <h4>Season Predictions</h4>
+            <div className="stats-groups-grid">
+              {groups.filter((g) => g.teams.length > 0).map((g) => (
+                <div key={g.key} className="stats-group-card">
+                  <h4>{g.label}</h4>
+                  {g.teams.slice(0, 5).map((t, i) => (
+                    <div key={t.team_id} className="stats-row stats-row-compact">
+                      <span className="stats-rank-sm">#{i + 1}</span>
+                      <span className="stats-team">
+                        {plCrest(t.team_code, t.crest_url)}
+                        {t.short_name || t.team_name}
+                      </span>
+                      <div className="stats-bar-wrapper">
+                        <div className="stats-bar stats-bar-group" style={{ width: `${t.percentage}%` }} />
+                      </div>
+                      <span className="stats-pct">{t.percentage}%</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hasAnyAwardPicks && (
+          <div className="global-stats-section">
+            <h4>Award Picks</h4>
+            <div className="stats-groups-grid">
+              {awards.map((award) => {
+                const picks = award.picks || [];
+                if (picks.length === 0) return null;
+                return (
+                  <div key={award.key} className="stats-group-card">
+                    <h4>{award.label}</h4>
+                    {picks.map((p, i) => (
+                      <div key={i} className="stats-row stats-row-compact">
+                        <span className="stats-rank-sm">#{i + 1}</span>
+                        <span className="stats-team stats-team-award">
+                          {plCrest(p.team_code, p.crest_url)}
+                          <span className="stats-award-name">
+                            {p.player_name || p.team_name}
+                            {p.player_name && <span className="stats-award-team">{p.team_name}</span>}
+                          </span>
+                        </span>
+                        <div className="stats-bar-wrapper">
+                          <div className="stats-bar stats-bar-group" style={{ width: `${p.percentage}%` }} />
+                        </div>
+                        <span className="stats-pct">{p.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
