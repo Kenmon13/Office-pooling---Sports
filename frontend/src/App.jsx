@@ -987,7 +987,7 @@ function App() {
         <main>
           <Routes>
             {isLeague(pool.tournament) ? (<>
-              <Route path="/" element={<PLMatchday currentUser={participant} league={pool.tournament} />} />
+              <Route path="/" element={<PLMatchday currentUser={participant} league={pool.tournament} exactScoresDisabled={exactScoresDisabled} />} />
               <Route path="/season" element={<SeasonPredictions currentUser={participant} poolId={pool.id} league={pool.tournament} />} />
             </>) : (<>
               <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} groupStageUnlocked={groupStageUnlocked} />} />

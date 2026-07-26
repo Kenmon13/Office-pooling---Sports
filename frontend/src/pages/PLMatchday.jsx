@@ -60,7 +60,7 @@ function formatDeadlineFull(dateStr) {
   return `${weekdays[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()} at ${h % 12 || 12}:${m} ${ampm}`;
 }
 
-function PLMatchday({ currentUser, league = "epl2627" }) {
+function PLMatchday({ currentUser, league = "epl2627", exactScoresDisabled = false }) {
   const L = getLeague(league);
   const nfl = isNFL(league);
   const bands = L?.marginBands || [];
@@ -262,7 +262,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
         ) : (
           <ul>
             <li>Predict the outcome (Home / Draw / Away) for each match: <strong>2 pts</strong> for correct outcome.</li>
-            <li>Optionally predict the exact score: <strong>4 pts</strong> if correct score (replaces 2 pts).</li>
+            {!exactScoresDisabled && <li>Optionally predict the exact score: <strong>4 pts</strong> if correct score (replaces 2 pts).</li>}
             <li>Each match locks when it kicks off — you can keep editing later games in the same matchday.</li>
           </ul>
         )}
@@ -411,7 +411,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
                   </div>
                 )}
 
-                {!nfl && currentUser && !locked && !isFinished && pred.outcome && (
+                {!nfl && !exactScoresDisabled && currentUser && !locked && !isFinished && pred.outcome && (
                   <div className="pl-score-inputs">
                     <input
                       type="number"
@@ -445,7 +445,7 @@ function PLMatchday({ currentUser, league = "epl2627" }) {
                   </div>
                 )}
 
-                {!nfl && locked && pred.home_score != null && pred.away_score != null && !isFinished && (
+                {!nfl && !exactScoresDisabled && locked && pred.home_score != null && pred.away_score != null && !isFinished && (
                   <div className="pl-score-inputs locked">
                     <span className="locked-score">{pred.home_score} - {pred.away_score}</span>
                     <span className="score-label">Your predicted score</span>
