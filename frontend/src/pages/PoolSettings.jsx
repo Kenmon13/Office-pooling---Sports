@@ -5,7 +5,9 @@ import {
   fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid,
   fetchSeasonLock, updateSeasonLock,
   fetchScoreAdjustments, addScoreAdjustment, deleteScoreAdjustment,
+  fetchExactScoresSetting, updateExactScoresSetting,
 } from "../api";
+import { isNFL } from "../leagues";
 
 // League-only pool settings rendered as a full page (WC keeps its own modal untouched).
 function PoolSettings({ pool, user, onRenamed }) {
@@ -16,6 +18,7 @@ function PoolSettings({ pool, user, onRenamed }) {
   const [awardsLocked, setAwardsLocked] = useState(false);
   const [awardsVoided, setAwardsVoided] = useState(false);
   const [seasonLocked, setSeasonLocked] = useState(false);
+  const [scoresDisabled, setScoresDisabled] = useState(false);
   const [adjustments, setAdjustments] = useState([]);
 
   const [revealPassword, setRevealPassword] = useState(false);
@@ -46,6 +49,7 @@ function PoolSettings({ pool, user, onRenamed }) {
     fetchMessages(pool.id).then((d) => { if (d && typeof d.chat_closed !== "undefined") setChatClosed(!!d.chat_closed); }).catch(() => {});
     fetchPlayerAwardsLock(pool.id).then((d) => { if (d) { setAwardsLocked(!!d.player_awards_locked); setAwardsVoided(!!d.player_awards_voided); } }).catch(() => {});
     fetchSeasonLock(pool.id).then((d) => { if (d && typeof d.locked !== "undefined") setSeasonLocked(!!d.locked); }).catch(() => {});
+    fetchExactScoresSetting(pool.id).then((d) => { if (d && typeof d.exact_scores_disabled !== "undefined") setScoresDisabled(!!d.exact_scores_disabled); }).catch(() => {});
     loadAdjustments();
   }, [pool.id, loadAdjustments]);
 
@@ -145,6 +149,23 @@ function PoolSettings({ pool, user, onRenamed }) {
             }}>{seasonLocked ? "Locked — Unlock" : "Open — Lock"}</button>
             <span style={{ fontSize: "0.72rem", color: "#8aa88a", marginTop: 4, display: "block", textAlign: "right" }}>
               Locks all season predictions, including the title winner
+            </span>
+          </span>
+        </div>
+      )}
+
+      {isAdmin && !isNFL(pool.tournament) && (
+        <div className="pool-settings-row">
+          <span className="pool-settings-label">Score Prediction</span>
+          <span className="pool-settings-value">
+            <button className={`btn-small ${scoresDisabled ? "btn-danger" : ""}`} onClick={async () => {
+              const newVal = !scoresDisabled;
+              if (newVal && !window.confirm("Disable score prediction? Exact scores already entered will be wiped and the exact-score bonus will stop counting for everyone in the pool. This can't be undone.")) return;
+              const res = await updateExactScoresSetting(pool.id, newVal);
+              if (!res.error) setScoresDisabled(newVal);
+            }}>{scoresDisabled ? "Disabled — Enable" : "Enabled — Disable"}</button>
+            <span style={{ fontSize: "0.72rem", color: "#8aa88a", marginTop: 4, display: "block", textAlign: "right" }}>
+              Players predict the match outcome only; no exact-score bonus
             </span>
           </span>
         </div>

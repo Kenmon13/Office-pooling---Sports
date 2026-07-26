@@ -818,6 +818,14 @@ app.put("/api/pools/:poolId/exact-scores", requirePoolAdmin, (req, res) => {
   const poolId = req.params.poolId;
   const { disabled } = req.body;
   db.prepare("UPDATE pools SET exact_scores_disabled = ? WHERE id = ?").run(disabled ? 1 : 0, poolId);
+  // When an admin disables score prediction, wipe the scorelines already entered by this pool's
+  // members for league matches. Outcome picks and NFL margin bands are preserved. This is
+  // irreversible — turning it back on does not restore the wiped scores.
+  if (disabled) {
+    db.prepare(`UPDATE league_match_predictions
+      SET predicted_home_score = NULL, predicted_away_score = NULL
+      WHERE participant_id IN (SELECT id FROM participants WHERE pool_id = ?)`).run(poolId);
+  }
   res.json({ success: true, exact_scores_disabled: disabled ? 1 : 0 });
 });
 
@@ -2714,6 +2722,12 @@ app.post("/api/league/:code/match-predictions", resolveLeague, authenticateToken
   const { participant_id, predictions } = req.body;
   if (!participant_id || !Array.isArray(predictions)) return res.status(400).json({ error: "participant_id and predictions array required" });
 
+  // When the pool has score prediction disabled, drop any incoming scorelines server-side so a
+  // crafted request can't bypass the hidden UI. Enforced here as well as in the client.
+  const scoresDisabled = !!db.prepare(
+    "SELECT pl.exact_scores_disabled FROM participants pa JOIN pools pl ON pa.pool_id = pl.id WHERE pa.id = ?"
+  ).get(participant_id)?.exact_scores_disabled;
+
   const bandKeys = new Set((L.marginBands || []).map((b) => b.key));
   const now = new Date();
   const upsert = db.prepare(`INSERT INTO league_match_predictions (participant_id, match_id, predicted_outcome, predicted_home_score, predicted_away_score, predicted_margin_band)
@@ -2730,6 +2744,7 @@ app.post("/api/league/:code/match-predictions", resolveLeague, authenticateToken
       errors.push(`Match ${p.match_id} has already kicked off`);
       continue;
     }
+    if (scoresDisabled) { p.predicted_home_score = null; p.predicted_away_score = null; }
     // Reject scores that contradict the outcome — enforced server-side, not UI-only.
     const hs = p.predicted_home_score, as_ = p.predicted_away_score;
     if (hs != null && as_ != null) {
@@ -2821,7 +2836,9 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
   if (!poolId) return res.status(400).json({ error: "pool_id required" });
 
   const participants = db.prepare("SELECT p.* FROM participants p JOIN users u ON p.user_id = u.id WHERE p.pool_id = ? AND u.is_admin = 0 ORDER BY p.name").all(poolId);
-  const awardsVoided = !!db.prepare("SELECT player_awards_voided FROM pools WHERE id = ?").get(poolId)?.player_awards_voided;
+  const poolFlags = db.prepare("SELECT player_awards_voided, exact_scores_disabled FROM pools WHERE id = ?").get(poolId);
+  const awardsVoided = !!poolFlags?.player_awards_voided;
+  const exactScoresDisabled = !!poolFlags?.exact_scores_disabled;
   const finishedMatches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status = 'finished'").all(code);
   const allMatchPreds = db.prepare("SELECT mp.* FROM league_match_predictions mp JOIN league_matches m ON mp.match_id = m.id WHERE m.league = ?").all(code);
   const teams = db.prepare("SELECT * FROM league_teams WHERE league = ?").all(code);
@@ -2921,7 +2938,7 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
           matchPoints += S.matchOutcome;
           const actualBand = marginBandFor(L, Math.abs(sc.home - sc.away));
           if (p.predicted_margin_band && p.predicted_margin_band === actualBand) { matchPoints += S.matchMargin; matchExact++; }
-        } else if (p.predicted_home_score != null && p.predicted_away_score != null &&
+        } else if (!exactScoresDisabled && p.predicted_home_score != null && p.predicted_away_score != null &&
             p.predicted_home_score === sc.home && p.predicted_away_score === sc.away) {
           matchPoints += S.matchExact; matchExact++;
         } else {
