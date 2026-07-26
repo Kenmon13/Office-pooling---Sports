@@ -1,8 +1,3 @@
-// Donors hall of fame — add a new { user } entry here as donations come in.
-const DONORS = [
-  { user: "Jamie Vejar" },
-];
-
 function DonateModal({ onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -34,20 +29,6 @@ function DonateModal({ onClose }) {
             <span className="donate-paypal-label">Buy Me a Coffee</span>
             <span className="donate-paypal-handle">☕ @kenmon</span>
           </a>
-        </div>
-
-        <div className="donate-hof">
-          <h4>🏆 Hall of Fame of Donors</h4>
-          <table className="donate-hof-table">
-            <thead>
-              <tr><th>User</th></tr>
-            </thead>
-            <tbody>
-              {DONORS.map((d, i) => (
-                <tr key={i}><td>{d.user}</td></tr>
-              ))}
-            </tbody>
-          </table>
         </div>
 
         <div className="modal-actions">

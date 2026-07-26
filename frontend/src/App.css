@@ -1758,34 +1758,6 @@ nav a.active {
   color: #ffdd00;
 }
 
-.donate-hof {
-  margin-top: 20px;
-}
-
-.donate-hof h4 {
-  margin: 0 0 8px;
-}
-
-.donate-hof-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.donate-hof-table th,
-.donate-hof-table td {
-  border: 1px solid #2a4a2a;
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.donate-hof-table th {
-  background: #0f200f;
-  color: #7da67d;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
 .my-pools-section {
   margin-top: 32px;
 }
