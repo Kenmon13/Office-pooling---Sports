@@ -25,6 +25,7 @@ import Legal from "./pages/Legal";
 import Chat from "./pages/Chat";
 import Players from "./pages/Players";
 import Stats from "./pages/Stats";
+import LeagueStats from "./pages/LeagueStats";
 import Settings from "./pages/Settings";
 import PoolSettings from "./pages/PoolSettings";
 import { autoJoinPool, fetchLeaderboard, fetchPoolById, joinPoolById, leavePool, submitIssue, fetchHistory, fetchUserPools, fetchMyIssues, fetchIssueReplies, postIssueReply, fetchPoolPassword, changePoolPassword, renamePool, fetchAnnouncement, updateAnnouncement, fetchPoolAdmins, addPoolAdmin, kickPoolMember, updateChatStatus, fetchChampionUnlock, updateChampionUnlock, fetchChampionW2Lock, updateChampionW2Lock, fetchPlayerAwardsLock, updatePlayerAwardsLock, updatePlayerAwardsVoid, fetchExactScoresSetting, updateExactScoresSetting, fetchGroupStageUnlock, updateGroupStageUnlock, fetchKnockoutMatches, fetchParticipants, fetchMessages } from "./api";
@@ -995,7 +996,9 @@ function App() {
               <Route path="/champion" element={<Champion currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} />} />
             </>)}
             <Route path="/players" element={<Players currentUser={participant} poolId={pool.id} mockDate={pool.mock_date} tournament={pool.tournament} />} />
-            <Route path="/stats" element={<Stats poolId={pool.id} />} />
+            <Route path="/stats" element={isLeague(pool.tournament)
+              ? <LeagueStats league={pool.tournament} poolId={pool.id} />
+              : <Stats poolId={pool.id} />} />
             <Route path="/leaderboard" element={<Leaderboard poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             <Route path="/breakdown" element={<Breakdown currentUser={participant} poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             {/* History was merged into Breakdown; redirect old links. */}
