@@ -3004,6 +3004,95 @@ app.get("/api/league/:code/players", resolveLeague, (req, res) => {
     WHERE p.league = ? ORDER BY t.name, p.position, p.name`).all(req.params.code));
 });
 
+// Pool-wide pick distributions for a league pool — the league analog of the WC /stats/* endpoints.
+// Powers the Stats page: who the pool backs to win, zone/slot popularity, and award picks.
+app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
+  const { code } = req.params;
+  const L = req.league;
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.status(400).json({ error: "pool_id required" });
+
+  // Rank teams by how many of this pool's members put them anywhere in a set of finishing
+  // positions (soccer) or NFL slot positions. Percentage is share of picks within that set.
+  const zoneStats = (positions) => {
+    if (!positions.length) return [];
+    const placeholders = positions.map(() => "?").join(",");
+    const rows = db.prepare(`
+      SELECT t.id AS team_id, t.name AS team_name, t.code AS team_code,
+             t.short_name AS short_name, t.crest_url AS crest_url, COUNT(*) AS pick_count
+      FROM league_season_predictions sp
+      JOIN participants p ON p.id = sp.participant_id AND p.pool_id = ?
+      JOIN league_teams t ON t.id = sp.team_id
+      WHERE sp.league = ? AND sp.position IN (${placeholders})
+      GROUP BY t.id
+      ORDER BY pick_count DESC
+    `).all(poolId, code, ...positions);
+    const total = rows.reduce((s, r) => s + r.pick_count, 0);
+    return rows.map((r) => ({
+      team_id: r.team_id, team_name: r.team_name, team_code: r.team_code,
+      short_name: r.short_name, crest_url: r.crest_url, pick_count: r.pick_count,
+      percentage: total > 0 ? Math.round((r.pick_count / total) * 100) : 0,
+    }));
+  };
+  // A zone is either a single position (e.g. champion: 1) or an inclusive [from, to] range.
+  const rangePositions = (z) => (Array.isArray(z)
+    ? Array.from({ length: z[1] - z[0] + 1 }, (_, i) => z[0] + i)
+    : (z != null ? [z] : []));
+
+  let winner = { label: "", teams: [] };
+  const groups = [];
+  if (L.sport === "nfl") {
+    const sbSlot = (L.seasonSlots || []).find((s) => s.scope === "champion");
+    winner = { label: "Predicted Super Bowl Winner", teams: sbSlot ? zoneStats([sbSlot.pos]) : [] };
+    for (const s of (L.seasonSlots || []).filter((x) => x.scope === "conference")) {
+      groups.push({ key: s.key, label: `Predicted ${s.label}`, teams: zoneStats([s.pos]) });
+    }
+  } else {
+    const Z = L.zones || {};
+    winner = { label: "Predicted Champion", teams: zoneStats(rangePositions(Z.champion ?? 1)) };
+    if (Z.cl) groups.push({ key: "cl", label: "Predicted Top 4 (UCL)", teams: zoneStats(rangePositions(Z.cl)) });
+    if (Z.relegation) groups.push({ key: "relegation", label: "Predicted Relegation", teams: zoneStats(rangePositions(Z.relegation)) });
+  }
+
+  // Award picks — top 5 per category across the pool, mirroring /stats/award-picks.
+  const awardRows = db.prepare(`
+    SELECT pap.award_category,
+           COALESCE(pap.player_id, pap.team_id) AS pick_key,
+           pap.player_id,
+           pl.name AS player_name,
+           COALESCE(t2.name, t.name) AS team_name,
+           COALESCE(t2.code, t.code) AS team_code,
+           COALESCE(t2.crest_url, t.crest_url) AS crest_url,
+           COUNT(*) AS pick_count
+    FROM league_award_picks pap
+    JOIN participants p ON p.id = pap.participant_id AND p.pool_id = ?
+    LEFT JOIN league_players pl ON pl.id = pap.player_id
+    LEFT JOIN league_teams t ON t.id = pl.team_id
+    LEFT JOIN league_teams t2 ON t2.id = pap.team_id
+    WHERE pap.league = ?
+    GROUP BY pap.award_category, pick_key
+    ORDER BY pap.award_category, pick_count DESC
+  `).all(poolId, code);
+
+  const totalByAward = {};
+  for (const r of awardRows) totalByAward[r.award_category] = (totalByAward[r.award_category] || 0) + r.pick_count;
+  const picksByAward = {};
+  for (const r of awardRows) {
+    picksByAward[r.award_category] ||= [];
+    if (picksByAward[r.award_category].length < 5) {
+      picksByAward[r.award_category].push({
+        player_id: r.player_id, player_name: r.player_name,
+        team_name: r.team_name, team_code: r.team_code, crest_url: r.crest_url,
+        pick_count: r.pick_count,
+        percentage: totalByAward[r.award_category] > 0 ? Math.round((r.pick_count / totalByAward[r.award_category]) * 100) : 0,
+      });
+    }
+  }
+  const awards = (L.awards || []).map((a) => ({ key: a.key, label: a.label, type: a.type, picks: picksByAward[a.key] || [] }));
+
+  res.json({ sport: L.sport, winner, groups, awards });
+});
+
 app.get("/api/league/:code/player-award-picks/:participantId", resolveLeague, (req, res) => {
   const { code } = req.params;
   const { pool_id } = req.query;
