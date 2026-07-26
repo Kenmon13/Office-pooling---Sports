@@ -784,6 +784,10 @@ export async function fetchLeaguePickStats(code, poolId) {
   return (await fetch(`${API}/league/${code}/pick-stats?pool_id=${poolId}`, { headers: authHeaders() })).json();
 }
 
+export async function fetchLeagueCommunityStats(code) {
+  return (await fetch(`${API}/league/${code}/community-stats`, { headers: authHeaders() })).json();
+}
+
 export async function fetchLeaguePlayerAwardPicks(code, participantId, poolId) {
   return (await fetch(`${API}/league/${code}/player-award-picks/${participantId}?pool_id=${poolId}`, { headers: authHeaders() })).json();
 }

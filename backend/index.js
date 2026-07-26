@@ -3004,16 +3004,15 @@ app.get("/api/league/:code/players", resolveLeague, (req, res) => {
     WHERE p.league = ? ORDER BY t.name, p.position, p.name`).all(req.params.code));
 });
 
-// Pool-wide pick distributions for a league pool — the league analog of the WC /stats/* endpoints.
-// Powers the Stats page: who the pool backs to win, zone/slot popularity, and award picks.
-app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
-  const { code } = req.params;
-  const L = req.league;
-  const poolId = req.query.pool_id;
-  if (!poolId) return res.status(400).json({ error: "pool_id required" });
+// Shared engine for league pick distributions. poolId truthy → scoped to one pool (Stats page);
+// poolId null → community-wide across every pool of the league (Community Predictions). Config-
+// driven off leagues.js, so it works for EPL / La Liga / Serie A / NFL alike.
+function computeLeaguePickStats(L, code, poolId) {
+  const poolFilter = poolId ? "AND p.pool_id = ?" : "";
+  const poolArgs = poolId ? [poolId] : [];
 
-  // Rank teams by how many of this pool's members put them anywhere in a set of finishing
-  // positions (soccer) or NFL slot positions. Percentage is share of picks within that set.
+  // Rank teams by how many members put them anywhere in a set of finishing positions (soccer)
+  // or NFL slot positions. Percentage is share of picks within that set.
   const zoneStats = (positions) => {
     if (!positions.length) return [];
     const placeholders = positions.map(() => "?").join(",");
@@ -3021,12 +3020,12 @@ app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
       SELECT t.id AS team_id, t.name AS team_name, t.code AS team_code,
              t.short_name AS short_name, t.crest_url AS crest_url, COUNT(*) AS pick_count
       FROM league_season_predictions sp
-      JOIN participants p ON p.id = sp.participant_id AND p.pool_id = ?
+      JOIN participants p ON p.id = sp.participant_id ${poolFilter}
       JOIN league_teams t ON t.id = sp.team_id
       WHERE sp.league = ? AND sp.position IN (${placeholders})
       GROUP BY t.id
       ORDER BY pick_count DESC
-    `).all(poolId, code, ...positions);
+    `).all(...poolArgs, code, ...positions);
     const total = rows.reduce((s, r) => s + r.pick_count, 0);
     return rows.map((r) => ({
       team_id: r.team_id, team_name: r.team_name, team_code: r.team_code,
@@ -3054,7 +3053,7 @@ app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
     if (Z.relegation) groups.push({ key: "relegation", label: "Predicted Relegation", teams: zoneStats(rangePositions(Z.relegation)) });
   }
 
-  // Award picks — top 5 per category across the pool, mirroring /stats/award-picks.
+  // Award picks — top 5 per category, mirroring /stats/award-picks.
   const awardRows = db.prepare(`
     SELECT pap.award_category,
            COALESCE(pap.player_id, pap.team_id) AS pick_key,
@@ -3065,14 +3064,14 @@ app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
            COALESCE(t2.crest_url, t.crest_url) AS crest_url,
            COUNT(*) AS pick_count
     FROM league_award_picks pap
-    JOIN participants p ON p.id = pap.participant_id AND p.pool_id = ?
+    JOIN participants p ON p.id = pap.participant_id ${poolFilter}
     LEFT JOIN league_players pl ON pl.id = pap.player_id
     LEFT JOIN league_teams t ON t.id = pl.team_id
     LEFT JOIN league_teams t2 ON t2.id = pap.team_id
     WHERE pap.league = ?
     GROUP BY pap.award_category, pick_key
     ORDER BY pap.award_category, pick_count DESC
-  `).all(poolId, code);
+  `).all(...poolArgs, code);
 
   const totalByAward = {};
   for (const r of awardRows) totalByAward[r.award_category] = (totalByAward[r.award_category] || 0) + r.pick_count;
@@ -3090,7 +3089,24 @@ app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
   }
   const awards = (L.awards || []).map((a) => ({ key: a.key, label: a.label, type: a.type, picks: picksByAward[a.key] || [] }));
 
-  res.json({ sport: L.sport, winner, groups, awards });
+  // Mirror the WC global stat: totalPlayers = number of members who made a winner pick.
+  const totalPlayers = winner.teams.reduce((s, t) => s + t.pick_count, 0);
+
+  return { sport: L.sport, totalPlayers, winner, groups, awards };
+}
+
+// Pool-wide pick distributions for a league pool — the league analog of the WC /stats/* endpoints.
+// Powers the Stats page: who the pool backs to win, zone/slot popularity, and award picks.
+app.get("/api/league/:code/pick-stats", resolveLeague, (req, res) => {
+  const poolId = req.query.pool_id;
+  if (!poolId) return res.status(400).json({ error: "pool_id required" });
+  res.json(computeLeaguePickStats(req.league, req.params.code, poolId));
+});
+
+// Community-wide (all pools) pick distributions for a league — the league analog of the WC
+// /api/stats/global endpoint. Powers "Community Predictions" on the pool-select screen.
+app.get("/api/league/:code/community-stats", resolveLeague, (req, res) => {
+  res.json(computeLeaguePickStats(req.league, req.params.code, null));
 });
 
 app.get("/api/league/:code/player-award-picks/:participantId", resolveLeague, (req, res) => {
