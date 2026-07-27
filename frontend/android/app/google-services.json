@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "137981374249",
+    "project_id": "sportspooling-538e3",
+    "storage_bucket": "sportspooling-538e3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:137981374249:android:213bf255f688c30a919138",
+        "android_client_info": {
+          "package_name": "com.sportspooling.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8PD3xORmVjx-9QA_6slZJLsA5v73CjI8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

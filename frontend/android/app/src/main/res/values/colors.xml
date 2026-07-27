@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the app's page background so the system bars do not sit as light
+         strips above and below a dark screen. -->
+    <color name="appBackground">#0b1a0b</color>
+</resources>

@@ -29,6 +29,11 @@ Pool funds and predict sports events. Full-stack JS app deployed on Railway.
 - SQLite via `better-sqlite3`
 - CORS enabled
 
+### Mobile — `frontend/ios/`, `frontend/android/`
+- Capacitor 8 wraps the same React build as iOS and Android apps
+- Platform branching lives in `frontend/src/platform.js`
+- **See [MOBILE.md](MOBILE.md)** for setup, build commands, and store submission
+
 ### Deployment
 - Docker container deployed to Railway
 - Build: root `npm run build` (installs both sides, builds frontend, copies `dist/` → `backend/public/`)
@@ -42,6 +47,9 @@ Pool funds and predict sports events. Full-stack JS app deployed on Railway.
 # Install all deps
 cd backend && npm install
 cd ../frontend && npm install
+
+# Mobile: rebuild web assets into the native projects (run after every FE change)
+cd frontend && npm run cap:sync
 
 # Dev (run both terminals)
 cd frontend && npm run dev       # Vite dev server

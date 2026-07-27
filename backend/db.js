@@ -195,6 +195,42 @@ try { db.exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE users ADD COLUMN google_id TEXT"); } catch (_) {}
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)"); } catch (_) {}
 
+// Sign in with Apple. Apple's `sub` is stable per Apple-developer-team, so it is
+// stored alongside google_id rather than replacing it.
+try { db.exec("ALTER TABLE users ADD COLUMN apple_id TEXT"); } catch (_) {}
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_id ON users(apple_id)"); } catch (_) {}
+
+// Push notifications. One row per device: a user with a phone and a tablet has two.
+// The FCM registration token is the primary key because FCM can reassign a token to a
+// different user (same device, new login), and the newest owner wins.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS device_tokens (
+    token        TEXT PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    platform     TEXT NOT NULL CHECK(platform IN ('ios','android','web')),
+    created_at   TEXT DEFAULT (datetime('now')),
+    last_seen_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
+
+  -- Dedupe ledger: guarantees a user is told about a given match at most once per
+  -- kind, no matter how often the scan runs or how many pools they are in.
+  CREATE TABLE IF NOT EXISTS push_log (
+    user_id  INTEGER NOT NULL REFERENCES users(id),
+    kind     TEXT NOT NULL,
+    ref      TEXT NOT NULL,
+    sent_at  TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, kind, ref)
+  );
+
+  -- Per-user opt-out. Absent row means opted in.
+  CREATE TABLE IF NOT EXISTS push_prefs (
+    user_id     INTEGER PRIMARY KEY REFERENCES users(id),
+    reminders   INTEGER NOT NULL DEFAULT 1,
+    results     INTEGER NOT NULL DEFAULT 1
+  );
+`);
+
 // "What should we build next?" poll — one row per user, either a vote or a dismissal.
 db.exec(`
   CREATE TABLE IF NOT EXISTS poll_responses (

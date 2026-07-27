@@ -4,12 +4,31 @@
   box-sizing: border-box;
 }
 
+/* The native shell draws the WebView edge to edge, and any strip the body does
+   not cover falls back to the WebView's white default — so html carries the
+   background too. Harmless on the web. */
+html {
+  background: #0b1a0b;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 15px;
   background: #0b1a0b;
   color: #d4e8d4;
   min-height: 100vh;
+}
+
+/* Native shell only: keep content clear of the notch and the home indicator.
+   The insets resolve to 0 in a normal browser, so this is inert on the web. */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.app {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 
 .app {
@@ -2134,6 +2153,41 @@ nav a.active {
 .google-login-wrapper {
   display: flex;
   justify-content: center;
+}
+
+/* Native shell: Google's web button can't render inside a webview, so iOS and
+   Android get plain buttons that trigger the OS sign-in sheets instead. */
+.native-social-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.native-social-btn {
+  width: 280px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.native-social-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.native-social-btn-google {
+  background: #131f13;
+  border-color: #2e5a2e;
+  color: #d4e8d4;
+}
+
+.native-social-btn-apple {
+  background: #ffffff;
+  color: #000000;
 }
 
 .success-msg {

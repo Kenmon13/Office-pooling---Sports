@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sports Pooling</string>
+    <string name="title_activity_main">Sports Pooling</string>
+    <string name="package_name">com.sportspooling.app</string>
+    <string name="custom_url_scheme">com.sportspooling.app</string>
+</resources>

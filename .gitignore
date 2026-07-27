@@ -5,3 +5,9 @@ backend/public/
 *.db-wal
 .env
 backend/.env
+
+# Capacitor native build artifacts
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/ios/App/Pods/
+frontend/ios/App/*.xcworkspace/xcuserdata/

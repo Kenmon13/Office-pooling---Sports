@@ -5,3 +5,9 @@ backend/worldcup.db
 .gitignore
 *.md
 frontend/dist
+
+# Capacitor native projects and icon sources are not needed by the server build
+frontend/ios
+frontend/android
+frontend/assets
+frontend/capacitor.config.json
