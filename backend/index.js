@@ -1,6 +1,7 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const fs = require("fs");
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
@@ -11,13 +12,21 @@ const { OAuth2Client } = require("google-auth-library");
 const { Resend } = require("resend");
 const JWT_SECRET = process.env.JWT_SECRET || "office-pooling-secret-change-me";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "719484309775-ooani0nttr0qeijov4ar50nk845364rt.apps.googleusercontent.com";
+// The iOS app signs in against its own OAuth client, so its ID tokens carry a
+// different `aud` than the web/Android ones. Both must be accepted.
+const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID || "";
+const GOOGLE_AUDIENCES = [GOOGLE_CLIENT_ID, GOOGLE_IOS_CLIENT_ID].filter(Boolean);
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+// Sign in with Apple issues identity tokens to the app's bundle ID.
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID || "com.sportspooling.app";
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || "https://sportspooling.com";
 
 // Seed on first run
 require("./seed");
 const { startScoreRefresh, syncPLFixtures, syncPLSquads } = require("./scores");
+const push = require("./push");
+const { startPushJobs } = require("./pushJobs");
 
 const app = express();
 app.use(cors());
@@ -74,7 +83,7 @@ app.post("/api/auth/google", async (req, res) => {
 
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: GOOGLE_CLIENT_ID,
+      audience: GOOGLE_AUDIENCES,
     });
     const payload = ticket.getPayload();
     const { sub: googleId, email, name } = payload;
@@ -110,6 +119,84 @@ app.post("/api/auth/google", async (req, res) => {
   } catch (err) {
     console.error("Google auth error:", err.message || err);
     res.status(401).json({ error: "Google authentication failed: " + (err.message || "unknown error") });
+  }
+});
+
+// --- Sign in with Apple ---
+// Required by App Store guideline 4.8 for any app that offers Google sign-in.
+
+const APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
+let appleKeyCache = { keys: null, fetchedAt: 0 };
+
+async function getAppleSigningKey(kid) {
+  const fresh = Date.now() - appleKeyCache.fetchedAt < 24 * 60 * 60 * 1000;
+  if (!appleKeyCache.keys || !fresh || !appleKeyCache.keys.find((k) => k.kid === kid)) {
+    const resp = await fetch(APPLE_KEYS_URL);
+    if (!resp.ok) throw new Error(`Could not fetch Apple public keys (${resp.status})`);
+    const body = await resp.json();
+    appleKeyCache = { keys: body.keys || [], fetchedAt: Date.now() };
+  }
+  const jwk = appleKeyCache.keys.find((k) => k.kid === kid);
+  if (!jwk) throw new Error("Apple public key not found for this token");
+  return crypto.createPublicKey({ key: jwk, format: "jwk" });
+}
+
+async function verifyAppleIdentityToken(idToken) {
+  let header;
+  try {
+    header = JSON.parse(Buffer.from(idToken.split(".")[0], "base64url").toString("utf8"));
+  } catch {
+    throw new Error("Malformed identity token");
+  }
+  if (!header || !header.kid) throw new Error("Malformed identity token");
+  const key = await getAppleSigningKey(header.kid);
+  return jwt.verify(idToken, key, {
+    algorithms: ["RS256"],
+    audience: APPLE_BUNDLE_ID,
+    issuer: "https://appleid.apple.com",
+  });
+}
+
+app.post("/api/auth/apple", async (req, res) => {
+  try {
+    const { token: idToken, display_name } = req.body;
+    if (!idToken) return res.status(400).json({ error: "Token is required" });
+
+    const payload = await verifyAppleIdentityToken(idToken);
+    const appleId = payload.sub;
+
+    // Apple only returns the email on the first authorization, and it may be a
+    // private relay address. `sub` is the only field present on every sign-in.
+    // email_verified arrives as either a boolean or the string "true"/"false".
+    const emailVerified = payload.email_verified === true || payload.email_verified === "true";
+    const normEmail =
+      payload.email && emailVerified ? String(payload.email).trim().toLowerCase() : null;
+
+    let row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE apple_id = ?").get(appleId);
+
+    if (!row && normEmail) {
+      // Link to an existing account with the same email, mirroring Google.
+      row = db.prepare("SELECT id, username, display_name, email, is_admin FROM users WHERE lower(email) = ?").get(normEmail);
+      if (row) {
+        db.prepare("UPDATE users SET apple_id = ? WHERE id = ?").run(appleId, row.id);
+      }
+    }
+
+    if (!row) {
+      const username = `a_${appleId.replace(/\W/g, "").slice(0, 12)}`;
+      const displayName = (display_name && display_name.trim()) || normEmail || "Apple User";
+      const result = db.prepare(
+        "INSERT INTO users (username, password, display_name, email, apple_id) VALUES (?, ?, ?, ?, ?)"
+      ).run(username, "apple-oauth-no-password", displayName, normEmail, appleId);
+      row = { id: result.lastInsertRowid, username, display_name: displayName, email: normEmail, is_admin: 0 };
+    }
+
+    const user = { id: row.id, username: row.username, display_name: row.display_name, email: row.email, is_admin: row.is_admin };
+    const token = jwt.sign({ id: user.id, username: user.username, is_admin: user.is_admin }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ ...user, token });
+  } catch (err) {
+    console.error("Apple auth error:", err.message || err);
+    res.status(401).json({ error: "Apple authentication failed: " + (err.message || "unknown error") });
   }
 });
 
@@ -365,6 +452,58 @@ function requireAdminToken(req, res, next) {
     next();
   });
 }
+
+// --- Push notifications ---
+
+app.post("/api/push/register", authenticateToken, (req, res) => {
+  const { token, platform } = req.body;
+  if (!token || typeof token !== "string") return res.status(400).json({ error: "Token is required" });
+  if (!["ios", "android", "web"].includes(platform)) {
+    return res.status(400).json({ error: "platform must be ios, android or web" });
+  }
+  push.registerToken(req.user.id, token, platform);
+  res.json({ ok: true, enabled: push.isEnabled() });
+});
+
+app.post("/api/push/unregister", authenticateToken, (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "Token is required" });
+  // Scoped to the caller so one user cannot drop another user's device.
+  const row = db.prepare("SELECT user_id FROM device_tokens WHERE token = ?").get(token);
+  if (row && row.user_id === req.user.id) push.unregisterToken(token);
+  res.json({ ok: true });
+});
+
+app.get("/api/push/prefs", authenticateToken, (req, res) => {
+  const row = db.prepare("SELECT reminders, results FROM push_prefs WHERE user_id = ?").get(req.user.id);
+  res.json({
+    reminders: row ? !!row.reminders : true,
+    results: row ? !!row.results : true,
+    devices: push.tokensFor(req.user.id).length,
+  });
+});
+
+app.put("/api/push/prefs", authenticateToken, (req, res) => {
+  const reminders = req.body.reminders === false ? 0 : 1;
+  const results = req.body.results === false ? 0 : 1;
+  db.prepare(
+    `INSERT INTO push_prefs (user_id, reminders, results) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET reminders = excluded.reminders, results = excluded.results`
+  ).run(req.user.id, reminders, results);
+  res.json({ reminders: !!reminders, results: !!results });
+});
+
+// Send a notification to the caller's own devices, so push can be verified on a
+// real handset without waiting for a match.
+app.post("/api/push/test", authenticateToken, async (req, res) => {
+  if (!push.isEnabled()) return res.status(503).json({ error: "Push is not configured on this server" });
+  const delivered = await push.sendToUser(req.user.id, {
+    title: "Sports Pooling",
+    body: "Push notifications are working.",
+    data: { kind: "test" },
+  });
+  res.json({ delivered });
+});
 
 // --- Admin ---
 
@@ -3276,4 +3415,5 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`World Cup Pool API running on port ${PORT}`);
   startScoreRefresh();
+  startPushJobs();
 });

@@ -35,6 +35,8 @@ import AnnouncementPrompt from "./components/AnnouncementModal";
 import PasswordInput from "./components/PasswordInput";
 import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, countUnread, applyDismissals } from "./windowsHelpers";
 import { localTzLabel } from "./flags";
+import { SITE_ORIGIN, isIOS } from "./platform";
+import { enablePush, disablePush, setPushOpenHandler } from "./push";
 import { isLeague } from "./leagues";
 import "./App.css";
 
@@ -242,6 +244,8 @@ function App() {
   };
 
   const handleSignOut = () => {
+    // Runs before the token is cleared below, so the request is still authorised.
+    disablePush();
     setUser(null);
     setParticipant(null);
     setSelectedSport(null);
@@ -273,6 +277,22 @@ function App() {
     handleJoinPool(poolData);
     setPendingNavigation(`/picks/${participantId}`);
   };
+
+  // Push notifications (native builds only — enablePush no-ops on the web).
+  // Registering on every sign-in is intentional: FCM hands back the same token and
+  // the backend upsert makes repeats free, but it recovers a token that failed to
+  // reach the server the first time.
+  useEffect(() => {
+    if (!user) return;
+    enablePush();
+    setPushOpenHandler(async (data) => {
+      if (!data?.tournament) return;
+      const pools = await fetchUserPools();
+      if (!Array.isArray(pools)) return;
+      const target = pools.find((p) => p.tournament === data.tournament);
+      if (target) handleJoinPool(target);
+    });
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // From a pick-reminder notification card: jump straight to the pick screen
   // that needs attention. poolData is set when the card belongs to a different
@@ -525,7 +545,9 @@ function App() {
     : null;
 
   // Donate / support shortcut, shown next to Report Issue across the app.
-  const donateBtn = <button onClick={() => setShowDonate(true)} className="btn-small btn-donate">Support us ❤️</button>;
+  // App Store guideline 3.1.1 forbids linking out to PayPal/Buy Me a Coffee to
+  // pay the developer, so the donate entry points are hidden on iOS builds only.
+  const donateBtn = isIOS ? null : <button onClick={() => setShowDonate(true)} className="btn-small btn-donate">Support us ❤️</button>;
 
   const announcementBar = currentTournamentId && (announcements.length > 0 || !!(user && user.is_admin)) ? (
     <div className="announcement-bar">
@@ -873,7 +895,7 @@ function App() {
                       }}>Pool Settings</button>
                       )}
                       <button onClick={(e) => {
-                        const url = `${window.location.origin}/join/${pool.id}`;
+                        const url = `${SITE_ORIGIN}/join/${pool.id}`;
                         navigator.clipboard.writeText(url);
                         const btn = e.currentTarget;
                         btn.textContent = "Copied!";
@@ -881,7 +903,7 @@ function App() {
                       }} className="hamburger-item">Share Link</button>
                       <button onClick={() => { setShowQuitConfirm(true); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Quit Pool</button>
                       <hr className="hamburger-divider" />
-                      <button onClick={() => { setShowDonate(true); setMobileMenuOpen(false); }} className="hamburger-item">Support us ❤️</button>
+                      {!isIOS && <button onClick={() => { setShowDonate(true); setMobileMenuOpen(false); }} className="hamburger-item">Support us ❤️</button>}
                       <button onClick={() => { openIssueChat(); setMobileMenuOpen(false); }} className="hamburger-item">Report Issue</button>
                       <button onClick={() => { handleSignOut(); setMobileMenuOpen(false); }} className="hamburger-item hamburger-signout">Sign Out</button>
                     </div>
@@ -898,7 +920,7 @@ function App() {
                   Quit Pool
                 </button>
                 <button onClick={(e) => {
-                  const url = `${window.location.origin}/join/${pool.id}`;
+                  const url = `${SITE_ORIGIN}/join/${pool.id}`;
                   navigator.clipboard.writeText(url);
                   const btn = e.currentTarget;
                   btn.textContent = "Copied!";

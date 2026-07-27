@@ -1,4 +1,6 @@
-const API = "/api";
+import { API_ORIGIN } from "./platform";
+
+const API = `${API_ORIGIN}/api`;
 
 function getToken() {
   return localStorage.getItem("auth_token");
@@ -36,6 +38,57 @@ export async function googleSignIn(token) {
   const data = await res.json();
   if (data.token) localStorage.setItem("auth_token", data.token);
   return data;
+}
+
+// display_name is only ever supplied by Apple on the first authorization.
+export async function appleSignIn(token, display_name) {
+  const res = await fetch(`${API}/auth/apple`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, display_name }),
+  });
+  const data = await res.json();
+  if (data.token) localStorage.setItem("auth_token", data.token);
+  return data;
+}
+
+// --- Push notifications ---
+
+export async function registerPushToken(token, platform) {
+  const res = await fetch(`${API}/push/register`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ token, platform }),
+  });
+  return res.json();
+}
+
+export async function unregisterPushToken(token) {
+  const res = await fetch(`${API}/push/unregister`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ token }),
+  });
+  return res.json();
+}
+
+export async function fetchPushPrefs() {
+  const res = await fetch(`${API}/push/prefs`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function updatePushPrefs(reminders, results) {
+  const res = await fetch(`${API}/push/prefs`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ reminders, results }),
+  });
+  return res.json();
+}
+
+export async function sendTestPush() {
+  const res = await fetch(`${API}/push/test`, { method: "POST", headers: authHeaders() });
+  return res.json();
 }
 
 export async function signIn(username, password) {
