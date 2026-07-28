@@ -4,6 +4,69 @@ Copy-paste material for the Play Console. Character limits are Google's.
 
 ---
 
+## Where this was left off — 2026-07-29
+
+Everything code-side is done, merged to `main`, and deployed. The remaining work
+is Console and backup work. Do them in this order.
+
+### 1. Back up the upload keystore — do this first
+
+`frontend/android/upload-keystore.jks` and `frontend/android/key.properties`
+exist in **exactly one place**: this laptop. They are gitignored on purpose, and
+there is no Time Machine destination configured. Lose the disk, lose the ability
+to ship updates without a Google support round-trip.
+
+Run these one at a time (they are deliberately short — a long one-liner wraps on
+paste and breaks):
+
+```bash
+tar czf ~/ks.tgz -C ~/Desktop/playground/Office-pooling/frontend/android upload-keystore.jks key.properties
+```
+```bash
+openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -in ~/ks.tgz -out ~/ks-backup.enc
+```
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in ~/ks-backup.enc | tar tzf -
+```
+```bash
+rm ~/ks.tgz
+```
+
+The third command must list both filenames — verify before trusting it. Then
+drag `~/ks-backup.enc` into iCloud Drive in Finder.
+
+**Also put the passphrase and the contents of `key.properties` into a password
+manager.** An encrypted archive whose passphrase lives only in your head is not
+a backup.
+
+### 2. Screenshots — 4–8 phone shots
+
+Must be captured from a pool created with **neutral names**. Captures from the
+live app showed a real pool name and another member's picks, and Play listings
+are public. `shot-*.png` is gitignored here for that reason. That throwaway pool
+doubles as the demo account Apple will require later.
+
+### 3. Play Console — $25
+
+Listing text, Data Safety table and content-rating notes are all below.
+
+### 4. Upload the AAB to internal testing, not production
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+cd frontend && npm run cap:sync && cd android && ./gradlew bundleRelease
+# → app/build/outputs/bundle/release/app-release.aab
+```
+
+### 5. Add the Play App Signing SHA-1 to the Android OAuth client
+
+From the Console (**not** the upload key), into GCP project `719484309775`.
+Miss this and Google sign-in works in debug and fails in production.
+
+### 6. Promote to production
+
+---
+
 ## App name (30 max)
 
 ```
