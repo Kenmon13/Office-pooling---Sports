@@ -183,6 +183,11 @@ Services will not receive anything.
   limits deliberately do not.
 - **Opt-outs** live in `push_prefs` and are respected before anything is sent.
   `GET`/`PUT /api/push/prefs` expose them; there is no settings UI for this yet.
+- **A push arriving while the app is open never reaches the tray.** Android hands it
+  to the app instead, so `frontend/src/components/PushToast.jsx` shows it in-app;
+  tapping it routes through the same handler a tray tap uses. Without that listener
+  the message is received and silently dropped, which is how it behaved until
+  2026-07-29.
 - The 24-hour result lookback exists so the first run after a deploy cannot blast
   every historical result at once.
 

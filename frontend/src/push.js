@@ -13,6 +13,19 @@ export function setPushOpenHandler(fn) {
   onOpen = fn;
 }
 
+// Called when a push lands while the app is already open. PushToast wires this to
+// an in-app notice.
+let onForeground = null;
+export function setPushForegroundHandler(fn) {
+  onForeground = fn;
+}
+
+// Lets that notice route exactly like a tray tap, instead of duplicating the
+// pool-lookup logic that lives in App.
+export function openFromPush(data) {
+  if (onOpen) onOpen(data);
+}
+
 function attachListeners() {
   if (listenersAttached) return;
   listenersAttached = true;
@@ -34,6 +47,18 @@ function attachListeners() {
   PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
     const data = action?.notification?.data || {};
     if (onOpen) onOpen(data);
+  });
+
+  // A push that arrives while the app is in the foreground is handed straight to
+  // us and never reaches the tray, so showing it in-app is the only way the user
+  // sees it at all.
+  PushNotifications.addListener("pushNotificationReceived", (notification) => {
+    if (!onForeground) return;
+    onForeground({
+      title: notification?.title || "",
+      body: notification?.body || "",
+      data: notification?.data || {},
+    });
   });
 }
 
