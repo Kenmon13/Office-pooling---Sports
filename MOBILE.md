@@ -220,6 +220,37 @@ Verify, in this order: app opens → Google sign-in works → pools load → `PO
 /api/push/test` produces a notification → tapping it opens the right pool.
 An emulator without Google Play Services cannot test push.
 
+**4b. Create the upload keystore and wire release signing**
+
+Play needs a signed **AAB**, not the debug APK. `app/build.gradle` reads the
+signing details from `android/key.properties`, which is gitignored along with
+`*.jks`/`*.keystore` — when that file is absent the release block is skipped and
+debug builds carry on working.
+
+```bash
+cd frontend/android
+keytool -genkeypair -v -keystore upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Then create `frontend/android/key.properties`:
+
+```
+storeFile=upload-keystore.jks
+storePassword=<the store password you just set>
+keyAlias=upload
+keyPassword=<the key password you just set>
+```
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+./gradlew bundleRelease     # → app/build/outputs/bundle/release/app-release.aab
+```
+
+> **Back the keystore up somewhere you will not lose it.** With Play App Signing
+> a lost *upload* key can be reset by Google, but losing it still means a support
+> round-trip before you can ship another update. Never commit it.
+
 **5. Pay the $25 and create the Play Console listing**
 You will need: app name, short + full description, a 512×512 icon
 (`frontend/assets/icon-only.png` after resizing), a 1024×500 feature graphic, and

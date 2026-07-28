@@ -647,6 +647,14 @@ app.delete("/api/admin/users/:id", requireAdminToken, (req, res) => {
       db.prepare("DELETE FROM poll_responses WHERE user_id = ?").run(targetId);
       db.prepare("DELETE FROM pool_admins WHERE user_id = ?").run(targetId);
 
+      // Push tables all declare `user_id NOT NULL REFERENCES users(id)` and
+      // foreign_keys is ON, so skipping them makes the DELETE below throw and roll
+      // the whole transaction back — deletion fails outright for anyone who has
+      // ever opened the mobile app.
+      db.prepare("DELETE FROM device_tokens WHERE user_id = ?").run(targetId);
+      db.prepare("DELETE FROM push_log WHERE user_id = ?").run(targetId);
+      db.prepare("DELETE FROM push_prefs WHERE user_id = ?").run(targetId);
+
       db.prepare("DELETE FROM users WHERE id = ?").run(targetId);
     });
     deleteUser();
