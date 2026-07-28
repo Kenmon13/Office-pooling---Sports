@@ -37,6 +37,7 @@ import { computeWindowsUnreadCount, fetchWindowsForPool, generateSections, count
 import { localTzLabel } from "./flags";
 import { SITE_ORIGIN, isIOS } from "./platform";
 import { enablePush, disablePush, setPushOpenHandler } from "./push";
+import PushToast from "./components/PushToast";
 import { isLeague } from "./leagues";
 import "./App.css";
 
@@ -1568,4 +1569,15 @@ function InviteJoin({ pool, onJoin, onCancel }) {
   );
 }
 
-export default App;
+// App returns early for the auth, invite and loading screens, so the foreground
+// push notice is mounted as its own sibling rather than inside any one of them.
+function AppRoot() {
+  return (
+    <>
+      <App />
+      <PushToast />
+    </>
+  );
+}
+
+export default AppRoot;

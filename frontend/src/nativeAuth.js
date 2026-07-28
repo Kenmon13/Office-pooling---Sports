@@ -23,12 +23,19 @@ export function isUserCancellation(err) {
 }
 
 // Returns the Google ID token, which /api/auth/google verifies server-side.
+//
+// No `scopes` are requested on purpose. The plugin always asks for openid,
+// userinfo.email and userinfo.profile, which is exactly the sub/email/name the
+// backend reads — and passing *any* scopes array makes its Android side demand a
+// MainActivity that implements ModifiedMainActivityForSocialLoginPlugin, failing
+// with "You CANNOT use scopes without modifying the main activity" instead of
+// signing in.
 export async function nativeGoogleIdToken() {
   if (!isNative) throw new Error("nativeGoogleIdToken called outside the native shell");
   await ensureInitialized();
   const { result } = await SocialLogin.login({
     provider: "google",
-    options: { scopes: ["email", "profile"] },
+    options: {},
   });
   if (!result?.idToken) throw new Error("Google did not return an ID token");
   return result.idToken;
