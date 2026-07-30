@@ -62,7 +62,19 @@ on sportspooling.com for the reviewer.
 
 Listing text, Data Safety table and content-rating notes are all below.
 
-### 4. Upload the AAB to internal testing, not production
+Decide two things at signup, because neither is easy to change afterwards:
+
+- **Which Google account owns the app.** Transferring an app later is a formal
+  process. It does not have to be the account owning GCP project
+  `719484309775`, but keeping them the same makes step 5 less confusing.
+- **Personal or organization account.** Personal verifies with an ID document
+  and is faster to open, but it is subject to the closed-testing requirement in
+  step 4. Organization skips that entirely but needs a D-U-N-S number.
+
+The $25 is a one-time registration fee, not a subscription. Identity
+verification can take days, so start it even if the listing is not written yet.
+
+### 4. Upload the AAB, then run the mandatory closed test
 
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
@@ -70,12 +82,35 @@ cd frontend && npm run cap:sync && cd android && ./gradlew bundleRelease
 # → app/build/outputs/bundle/release/app-release.aab
 ```
 
+**A personal developer account cannot publish straight to production.** Any
+personal account created after 13 Nov 2023 must first run a **closed test with
+at least 12 testers, opted in continuously for 14 days**, then click *Apply for
+production* and answer a questionnaire (how testers were recruited, what
+feedback came back, what changed as a result). Google's review of that is
+"usually 7 days or less". Production stays locked until it is approved.
+
+"Opted in" means the tester accepted the invite *and installed the app* under
+the matching Google account. Invitations that were never acted on do not count
+toward the 12. The threshold was 20 until December 2024.
+
+**Organization accounts are exempt** and can go straight to production, but they
+require a D-U-N-S number, which takes days to obtain.
+
+Plan around this: the 14-day clock is the long pole in the whole submission and
+nothing else depends on it, so **start recruiting the 12 testers early**, in
+parallel with writing the listing — not after it. Budget ~3 weeks from starting
+the closed test to being live. With ~4,700 existing users on the web app,
+finding 12 is a smaller problem here than for a cold launch.
+
+Source: https://support.google.com/googleplay/android-developer/answer/14151465
+
 ### 5. Add the Play App Signing SHA-1 to the Android OAuth client
 
 From the Console (**not** the upload key), into GCP project `719484309775`.
-Miss this and Google sign-in works in debug and fails in production.
+Miss this and Google sign-in works in debug and fails in production. Do this
+before the closed test starts, or 12 testers will hit a broken sign-in.
 
-### 6. Promote to production
+### 6. Apply for production, then promote
 
 ---
 
