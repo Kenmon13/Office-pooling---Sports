@@ -10,6 +10,51 @@ Everything code-side is done, merged to `main`, and deployed. **The keystore is
 backed up (step 1) and the screenshots are captured (step 2).** What remains is
 the Play Console work itself, steps 3–6.
 
+### Status board
+
+| | Where it stands |
+|---|---|
+| Play Console account | Created — "Kenmon", **personal** account, ID `5345948465533767728` |
+| Identity verification | **Started 2026-07-31**, takes a few days |
+| Device verification | **Blocked** — needs a real Android phone, buying one |
+| Phone number verification | Queued behind identity verification |
+| Creating the app | **Blocked** until verification completes |
+| 12 closed testers | Not yet recruited — can start now, see below |
+
+**Nothing can be created in the Console until verification clears** — not the
+app entry, not a draft listing. The only two things that move the submission
+forward right now are finishing verification and lining up the testers.
+
+**So recruit the 12 testers while waiting.** Testers are added by **Google
+account email address**, so what is needed is a list of Gmail addresses from
+people who will actually install and stay installed for 14 days. Collect ~15:
+some accept the invite and never install, and those do not count toward the 12.
+With ~4,700 users on the web app this should not be hard, but the 14-day clock
+cannot start until the list exists, and it is the long pole in the whole thing.
+
+Realistic timeline from here: a few days of verification, a day to create the
+app and upload, **14 days** of closed testing, then up to ~7 days of review.
+About four weeks, three of which are waiting.
+
+### The phone
+
+No physical Android device on hand — everything so far has been the emulator.
+One is needed for the Console device check, which is one-time and tied to the
+account, so borrowing works.
+
+Worth buying one anyway: this app is about to ship to ~4,700 users having never
+run on real hardware, and the two features most likely to differ are the two
+most recently built — FCM push delivery and Google sign-in. Recommended a cheap
+**Samsung Galaxy A-series**: aggressive One UI battery management is the classic
+cause of push silently not arriving for some users, and it will not show up on
+an emulator or a Pixel. A Pixel A-series is the cleaner baseline if that is
+preferred. Avoid flagships (too fast, hides performance problems) and avoid
+grey-import models without Google Play services (would fail the device check and
+break both sign-in and push).
+
+When it arrives: clear the device check, then install the debug APK and confirm
+push and Google sign-in on real hardware **before** the 12 testers see it.
+
 ### 1. Back up the upload keystore — done 2026-07-31
 
 `frontend/android/upload-keystore.jks` and `frontend/android/key.properties` are
