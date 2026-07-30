@@ -6,38 +6,40 @@ Copy-paste material for the Play Console. Character limits are Google's.
 
 ## Where this was left off — 2026-07-31
 
-Everything code-side is done, merged to `main`, and deployed. **Screenshots are
-now captured** (step 2 below). The rest is Console and backup work, in this order.
+Everything code-side is done, merged to `main`, and deployed. **The keystore is
+backed up (step 1) and the screenshots are captured (step 2).** What remains is
+the Play Console work itself, steps 3–6.
 
-### 1. Back up the upload keystore — do this first, still outstanding
+### 1. Back up the upload keystore — done 2026-07-31
 
-`frontend/android/upload-keystore.jks` and `frontend/android/key.properties`
-exist in **exactly one place**: this laptop. They are gitignored on purpose, and
-there is no Time Machine destination configured. Lose the disk, lose the ability
-to ship updates without a Google support round-trip.
+`frontend/android/upload-keystore.jks` and `frontend/android/key.properties` are
+gitignored and this machine has no Time Machine destination, so they used to
+exist in exactly one place. Lose the disk and you lose the ability to ship
+updates without a Google support round-trip.
 
-Run these one at a time (they are deliberately short — a long one-liner wraps on
-paste and breaks):
+Now backed up to **iCloud Drive → `Sports Pooling Android Signing Key/`**:
 
-```bash
-tar czf ~/ks.tgz -C ~/Desktop/playground/Office-pooling/frontend/android upload-keystore.jks key.properties
-```
-```bash
-openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -in ~/ks.tgz -out ~/ks-backup.enc
-```
-```bash
-openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in ~/ks-backup.enc | tar tzf -
-```
-```bash
-rm ~/ks.tgz
-```
+| File | What |
+|---|---|
+| `upload-keystore-backup-2026-07-31.enc` | both files, `openssl enc -aes-256-cbc -pbkdf2 -iter 600000` |
+| `README.txt` | what it is, and the restore command |
 
-The third command must list both filenames — verify before trusting it. Then
-drag `~/ks-backup.enc` into iCloud Drive in Finder.
+The passphrase is in the macOS **Passwords** app, not in that folder — an
+encrypted archive stored next to its own passphrase is the same as storing
+neither. The archive was verified by decrypting it and listing both filenames
+before the unencrypted intermediate was deleted, and the iCloud copy is
+byte-identical to the local one (matching SHA-256).
 
-**Also put the passphrase and the contents of `key.properties` into a password
-manager.** An encrypted archive whose passphrase lives only in your head is not
-a backup.
+Two things to remember if this ever needs restoring:
+
+- The `-iter 600000` must match what encrypted it. Omit it and you get
+  `bad decrypt` even with the correct passphrase.
+- `openssl` cannot prompt for a passphrase without a TTY, so run it in a real
+  Terminal window — not through a tool or script that captures stdin. And
+  terminals echo nothing while a password is typed; that is normal, not a
+  broken prompt.
+
+Worth re-running the verify command from the README about once a year.
 
 ### 2. Screenshots — done 2026-07-31
 
