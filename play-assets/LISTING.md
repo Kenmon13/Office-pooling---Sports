@@ -4,12 +4,12 @@ Copy-paste material for the Play Console. Character limits are Google's.
 
 ---
 
-## Where this was left off — 2026-07-29
+## Where this was left off — 2026-07-31
 
-Everything code-side is done, merged to `main`, and deployed. The remaining work
-is Console and backup work. Do them in this order.
+Everything code-side is done, merged to `main`, and deployed. **Screenshots are
+now captured** (step 2 below). The rest is Console and backup work, in this order.
 
-### 1. Back up the upload keystore — do this first
+### 1. Back up the upload keystore — do this first, still outstanding
 
 `frontend/android/upload-keystore.jks` and `frontend/android/key.properties`
 exist in **exactly one place**: this laptop. They are gitignored on purpose, and
@@ -39,12 +39,22 @@ drag `~/ks-backup.enc` into iCloud Drive in Finder.
 manager.** An encrypted archive whose passphrase lives only in your head is not
 a backup.
 
-### 2. Screenshots — 4–8 phone shots
+### 2. Screenshots — done 2026-07-31
 
-Must be captured from a pool created with **neutral names**. Captures from the
-live app showed a real pool name and another member's picks, and Play listings
-are public. `shot-*.png` is gitignored here for that reason. That throwaway pool
-doubles as the demo account Apple will require later.
+Eight `shot-*.png` files are in this folder, ready to upload. They are gitignored
+(they are build output, not source) so they live only on this machine — see
+"Retaking the screenshots" below to reproduce them.
+
+They were captured against a **local** backend seeded with neutral data, never
+production, so no real pool name, member or prediction appears in any of them.
+The pool is "Office League" and the members are Alex, Sam, Jordan, Riley, Casey
+and Morgan.
+
+**These accounts exist only in the local database, so they are not the demo
+account Apple will ask for.** The earlier plan assumed one throwaway pool could
+serve both purposes; it cannot, because App Review signs in against production.
+When the iOS submission comes around, create a separate neutral account and pool
+on sportspooling.com for the reviewer.
 
 ### 3. Play Console — $25
 
@@ -165,17 +175,54 @@ Notes for the form:
 |---|---|---|
 | `icon-512.png` | Store icon, 512×512 | ready |
 | `feature-graphic-1024x500.png` | Feature graphic, 1024×500 | ready |
-| `shot-2-knockouts.png` | Phone screenshot | see caveat below |
+| `shot-1-pick-a-sport.png` | Phone screenshot — sport picker | ready |
+| `shot-2-competitions.png` | Phone screenshot — the five competitions | ready |
+| `shot-3-group-standings.png` | Phone screenshot — group tables + points earned | ready |
+| `shot-4-knockout-picks.png` | Phone screenshot — winner picks and scorelines | ready |
+| `shot-5-leaderboard.png` | Phone screenshot — pool leaderboard | ready |
+| `shot-6-breakdown.png` | Phone screenshot — where the points came from | ready |
+| `shot-7-pool-chat.png` | Phone screenshot — pool chat | ready |
+| `shot-8-scoring-rules.png` | Phone screenshot — knockout scoring rules | ready |
 
-**Screenshot caveat.** Play listings are public. Screenshots taken from the live
-app show real pool names and, on the leaderboard and picks screens, other
-people's usernames and predictions. Before uploading, create a pool with neutral
-names and capture from that. It doubles as the demo account Apple will require
-later.
+Upload them in that order — it reads as a tour of the app. Play allows 2–8 phone
+screenshots, so all eight fit.
 
-Play needs a minimum of 2 phone screenshots; 4–8 is better. Good candidates that
-contain no personal data: the sport picker, group standings, the knockout
-bracket, and the scoring-rules panel.
+**They are 1080×2160, not the 1080×2400 the emulator produces.** Play rejects a
+screenshot whose long side is more than twice its short side, and 2400 > 2×1080.
+The status bar and gesture bar are cropped off to land on 2160, which also keeps
+emulator chrome out of the listing.
+
+### Retaking the screenshots
+
+The old live-app capture was deleted: it showed a real pool ("megumi"). Never
+capture these against production. To rebuild the neutral environment:
+
+1. Seed and run a local backend — `node backend/seed.js`, then
+   `node backend/index.js` (port 3001).
+2. Create the demo users and pool through the API: six accounts (`demo`, `sam.d`,
+   `jordan`, `riley`, `casey`, `morgan`, all password `demo1234`, display names
+   Alex/Sam/Jordan/Riley/Casey/Morgan), a private pool "Office League" with
+   password `demo1234`, then `POST /api/participants/auto-join` for each user —
+   joining a pool does **not** create the participant row on its own.
+3. Give the pool something to show: group predictions for all 12 groups per
+   member, every group match finished with a score (group scoring needs complete
+   standings or everyone sits on 0), the R32 bracket filled from those standings,
+   and knockout predictions with scorelines. Knockout `match_date`s must be in
+   the **future** or the pick UI renders greyed out and locked.
+4. Point the debug build at it with `frontend/.env.local` containing
+   `VITE_API_BASE=http://10.0.2.2:3001` (gitignored; delete it before any
+   release build).
+5. Two things block that plain-HTTP call, both debug-only:
+   - `frontend/android/app/src/debug/AndroidManifest.xml` sets
+     `usesCleartextTraffic="true"`. It is committed and never merges into
+     release — the shipped AAB still refuses cleartext.
+   - Capacitor serves the WebView over `https://localhost`, so the call is also
+     blocked as mixed content. Temporarily set `android.allowMixedContent` to
+     `true` in `frontend/capacitor.config.json`, and **revert it before building
+     the release AAB** — that file is shared with release.
+6. Build and install: `npm run cap:sync`, `./gradlew assembleDebug`,
+   `adb install -r`. Capture with `adb exec-out screencap -p > shot.png`, then
+   crop to 1080×2160 as described above.
 
 ---
 
