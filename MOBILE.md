@@ -124,6 +124,63 @@ Releasing a new version means bumping:
 
 ---
 
+## Shipping an update once the apps are live
+
+Before the apps existed, `git push` → `main` → Railway was the whole release. It
+still is *for the website*, but it no longer reaches everyone. What you have to
+do depends on what you changed.
+
+### Backend-only change — nothing to ship
+
+Anything under `backend/` (scoring, an endpoint, a fix) goes live for **installed
+apps immediately**. The apps call `https://sportspooling.com/api` over the
+network, so a Railway deploy reaches them the same moment it reaches the website.
+
+### Frontend change — needs an app release
+
+Anything under `frontend/src/` reaches the **website only**. The native projects
+bundle their own copy of `dist/`, baked in at build time — see the `cap:sync`
+warning above. App users keep seeing the old UI until you cut a release:
+
+1. Bump `versionCode` **and** `versionName` in
+   `frontend/android/app/build.gradle` (iOS: *Version* and *Build* in Xcode).
+   `versionCode` must strictly increase. Play rejects a reused value permanently,
+   including for a bundle you built and never published, so if in doubt skip a
+   number rather than reuse one.
+2. `npm run cap:sync`. Skipping this ships **stale assets** and does not fail
+   loudly — the build succeeds and quietly contains the previous UI.
+3. `./gradlew bundleRelease`, signed with the same upload keystore. Losing that
+   key means you cannot update the app at all; the backup location is recorded in
+   `play-assets/LISTING.md`.
+4. Upload and roll out.
+
+The Play requirement to run a closed test with 12 testers for 14 days is
+**one-time**, for initial production access. Once granted, updates go straight to
+production under a much faster review.
+
+### The part that changes how you write backend code
+
+**You can no longer assume every client is running the current frontend.**
+
+On the web a breaking API change is safe: everyone reloads and gets matching
+code. With apps in the wild, users sit on an old build for weeks, and some
+effectively forever — you cannot force an update. Rename a response field or
+change a payload shape and you break people who did nothing wrong and have no
+way to tell why.
+
+So treat the API as a contract with older builds:
+
+- **Add** fields rather than rename or remove them.
+- Keep old endpoints working alongside new ones instead of swapping them out.
+- If a response shape genuinely has to change, version the endpoint and leave the
+  old one serving until the old builds have aged out.
+
+This is easy to forget precisely because it never shows up in testing, where you
+are always on the newest build. It surfaces as a bug report from one user on an
+old version that nobody can reproduce.
+
+---
+
 ## Push notifications
 
 Two notifications, both tied to something worth opening the app for:
