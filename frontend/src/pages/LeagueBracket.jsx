@@ -15,26 +15,40 @@ function LeagueBracket({ currentUser, league = "ucl2627" }) {
   const [picks, setPicks] = useState({});     // { [tie_id]: team_id }
   const [savedPicks, setSavedPicks] = useState({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  // No participant row (pool admins spectate) means nothing can be saved, so the bracket renders
+  // as a read-only view rather than a picker.
+  const canPick = !!currentUser;
 
+  // Loads for everyone, including someone with no participant row — a pool admin is a spectator
+  // (App.jsx only auto-joins when !is_admin), and bailing out on that left the page saying
+  // "Loading bracket..." forever. Without a participant the bracket is simply read-only.
   useEffect(() => {
-    if (!currentUser) return;
-    fetchLeagueBracket(league, currentUser.id).then((data) => {
-      const rs = data.rounds || [];
-      for (const r of rs) {
-        registerCrests(r.ties.flatMap((t) => [
-          { code: t.home_code, crest_url: t.home_crest },
-          { code: t.away_code, crest_url: t.away_crest },
-        ]));
-      }
-      const existing = {};
-      for (const r of rs) for (const t of r.ties) if (t.picked_team_id) existing[t.id] = t.picked_team_id;
-      setRounds(rs);
-      setPicks(existing);
-      setSavedPicks(existing);
-      setLoading(false);
-    });
+    let cancelled = false;
+    fetchLeagueBracket(league, currentUser?.id)
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.error) { setLoadError(data.error); return; }
+        setLoadError("");
+        const rs = data?.rounds || [];
+        for (const r of rs) {
+          registerCrests(r.ties.flatMap((t) => [
+            { code: t.home_code, crest_url: t.home_crest },
+            { code: t.away_code, crest_url: t.away_crest },
+          ]));
+        }
+        const existing = {};
+        for (const r of rs) for (const t of r.ties) if (t.picked_team_id) existing[t.id] = t.picked_team_id;
+        setRounds(rs);
+        setPicks(existing);
+        setSavedPicks(existing);
+      })
+      // Without this a failed request left the page loading forever rather than saying so.
+      .catch((err) => { if (!cancelled) setLoadError(err.message || "Could not load the bracket"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [league, currentUser]);
 
   const openTies = rounds.flatMap((r) => r.ties.filter((t) => !t.locked && t.home_team_id && t.away_team_id));
@@ -55,12 +69,17 @@ function LeagueBracket({ currentUser, league = "ucl2627" }) {
   };
 
   if (loading) return <p className="pick-hint">Loading bracket...</p>;
+  if (loadError) return <p className="pick-hint error">Could not load the bracket: {loadError}</p>;
 
   const drawn = rounds.some((r) => r.ties.length > 0);
 
   return (
     <div className="league-bracket">
       <h2 className="page-title">{L?.shortName} Bracket</h2>
+
+      {!canPick && (
+        <p className="pick-hint">You&apos;re viewing this pool as an admin, so the bracket is read-only.</p>
+      )}
 
       {!drawn ? (
         <p className="pick-hint">
@@ -88,7 +107,7 @@ function LeagueBracket({ currentUser, league = "ucl2627" }) {
               {round.ties.map((tie) => (
                 <TieCard
                   key={tie.id}
-                  tie={tie}
+                  tie={canPick ? tie : { ...tie, locked: true }}
                   legs={round.legs}
                   picked={picks[tie.id]}
                   onPick={(teamId) => setPicks((prev) => ({ ...prev, [tie.id]: teamId }))}
@@ -99,7 +118,7 @@ function LeagueBracket({ currentUser, league = "ucl2627" }) {
         </div>
       ))}
 
-      {drawn && (
+      {drawn && canPick && (
         <div className="ko-save-bar">
           {saveError && <span className="save-error">{saveError}</span>}
           <button className="save-btn" disabled={saving || changed.length === 0} onClick={handleSave}>

@@ -1033,6 +1033,11 @@ function App() {
             <Route path="/breakdown" element={<Breakdown currentUser={participant} poolId={pool.id} tournament={pool.tournament} mockDate={pool.mock_date} />} />
             {/* History was merged into Breakdown; redirect old links. */}
             <Route path="/history" element={<Navigate to="/breakdown" replace />} />
+            {/* Any route this pool doesn't have falls back to its home tab instead of rendering a
+                blank page — /bracket only exists for leagues with a knockout stage, so switching
+                from a Champions League pool to any other one while on it would otherwise strand
+                you on an empty screen. */}
+            <Route path="*" element={<Navigate to="/" replace />} />
             <Route path="/chat" element={<Chat currentUser={participant} poolId={pool.id} chatClosed={chatClosed} />} />
             {isLeague(pool.tournament) && (
               <Route path="/settings" element={<PoolSettings pool={pool} user={user} onRenamed={(name) => setPool({ ...pool, name })} />} />
