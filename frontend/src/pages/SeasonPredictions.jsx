@@ -79,6 +79,8 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
   const slots = L?.seasonSlots || [];
   const ZONE_LABELS = zoneDividerLabels(league);
   const [teams, setTeams] = useState([]);
+  // Distinguishes "still fetching" from "fetched, and this league genuinely has no clubs yet".
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
   const [table, setTable] = useState([]); // soccer: array of team IDs in order (pos 1-20)
   const [savedTable, setSavedTable] = useState([]);
   const [picks, setPicks] = useState({}); // nfl: { [slot.pos]: team_id }
@@ -107,6 +109,7 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
       registerCrests(teamData);
       registerCrests(standingsData);
       setTeams(teamData);
+      setTeamsLoaded(true);
       setDeadline(dlData.deadline || null);
       setServerLocked(typeof dlData.locked === "boolean" ? dlData.locked : null);
       setStandings(Array.isArray(standingsData) ? standingsData : []);
@@ -283,7 +286,14 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
       )}
 
       {teams.length === 0 ? (
-        <p className="pick-hint">Loading teams...</p>
+        // A league whose clubs come from a draw has none until it happens (the Champions League
+        // before 27 Aug), so an empty list is a real state, not a slow request. Saying "Loading"
+        // there leaves the page looking permanently broken.
+        <p className="pick-hint">
+          {teamsLoaded
+            ? `The ${L?.shortName || "league"} teams aren't known yet — they're published when the draw is made, and this page will fill in automatically.`
+            : "Loading teams..."}
+        </p>
       ) : slotBased && nfl ? (
         <NFLSlotPicks
           slots={slots}
