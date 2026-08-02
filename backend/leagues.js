@@ -35,6 +35,7 @@ const EPL_SQUADS = require("./epl-squad-data");
 const LALIGA_SQUADS = require("./laliga-squad-data");
 const SERIEA_SQUADS = require("./seriea-squad-data");
 const NFL_SQUADS = require("./nfl-squad-data");
+const UCL_SQUADS = require("./ucl-data");
 
 const DEFAULT_SCORING = {
   matchOutcome: 2,   // correct result (home/draw/away)
@@ -105,6 +106,55 @@ const NFL_SCORING = {
   matchMargin: 2,    // bonus: correct winner AND the final margin lands in the predicted band
   award: 5,          // each correct award pick
   // Season-prediction points are per-slot (see NFL_SLOTS.pts) rather than zone-based.
+};
+
+// ── Champions League shape ───────────────────────────────────────────────────
+// The 36-team league phase is one table, but finishing position decides a knockout path rather
+// than European qualification: 1-8 go straight to the last 16, 9-24 into a two-legged playoff
+// round, 25-36 are out. `cl`/`europa`/`conference`/`relegation` keep the shared zone key names so
+// anything already reading zones keeps working; ZONE_LABELS in the frontend renames them.
+const ZONES_36 = { champion: 1, cl: [1, 8], europa: null, conference: null, relegation: [25, 36] };
+
+// Ranking 36 clubs is not a game anyone finishes, so the Champions League is predicted as named
+// slots like the NFL. Same storage: league_season_predictions.position holds `pos` below.
+//
+// `scope` tells the scorer how to resolve each slot:
+//   champion   — lifts the trophy (winner of the final)
+//   finalist   — either team in the final; both finalist slots accept either, scored once each
+//   top8       — finishes 1-8 in the league phase, i.e. straight into the last 16
+const UCL_SLOTS = [
+  { pos: 1, key: "winner", label: "Winner", scope: "champion", pts: 25 },
+  { pos: 2, key: "finalist_a", label: "Finalist", scope: "finalist", pts: 8 },
+  { pos: 3, key: "finalist_b", label: "Finalist", scope: "finalist", pts: 8 },
+  ...Array.from({ length: 8 }, (_, i) => ({
+    pos: 4 + i,
+    key: `top8_${i + 1}`,
+    label: "Top 8 (direct to Last 16)",
+    scope: "top8",
+    pts: 5,
+  })),
+];
+
+// Knockout rounds as football-data.org reports them. Every round before the final is a two-legged
+// tie (FD sends leg 1 as matchday 1 and leg 2 as matchday 2 within the stage); the final is a
+// single match. `pts` is what a correctly picked tie winner is worth — rising by round, so a
+// deep bracket run is worth more than calling eight playoff ties.
+// `md` maps each leg onto a league_matches.matchday. football-data reports knockout legs as
+// matchday 1 and 2 *within their stage*, which would collide head-on with league-phase matchdays
+// 1-8, so legs are renumbered onto 9+ — the same trick NFL uses to carry playoffs as weeks 19-22.
+// Everything that locks or scores a match then works on knockout legs untouched.
+const UCL_KO_ROUNDS = [
+  { stage: "PLAYOFFS", key: "po", label: "Knockout Playoff", legs: 2, ties: 8, pts: 3, md: [9, 10] },
+  { stage: "LAST_16", key: "r16", label: "Last 16", legs: 2, ties: 8, pts: 5, md: [11, 12] },
+  { stage: "QUARTER_FINALS", key: "qf", label: "Quarter-finals", legs: 2, ties: 4, pts: 8, md: [13, 14] },
+  { stage: "SEMI_FINALS", key: "sf", label: "Semi-finals", legs: 2, ties: 2, pts: 12, md: [15, 16] },
+  { stage: "FINAL", key: "final", label: "Final", legs: 1, ties: 1, pts: 20, md: [17] },
+];
+
+const UCL_SCORING = {
+  ...DEFAULT_SCORING,
+  // Season points come from UCL_SLOTS.pts, and knockout points from UCL_KO_ROUNDS.pts, so the
+  // zone-based season keys inherited from DEFAULT_SCORING are unused here.
 };
 
 const leagues = {
@@ -213,6 +263,38 @@ const leagues = {
     ],
     scoring: NFL_SCORING,
   },
+
+  ucl2627: {
+    code: "ucl2627",
+    name: "Champions League 26/27",
+    shortName: "Champions League",
+    emoji: "⭐",
+    sport: "soccer",
+    feed: "football-data",
+    fdCompetition: "CL",
+    // No squad file: the 36 clubs aren't known until the league-phase draw on 2026-08-27, so
+    // teams are seeded straight from football-data.org (see syncFootballDataTeams in scores.js)
+    // and player squads are backfilled afterwards. squadData stays empty rather than absent so
+    // db.js's seeding loop can read it uniformly.
+    squadSource: "none",
+    squadData: UCL_SQUADS,
+    seedTeamsFromFeed: true,
+    // Nothing exists in the feed until the draw, so don't start polling a 404 for 24 days.
+    fixtureRelease: "2026-08-27T18:00:00Z",
+    teamCount: 36,
+    matchdays: 8,               // league phase: 36 clubs, 8 opponents each, one 1..36 table
+    // The league phase feeds a knockout bracket instead of European qualification, so the
+    // finishing-position zones describe who advances rather than who qualifies for what.
+    zones: ZONES_36,
+    seasonSlots: UCL_SLOTS,     // named picks, not a 1..36 ranking — see UCL_SLOTS
+    koRounds: UCL_KO_ROUNDS,    // two-legged ties + the one-off final
+    awards: [
+      { key: "top_scorer", label: "Top Scorer", type: "player" },
+      { key: "best_gk", label: "Goalkeeper of the Season", type: "player" },
+      { key: "ucl_winner", label: "Winning Club", type: "manager" },
+    ],
+    scoring: UCL_SCORING,
+  },
 };
 
 function getLeague(code) {
@@ -237,4 +319,32 @@ function marginBandFor(league, margin) {
   return null;
 }
 
-module.exports = { leagues, getLeague, isLeague, managerAwardKeys, marginBandFor, DEFAULT_SCORING };
+// Which league_matches.matchday a football-data match belongs to. Round-robin leagues use the
+// API's own matchday; a league with knockout rounds (ucl2627) renumbers each leg onto its own
+// matchday so legs can't collide with the league phase. Returns null for a stage we don't carry.
+function matchdayForFdMatch(league, fdMatch) {
+  const stage = fdMatch.stage;
+  const rounds = league.koRounds || [];
+  if (!rounds.length || !stage || stage === "LEAGUE_STAGE" || stage === "REGULAR_SEASON") {
+    return fdMatch.matchday ?? null;
+  }
+  const round = rounds.find((r) => r.stage === stage);
+  if (!round) return null;
+  // Single-match rounds (the final) report matchday null; two-legged ties report 1 then 2.
+  const legIndex = round.legs === 1 ? 0 : (fdMatch.matchday ?? 1) - 1;
+  return round.md[legIndex] ?? null;
+}
+
+// The knockout round a renumbered matchday belongs to, plus which leg it is (1-based).
+function koRoundForMatchday(league, matchday) {
+  for (const r of league.koRounds || []) {
+    const leg = r.md.indexOf(matchday);
+    if (leg >= 0) return { round: r, leg: leg + 1 };
+  }
+  return null;
+}
+
+module.exports = {
+  leagues, getLeague, isLeague, managerAwardKeys, marginBandFor,
+  matchdayForFdMatch, koRoundForMatchday, DEFAULT_SCORING,
+};

@@ -2674,8 +2674,10 @@ app.get("/api/league/:code/config", resolveLeague, (req, res) => {
     sport: L.sport, teamCount: L.teamCount, matchdays: L.matchdays, zones: L.zones,
     awards: L.awards, scoring: L.scoring,
     // NFL-only; undefined for soccer leagues and omitted from the JSON.
-    divisions: L.divisions, seasonSlots: L.seasonSlots,
-    marginBands: L.marginBands, playoffRounds: L.playoffRounds,
+    divisions: L.divisions, marginBands: L.marginBands, playoffRounds: L.playoffRounds,
+    // Present for any league predicted as named slots (NFL, Champions League) rather than a
+    // full 1..N ranking; koRounds is Champions League-only.
+    seasonSlots: L.seasonSlots, koRounds: L.koRounds,
   });
 });
 
@@ -2737,7 +2739,10 @@ function nflStandings(L, teams, matches) {
 app.get("/api/league/:code/standings", resolveLeague, (req, res) => {
   const L = req.league;
   const teams = db.prepare("SELECT * FROM league_teams WHERE league = ?").all(req.params.code);
-  const matches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status IN ('finished', 'live')").all(req.params.code);
+  const allMatches = db.prepare("SELECT * FROM league_matches WHERE league = ? AND status IN ('finished', 'live')").all(req.params.code);
+  // Knockout legs live on matchdays past the league phase (see UCL_KO_ROUNDS.md) and must not
+  // feed the table — the Champions League standings are the 36-team league phase only.
+  const matches = L.koRounds ? allMatches.filter((m) => m.matchday <= L.matchdays) : allMatches;
 
   if (L.sport === "nfl") return res.json(nflStandings(L, teams, matches));
 
@@ -2934,9 +2939,12 @@ app.post("/api/league/:code/season-predictions", resolveLeague, authenticateToke
 
   // Soccer predicts every table position (1..N); NFL predicts a fixed set of slots (division
   // winners, conference champions, Super Bowl) stored in the same `position` column.
-  const n = L.sport === "nfl" ? L.seasonSlots.length : L.teamCount;
+  // Slot-based leagues (NFL, Champions League) predict a fixed set of named picks; the rest rank
+  // the whole table. Keyed on seasonSlots rather than sport, so any league can opt in.
+  const slotBased = Array.isArray(L.seasonSlots) && L.seasonSlots.length > 0;
+  const n = slotBased ? L.seasonSlots.length : L.teamCount;
   if (!participant_id || !Array.isArray(predictions) || predictions.length !== n) {
-    return res.status(400).json({ error: L.sport === "nfl" ? `Must fill all ${n} picks` : `Must predict all ${n} positions` });
+    return res.status(400).json({ error: slotBased ? `Must fill all ${n} picks` : `Must predict all ${n} positions` });
   }
   const participant = db.prepare("SELECT pool_id FROM participants WHERE id = ?").get(participant_id);
   // Without this the upsert below trips an FK violation and 500s with a stack trace.
@@ -2947,11 +2955,14 @@ app.post("/api/league/:code/season-predictions", resolveLeague, authenticateToke
 
   // A division slot can only take a team from that division, a conference slot only a team from
   // that conference. Enforced here and not just in the picker, so the API can't be posted around.
-  if (L.sport === "nfl") {
+  if (slotBased) {
     const teamById = {};
     for (const t of db.prepare("SELECT id, name, conference, division FROM league_teams WHERE league = ?").all(code)) teamById[t.id] = t;
     const slotByPos = {};
     for (const s of L.seasonSlots) slotByPos[s.pos] = s;
+    // Slots where naming the same club twice is meaningless — you can't have both finalists be
+    // the same team, or fill two of the eight top-8 places with one club.
+    const distinctScopes = { finalist: [], top8: [] };
 
     for (const p of predictions) {
       const slot = slotByPos[p.position];
@@ -2964,6 +2975,18 @@ app.post("/api/league/:code/season-predictions", resolveLeague, authenticateToke
       if (slot.scope === "conference" && team.conference !== slot.conference) {
         return res.status(400).json({ error: `${team.name} is not in the ${slot.conference}` });
       }
+      if (distinctScopes[slot.scope]) distinctScopes[slot.scope].push(team);
+    }
+
+    for (const [scope, picked] of Object.entries(distinctScopes)) {
+      const seen = new Set();
+      for (const t of picked) {
+        if (seen.has(t.id)) {
+          const what = scope === "finalist" ? "as both finalists" : "more than once in the top 8";
+          return res.status(400).json({ error: `${t.name} can't be picked ${what}` });
+        }
+        seen.add(t.id);
+      }
     }
   }
 
@@ -2974,6 +2997,87 @@ app.post("/api/league/:code/season-predictions", resolveLeague, authenticateToke
   });
   saveAll();
   res.json({ success: true });
+});
+
+// The knockout bracket: every tie drawn so far, with the participant's pick when one is asked for.
+// A tie locks at its first leg's kickoff, matching how individual matches lock.
+app.get("/api/league/:code/bracket", resolveLeague, (req, res) => {
+  const { code } = req.params;
+  const L = req.league;
+  if (!L.koRounds) return res.status(400).json({ error: `${L.shortName} has no knockout rounds` });
+  const participantId = req.query.participant_id;
+
+  const ties = db.prepare(`SELECT t.*,
+      th.name AS home_name, th.short_name AS home_short, th.crest_url AS home_crest, th.code AS home_code,
+      ta.name AS away_name, ta.short_name AS away_short, ta.crest_url AS away_crest, ta.code AS away_code,
+      l1.match_date AS leg1_date, l1.status AS leg1_status, l1.home_score AS leg1_home, l1.away_score AS leg1_away,
+      l2.match_date AS leg2_date, l2.status AS leg2_status, l2.home_score AS leg2_home, l2.away_score AS leg2_away
+    FROM league_ko_ties t
+    LEFT JOIN league_teams th ON th.id = t.home_team_id
+    LEFT JOIN league_teams ta ON ta.id = t.away_team_id
+    LEFT JOIN league_matches l1 ON l1.id = t.leg1_match_id
+    LEFT JOIN league_matches l2 ON l2.id = t.leg2_match_id
+    WHERE t.league = ? ORDER BY t.round, t.tie_no`).all(code);
+
+  const picks = {};
+  if (participantId) {
+    for (const p of db.prepare("SELECT tie_id, team_id FROM league_ko_predictions WHERE league = ? AND participant_id = ?").all(code, participantId)) {
+      picks[p.tie_id] = p.team_id;
+    }
+  }
+
+  const now = new Date();
+  const rounds = L.koRounds.map((r) => ({
+    key: r.key,
+    label: r.label,
+    legs: r.legs,
+    pts: r.pts,
+    ties: ties.filter((t) => t.round === r.key).map((t) => ({
+      ...t,
+      locked: !!(t.leg1_date && now >= new Date(t.leg1_date.replace(" ", "T") + "Z")),
+      picked_team_id: picks[t.id] ?? null,
+    })),
+  }));
+  res.json({ rounds });
+});
+
+app.post("/api/league/:code/ko-predictions", resolveLeague, authenticateToken, (req, res) => {
+  const { code } = req.params;
+  const L = req.league;
+  const { participant_id, predictions } = req.body;
+  if (!L.koRounds) return res.status(400).json({ error: `${L.shortName} has no knockout rounds` });
+  if (!participant_id || !Array.isArray(predictions)) {
+    return res.status(400).json({ error: "participant_id and predictions array required" });
+  }
+  if (!db.prepare("SELECT id FROM participants WHERE id = ?").get(participant_id)) {
+    return res.status(400).json({ error: `Unknown participant ${participant_id}` });
+  }
+
+  const now = new Date();
+  const upsert = db.prepare(`INSERT INTO league_ko_predictions (participant_id, league, tie_id, team_id)
+    VALUES (?, ?, ?, ?) ON CONFLICT(participant_id, tie_id)
+    DO UPDATE SET team_id = excluded.team_id, updated_at = datetime('now')`);
+
+  let saved = 0;
+  const errors = [];
+  for (const p of predictions) {
+    const tie = db.prepare(`SELECT t.*, l1.match_date AS leg1_date
+      FROM league_ko_ties t LEFT JOIN league_matches l1 ON l1.id = t.leg1_match_id
+      WHERE t.id = ? AND t.league = ?`).get(p.tie_id, code);
+    if (!tie) { errors.push(`Tie ${p.tie_id} not found`); continue; }
+    // The picked club has to actually be in the tie — enforced here, not just in the bracket UI.
+    if (p.team_id !== tie.home_team_id && p.team_id !== tie.away_team_id) {
+      errors.push(`Team ${p.team_id} is not in tie ${p.tie_id}`);
+      continue;
+    }
+    if (tie.leg1_date && now >= new Date(tie.leg1_date.replace(" ", "T") + "Z")) {
+      errors.push(`Tie ${p.tie_id} has already kicked off`);
+      continue;
+    }
+    upsert.run(participant_id, code, p.tie_id, p.team_id);
+    saved++;
+  }
+  res.json({ success: true, saved, errors });
 });
 
 app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
@@ -2996,7 +3100,9 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
   if (L.sport !== "nfl") {
     const standings = {};
     for (const t of teams) standings[t.id] = { team_id: t.id, points: 0, gf: 0, ga: 0 };
-    for (const m of finishedMatches) {
+    // Knockout legs sit on matchdays past the league phase and must stay out of the table.
+    const tableMatches = L.koRounds ? finishedMatches.filter((m) => m.matchday <= L.matchdays) : finishedMatches;
+    for (const m of tableMatches) {
       const h = standings[m.home_team_id], a = standings[m.away_team_id];
       if (!h || !a) continue;
       h.gf += m.home_score; h.ga += m.away_score;
@@ -3046,6 +3152,39 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
       }
     }
   }
+
+  // Champions League: the knockout bracket, plus the season slots it resolves. Like the NFL these
+  // settle at different moments — the top 8 once the league phase is complete, the finalists as
+  // soon as the final has two teams, the winner when it's played — and each scores when known.
+  const koTies = L.koRounds
+    ? db.prepare("SELECT * FROM league_ko_ties WHERE league = ? ORDER BY round, tie_no").all(code)
+    : [];
+  const koPredsByParticipant = {};
+  if (L.koRounds) {
+    for (const p of db.prepare("SELECT * FROM league_ko_predictions WHERE league = ?").all(code)) {
+      (koPredsByParticipant[p.participant_id] ||= []).push(p);
+    }
+  }
+  const uclTop8 = new Set();
+  const uclFinalists = new Set();
+  let uclWinner = null;
+  if (L.koRounds) {
+    const phase = db.prepare("SELECT COUNT(*) c FROM league_matches WHERE league = ? AND matchday <= ?").get(code, L.matchdays).c;
+    const phaseDone = finishedMatches.filter((m) => m.matchday <= L.matchdays).length;
+    if (phase > 0 && phase === phaseDone) {
+      for (const [tid, pos] of Object.entries(actualPositions)) {
+        if (pos <= (L.zones?.cl?.[1] ?? 8)) uclTop8.add(Number(tid));
+      }
+    }
+    const finalTie = koTies.find((t) => t.round === "final");
+    if (finalTie?.home_team_id) uclFinalists.add(finalTie.home_team_id);
+    if (finalTie?.away_team_id) uclFinalists.add(finalTie.away_team_id);
+    uclWinner = finalTie?.winner_team_id ?? null;
+  }
+  const koPtsByRound = {};
+  for (const r of L.koRounds || []) koPtsByRound[r.key] = r.pts;
+  const tieById = {};
+  for (const t of koTies) tieById[t.id] = t;
 
   const matchResults = {}, matchScores = {};
   for (const m of finishedMatches) {
@@ -3104,6 +3243,17 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
         const winner = nflSlotWinners[slot.key];
         if (winner && predictedTeams[slot.pos] === winner) seasonPoints += slot.pts;
       }
+    } else if (L.koRounds && L.seasonSlots) {
+      // Each slot is scored on its own: a top-8 pick lands if that club finished top 8 (order
+      // within the eight doesn't matter), a finalist pick lands if that club reached the final,
+      // and the winner slot lands only on the club that lifted it.
+      for (const slot of L.seasonSlots) {
+        const tid = predictedTeams[slot.pos];
+        if (!tid) continue;
+        if (slot.scope === "top8" && uclTop8.has(tid)) seasonPoints += slot.pts;
+        else if (slot.scope === "finalist" && uclFinalists.has(tid)) seasonPoints += slot.pts;
+        else if (slot.scope === "champion" && uclWinner === tid) seasonPoints += slot.pts;
+      }
     } else if (seasonComplete) {
       if (predictedTeams[Z.champion] && actualPositions[predictedTeams[Z.champion]] === Z.champion) seasonPoints += S.seasonChampion;
       for (let pos = clFrom; pos <= clTo; pos++) {
@@ -3136,9 +3286,18 @@ app.get("/api/league/:code/leaderboard", resolveLeague, (req, res) => {
       }
     }
 
+    // Bracket: one pick per knockout tie, worth more the deeper the round. A tie only scores
+    // once it has a winner, so an unplayed round contributes nothing either way.
+    let koPoints = 0, koCorrect = 0;
+    for (const kp of (koPredsByParticipant[part.id] || [])) {
+      const tie = tieById[kp.tie_id];
+      if (!tie?.winner_team_id) continue;
+      if (kp.team_id === tie.winner_team_id) { koPoints += koPtsByRound[tie.round] || 0; koCorrect++; }
+    }
+
     const adjustmentPoints = adjustmentByParticipant[part.id] || 0;
-    const totalPoints = matchPoints + seasonPoints + awardPoints + adjustmentPoints;
-    return { id: part.id, name: part.name, points: totalPoints, match_points: matchPoints, match_correct: matchCorrect, match_exact: matchExact, season_points: seasonPoints, award_points: awardPoints, adjustment_points: adjustmentPoints };
+    const totalPoints = matchPoints + seasonPoints + awardPoints + koPoints + adjustmentPoints;
+    return { id: part.id, name: part.name, points: totalPoints, match_points: matchPoints, match_correct: matchCorrect, match_exact: matchExact, season_points: seasonPoints, award_points: awardPoints, ko_points: koPoints, ko_correct: koCorrect, adjustment_points: adjustmentPoints };
   });
 
   result.sort((a, b) => b.points - a.points || b.match_correct - a.match_correct || a.name.localeCompare(b.name));

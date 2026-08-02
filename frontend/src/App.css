@@ -6341,3 +6341,89 @@ nav a.active {
 .push-toast-close:hover {
   color: #d4e8d4;
 }
+
+/* ── Champions League knockout bracket ──────────────────────────────────────── */
+/* Ties are picked, not dragged: each side is a button and the picked one is highlighted.
+   Once a tie is decided the card stops being a picker and reads as a result. */
+.league-bracket { max-width: 860px; margin: 0 auto; padding-bottom: 80px; }
+
+.ko-round { margin-top: 20px; }
+.ko-round-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid #1e3a1e;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+.ko-round-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #7da67d;
+  margin: 0;
+}
+.ko-round-pts { font-size: 12px; color: #5a8a5a; }
+.ko-round-pending { color: #5a8a5a; font-style: italic; font-size: 13px; margin: 0 0 4px; }
+
+.ko-ties {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.ko-tie {
+  background: #0e1e0e;
+  border: 1px solid #1e3a1e;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ko-tie.decided { border-color: #2d5a2d; }
+
+.ko-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  background: #0f240f;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #cdddcd;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.ko-side:hover:not(:disabled) { border-color: #2d5a2d; }
+.ko-side:disabled { cursor: default; }
+.ko-side.picked { border-color: #4a9a4a; background: #143014; color: #e6f4e6; font-weight: 600; }
+.ko-side.winner { border-color: #4a9a4a; background: #163716; }
+.ko-side.out { opacity: 0.45; }
+.ko-side.tbd { color: #5a8a5a; font-style: italic; justify-content: center; }
+.ko-side-name { flex: 1; }
+.ko-side-mark { color: #6ac46a; font-weight: 700; }
+
+.ko-tie-meta {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  font-size: 11px;
+  color: #5a8a5a;
+  min-height: 14px;
+}
+.ko-agg { font-weight: 600; color: #7da67d; }
+.ko-locked-tag { text-transform: uppercase; letter-spacing: 0.5px; }
+
+.ko-save-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 0;
+  background: linear-gradient(to top, #0a1a0a 70%, transparent);
+}

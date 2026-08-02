@@ -13,6 +13,7 @@ import Breakdown from "./pages/Breakdown";
 import Champion from "./pages/Champion";
 import PLMatchday from "./pages/PLMatchday";
 import SeasonPredictions from "./pages/SeasonPredictions";
+import LeagueBracket from "./pages/LeagueBracket";
 import ViewPicks from "./pages/ViewPicks";
 import ViewEPLPicks from "./pages/ViewEPLPicks";
 import SelectSport from "./pages/SelectSport";
@@ -38,7 +39,7 @@ import { localTzLabel } from "./flags";
 import { SITE_ORIGIN, isIOS } from "./platform";
 import { enablePush, disablePush, setPushOpenHandler } from "./push";
 import PushToast from "./components/PushToast";
-import { isLeague } from "./leagues";
+import { isLeague, hasBracket } from "./leagues";
 import "./App.css";
 
 const TOURNAMENT_META = {
@@ -47,6 +48,7 @@ const TOURNAMENT_META = {
   laliga2627: { id: "laliga2627", name: "La Liga 26/27", emoji: "🇪🇸" },
   seriea2627: { id: "seriea2627", name: "Serie A 26/27", emoji: "🇮🇹" },
   nfl2627: { id: "nfl2627", name: "NFL 26/27", emoji: "🏈" },
+  ucl2627: { id: "ucl2627", name: "Champions League 26/27", emoji: "⭐" },
 };
 
 // Used when a pool is joined directly (via code or a shared link) rather than through the sport
@@ -994,6 +996,7 @@ function App() {
             {isLeague(pool.tournament) ? (<>
               <NavLink to="/">Matchday</NavLink>
               <NavLink to="/season">Season</NavLink>
+              {hasBracket(pool.tournament) && <NavLink to="/bracket">Bracket</NavLink>}
             </>) : (<>
               <NavLink to="/">Groups</NavLink>
               <NavLink to="/knockouts">Knockouts</NavLink>
@@ -1013,6 +1016,7 @@ function App() {
             {isLeague(pool.tournament) ? (<>
               <Route path="/" element={<PLMatchday currentUser={participant} league={pool.tournament} exactScoresDisabled={exactScoresDisabled} />} />
               <Route path="/season" element={<SeasonPredictions currentUser={participant} poolId={pool.id} league={pool.tournament} />} />
+              {hasBracket(pool.tournament) && <Route path="/bracket" element={<LeagueBracket currentUser={participant} league={pool.tournament} />} />}
             </>) : (<>
               <Route path="/" element={<Matches currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} groupStageUnlocked={groupStageUnlocked} />} />
               <Route path="/knockouts" element={<Knockouts currentUser={participant} tournament={pool.tournament} poolId={pool.id} mockDate={pool.mock_date} exactScoresDisabled={exactScoresDisabled} />} />
