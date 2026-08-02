@@ -826,6 +826,14 @@ if (!existingNFLPool) {
   db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("NFL 26/27", "americanfootball", "nfl2627", "");
 }
 
+// Seed default public pool for Champions League 26/27. Created before the 2026-08-27 league-phase
+// draw, so it exists with no clubs or fixtures until the sync seeds them — joinable throughout,
+// and the season/bracket entry window opens off the fixtures once they land.
+const existingUCLPool = db.prepare("SELECT id FROM pools WHERE name = 'Champions League 26/27' AND is_public = 1").get();
+if (!existingUCLPool) {
+  db.prepare("INSERT INTO pools (name, sport, tournament, password, is_public) VALUES (?, ?, ?, ?, 1)").run("Champions League 26/27", "soccer", "ucl2627", "");
+}
+
 // Migration: update WC2026 group stage match dates to official FIFA schedule
 const WC2026_MATCH_DATES = [
   // Group A

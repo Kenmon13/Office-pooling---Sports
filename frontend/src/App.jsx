@@ -866,9 +866,12 @@ function App() {
                     <div className={`hamburger-dropdown ${mobileMenuOpen ? "open" : ""}`}>
                       <div className="hamburger-menu-user">
                         <div className="hamburger-avatar-row">
-                          <div className="hamburger-avatar">{user.display_name.charAt(0).toUpperCase()}</div>
+                          {/* Every other display_name render is plain interpolation, which tolerates
+                              a missing value; this one calls a string method, so an account without
+                              a display_name would throw here and blank the whole app. */}
+                          <div className="hamburger-avatar">{(user.display_name || user.username || "?").charAt(0).toUpperCase()}</div>
                           <div className="hamburger-name-col">
-                            <button onClick={() => { setShowSettings(true); setMobileMenuOpen(false); }} className="btn-link hamburger-username">{user.display_name}</button>
+                            <button onClick={() => { setShowSettings(true); setMobileMenuOpen(false); }} className="btn-link hamburger-username">{user.display_name || user.username}</button>
                             {!!user.is_admin && <span className="header-admin-badge">Admin</span>}
                             {participant && !user.is_admin && <span className="header-user-points">{points} pts</span>}
                           </div>

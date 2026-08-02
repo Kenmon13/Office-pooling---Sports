@@ -240,7 +240,9 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
 
   const sortUsers = (list) => {
     const sorted = [...list];
-    if (userSort === "alpha") sorted.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    // Same guard the search filter below already uses — a user without a display_name would
+    // otherwise throw here and take the whole Users tab down.
+    if (userSort === "alpha") sorted.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     else sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     return sorted;
   };
