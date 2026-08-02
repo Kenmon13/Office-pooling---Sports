@@ -1389,6 +1389,10 @@ try {
         const delPicks = db.prepare("DELETE FROM league_award_picks WHERE player_id = ?");
         const delResults = db.prepare("DELETE FROM league_award_results WHERE player_id = ?");
         const delP = db.prepare("DELETE FROM league_players WHERE id = ?");
+        // Player picks denormalise the club at pick time, and the community-predictions query
+        // prefers that copy over the player's live club — so it has to follow him on a transfer
+        // or the pick renders under his old badge.
+        const syncPickTeam = db.prepare("UPDATE league_award_picks SET team_id = ? WHERE player_id = ?");
         let added = 0, removed = 0, moved = 0;
 
         for (const row of db.prepare("SELECT id, name, team_id, position FROM league_players WHERE league = ?").all(code)) {
@@ -1401,7 +1405,7 @@ try {
           const [want] = candidates.splice(i, 1);
           if (want.name !== row.name || want.pos !== row.position || want.tid !== row.team_id) {
             updP.run(want.name, want.pos, want.tid, row.id);
-            if (want.tid !== row.team_id) moved++;
+            if (want.tid !== row.team_id) { syncPickTeam.run(want.tid, row.id); moved++; }
           }
         }
         for (const list of desired.values()) for (const p of list) { insP.run(code, p.name, p.tid, p.pos); added++; }

@@ -557,7 +557,7 @@ async function syncPLSquads() {
     const localByCode = {};
     for (const t of db.prepare("SELECT id, code FROM league_teams WHERE league = ?").all(leagueCode)) localByCode[t.code] = t.id;
 
-    const findByPid = db.prepare("SELECT id FROM league_players WHERE league = ? AND api_player_id = ?");
+    const findByPid = db.prepare("SELECT id, team_id FROM league_players WHERE league = ? AND api_player_id = ?");
     const findByName = db.prepare("SELECT id FROM league_players WHERE league = ? AND team_id = ? AND name = ? AND api_player_id IS NULL");
     const updatePlayer = db.prepare("UPDATE league_players SET name = ?, position = ?, team_id = ?, api_player_id = ? WHERE id = ?");
     const insertPlayer = db.prepare("INSERT OR IGNORE INTO league_players (league, name, team_id, position, api_player_id) VALUES (?, ?, ?, ?, ?)");
@@ -565,6 +565,9 @@ async function syncPLSquads() {
     const delPicks = db.prepare("DELETE FROM league_award_picks WHERE player_id = ?");
     const delResults = db.prepare("DELETE FROM league_award_results WHERE player_id = ?");
     const delPlayer = db.prepare("DELETE FROM league_players WHERE id = ?");
+    // Award picks cache the player's club at pick time and that copy wins when the pick is
+    // rendered, so a move between two PL clubs has to carry the pick's club with it.
+    const syncPickTeam = db.prepare("UPDATE league_award_picks SET team_id = ? WHERE player_id = ?");
     const updateManager = db.prepare("UPDATE league_teams SET manager = ? WHERE id = ?");
 
     let teamsProcessed = 0, playersAdded = 0, playersRemoved = 0, managersUpdated = 0;
@@ -595,7 +598,11 @@ async function syncPLSquads() {
           seenPids.add(pid);
 
           const byPid = findByPid.get(leagueCode, pid);
-          if (byPid) { updatePlayer.run(name, pos, teamId, pid, byPid.id); continue; }
+          if (byPid) {
+            updatePlayer.run(name, pos, teamId, pid, byPid.id);
+            if (byPid.team_id !== teamId) syncPickTeam.run(teamId, byPid.id);
+            continue;
+          }
           const byName = findByName.get(leagueCode, teamId, name); // adopt file-seeded row, backfill pid
           if (byName) { updatePlayer.run(name, pos, teamId, pid, byName.id); continue; }
           if (insertPlayer.run(leagueCode, name, teamId, pos, pid).changes) playersAdded++;
