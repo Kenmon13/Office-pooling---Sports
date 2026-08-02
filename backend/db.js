@@ -1328,8 +1328,10 @@ try {
   console.log("league_players position-CHECK rebuild skipped:", err.message);
 }
 
-// Seed league_teams (idempotent) + refresh manager/crest/name/conference/division, and reseed
-// league_players from each league's squad file whenever the roster count changes.
+// Seed league_teams (idempotent) + refresh manager/crest/name/conference/division, then bring
+// league_players in line with each league's squad file: a first-time seed when the league is
+// empty, otherwise a row-by-row reconcile that leaves award picks on unaffected players intact.
+const LIVE_SQUAD_SOURCES = new Set(["pulselive"]);
 try {
   const { leagues: LEAGUE_CONFIG } = require("./leagues");
   for (const [code, cfg] of Object.entries(LEAGUE_CONFIG)) {
@@ -1345,11 +1347,14 @@ try {
 
     const totalPlayers = Object.values(cfgSquads).reduce((s, a) => s + a.length, 0);
     const currentCount = db.prepare("SELECT COUNT(*) AS c FROM league_players WHERE league = ?").get(code).c;
-    if (currentCount !== totalPlayers) {
-      const reseed = db.transaction(() => {
-        db.prepare("DELETE FROM league_award_results WHERE league = ?").run(code);
-        db.prepare("DELETE FROM league_award_picks WHERE league = ? AND player_id IS NOT NULL").run(code);
-        db.prepare("DELETE FROM league_players WHERE league = ?").run(code);
+
+    // Leagues with a live squad feed own their roster once seeded — re-applying the file would
+    // undo the feed's transfers (see syncPLSquads in scores.js). Only seed those from empty.
+    // Gate on the sources actually implemented, not on cfg.squadSource: 'laliga' and 'espn' are
+    // declared in leagues.js but no squad sync exists for them, so those leagues are file-driven.
+    const liveSourced = LIVE_SQUAD_SOURCES.has(cfg.squadSource);
+    if (currentCount === 0) {
+      const seed = db.transaction(() => {
         const insP = db.prepare("INSERT OR IGNORE INTO league_players (league, name, team_id, position) VALUES (?, ?, ?, ?)");
         for (const [tc, players] of Object.entries(cfgSquads)) {
           const tid = teamIdByCode[tc];
@@ -1357,8 +1362,56 @@ try {
           for (const p of players) insP.run(code, p.name, tid, p.pos);
         }
       });
-      reseed();
+      seed();
       console.log(`Seeded ${code} squads (${totalPlayers} players across ${cfgTeams.length} clubs).`);
+    } else if (!liveSourced && currentCount !== totalPlayers) {
+      // File-driven league whose squad file changed (a manual transfer-window refresh). Reconcile
+      // row-by-row instead of wiping the league: rows are keyed on the player's name, so unchanged
+      // players keep their id and everyone's award picks on them survive. Only a player who has
+      // actually left the league loses his row — and with it any pick, matching how the PL sync
+      // treats a transfer out.
+      const key = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+      // Keyed by name, but a name can legitimately belong to two different players at different
+      // clubs (e.g. two Moussa Diarras in La Liga), so each key holds a list.
+      const desired = new Map();
+      for (const [tc, players] of Object.entries(cfgSquads)) {
+        const tid = teamIdByCode[tc];
+        if (!tid) { console.log(`${code}: squads skip unknown team ${tc}`); continue; }
+        for (const p of players) {
+          const k = key(p.name);
+          if (!desired.has(k)) desired.set(k, []);
+          desired.get(k).push({ name: p.name, pos: p.pos, tid });
+        }
+      }
+      const reconcile = db.transaction(() => {
+        const insP = db.prepare("INSERT INTO league_players (league, name, team_id, position) VALUES (?, ?, ?, ?)");
+        const updP = db.prepare("UPDATE league_players SET name = ?, position = ?, team_id = ? WHERE id = ?");
+        const delPicks = db.prepare("DELETE FROM league_award_picks WHERE player_id = ?");
+        const delResults = db.prepare("DELETE FROM league_award_results WHERE player_id = ?");
+        const delP = db.prepare("DELETE FROM league_players WHERE id = ?");
+        // Player picks denormalise the club at pick time, and the community-predictions query
+        // prefers that copy over the player's live club — so it has to follow him on a transfer
+        // or the pick renders under his old badge.
+        const syncPickTeam = db.prepare("UPDATE league_award_picks SET team_id = ? WHERE player_id = ?");
+        let added = 0, removed = 0, moved = 0;
+
+        for (const row of db.prepare("SELECT id, name, team_id, position FROM league_players WHERE league = ?").all(code)) {
+          const candidates = desired.get(key(row.name)) || [];
+          if (!candidates.length) { delPicks.run(row.id); delResults.run(row.id); delP.run(row.id); removed++; continue; }
+          // Prefer the candidate still at this club, so a same-named pair isn't swapped and a
+          // genuine intra-league transfer falls through to the club change below.
+          let i = candidates.findIndex((c) => c.tid === row.team_id);
+          if (i < 0) i = 0;
+          const [want] = candidates.splice(i, 1);
+          if (want.name !== row.name || want.pos !== row.position || want.tid !== row.team_id) {
+            updP.run(want.name, want.pos, want.tid, row.id);
+            if (want.tid !== row.team_id) { syncPickTeam.run(want.tid, row.id); moved++; }
+          }
+        }
+        for (const list of desired.values()) for (const p of list) { insP.run(code, p.name, p.tid, p.pos); added++; }
+        console.log(`Reconciled ${code} squads: +${added} / -${removed} / ${moved} moved club (${totalPlayers} players).`);
+      });
+      reconcile();
     }
   }
 } catch (err) {
