@@ -810,6 +810,22 @@ export async function submitLeagueSeasonPredictions(code, participant_id, predic
   return res.json();
 }
 
+// Knockout bracket (Champions League). Ties appear round by round as each draw publishes, so an
+// empty rounds list simply means nothing has been drawn yet.
+export async function fetchLeagueBracket(code, participantId) {
+  const q = participantId ? `?participant_id=${participantId}` : "";
+  return (await fetch(`${API}/league/${code}/bracket${q}`, { headers: authHeaders() })).json();
+}
+
+export async function submitLeagueKoPredictions(code, participant_id, predictions) {
+  const res = await fetch(`${API}/league/${code}/ko-predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ participant_id, predictions }),
+  });
+  return res.json();
+}
+
 export async function fetchLeagueLeaderboard(code, poolId) {
   return (await fetch(`${API}/league/${code}/leaderboard?pool_id=${poolId}`, { headers: authHeaders() })).json();
 }

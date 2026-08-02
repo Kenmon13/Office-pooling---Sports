@@ -3008,8 +3008,8 @@ app.get("/api/league/:code/bracket", resolveLeague, (req, res) => {
   const participantId = req.query.participant_id;
 
   const ties = db.prepare(`SELECT t.*,
-      th.name AS home_name, th.short_name AS home_short, th.crest_url AS home_crest,
-      ta.name AS away_name, ta.short_name AS away_short, ta.crest_url AS away_crest,
+      th.name AS home_name, th.short_name AS home_short, th.crest_url AS home_crest, th.code AS home_code,
+      ta.name AS away_name, ta.short_name AS away_short, ta.crest_url AS away_crest, ta.code AS away_code,
       l1.match_date AS leg1_date, l1.status AS leg1_status, l1.home_score AS leg1_home, l1.away_score AS leg1_away,
       l2.match_date AS leg2_date, l2.status AS leg2_status, l2.home_score AS leg2_home, l2.away_score AS leg2_away
     FROM league_ko_ties t

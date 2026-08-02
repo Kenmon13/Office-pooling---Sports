@@ -54,6 +54,44 @@ const NFL_MARGIN_BANDS = [
   { key: "blowout", label: "11+", desc: "Blowout", min: 11, max: null },
 ];
 
+// Champions League: one 36-club league phase table, but finishing position decides a knockout
+// path rather than European qualification, so the shared zone keys are relabelled.
+const ZONES_36 = { champion: 1, cl: [1, 8], europa: null, conference: null, relegation: [25, 36] };
+const ZONE_LABELS_UCL = {
+  champion: "Top of the league phase",
+  cl: "Direct to Last 16",
+  europa: null,
+  conference: null,
+  relegation: "Eliminated",
+};
+
+// Mirrors backend UCL_SLOTS — `pos` must match exactly, it's what's stored as
+// league_season_predictions.position. Ranking 36 clubs isn't a game anyone finishes, so the
+// Champions League is predicted as named slots like the NFL.
+const UCL_SLOTS = [
+  { pos: 1, key: "winner", label: "Winner", scope: "champion", pts: 25, emoji: "\u{1F3C6}" },
+  { pos: 2, key: "finalist_a", label: "Finalist", scope: "finalist", pts: 8, emoji: "\u{1F948}" },
+  { pos: 3, key: "finalist_b", label: "Finalist", scope: "finalist", pts: 8, emoji: "\u{1F948}" },
+  ...Array.from({ length: 8 }, (_, i) => ({
+    pos: 4 + i,
+    key: `top8_${i + 1}`,
+    label: `Top 8 — pick ${i + 1}`,
+    scope: "top8",
+    pts: 5,
+    emoji: "\u{2B50}",
+  })),
+];
+
+// Knockout rounds, mirroring backend UCL_KO_ROUNDS. `pts` is what a correctly picked tie winner
+// is worth, rising by round so a deep bracket run outscores calling eight playoff ties.
+const UCL_KO_ROUNDS = [
+  { key: "po", label: "Knockout Playoff", legs: 2, pts: 3 },
+  { key: "r16", label: "Last 16", legs: 2, pts: 5 },
+  { key: "qf", label: "Quarter-finals", legs: 2, pts: 8 },
+  { key: "sf", label: "Semi-finals", legs: 2, pts: 12 },
+  { key: "final", label: "Final", legs: 1, pts: 20 },
+];
+
 export const LEAGUES = {
   epl2627: {
     code: "epl2627",
@@ -136,6 +174,25 @@ export const LEAGUES = {
       { key: "coy",    label: "Coach of the Year",             emoji: "\u{1F9D1}‍\u{1F4BC}", pts: 5, type: "team", desc: "Awarded to the best head coach of the season." },
     ],
   },
+
+  ucl2627: {
+    code: "ucl2627",
+    name: "Champions League 26/27",
+    shortName: "Champions League",
+    emoji: "⭐",
+    sport: "soccer",
+    teamCount: 36,
+    matchdays: 8,          // league phase; knockout legs arrive on matchdays 9-17
+    zones: ZONES_36,
+    zoneLabels: ZONE_LABELS_UCL,
+    seasonSlots: UCL_SLOTS,
+    koRounds: UCL_KO_ROUNDS,
+    awards: [
+      { key: "top_scorer", label: "Top Scorer",               emoji: "\u{1F45F}", pts: 5, type: "player", desc: "Awarded to the top goalscorer of the competition." },
+      { key: "best_gk",    label: "Goalkeeper of the Season", emoji: "\u{1F9E4}", pts: 5, type: "player", posFilter: "GK", desc: "Awarded to the best goalkeeper of the competition." },
+      { key: "ucl_winner", label: "Winning Club",             emoji: "\u{1F3C6}", pts: 5, type: "team", desc: "Awarded to the club that lifts the trophy." },
+    ],
+  },
 };
 
 export function isLeague(code) {
@@ -148,6 +205,17 @@ export function getLeague(code) {
 
 export function isNFL(code) {
   return LEAGUES[code]?.sport === "nfl";
+}
+
+// Leagues predicted as a fixed set of named picks (NFL slots, Champions League slots) rather than
+// by ranking the whole table. Keyed on the config, not the sport, so any league can opt in.
+export function isSlotBased(code) {
+  return (LEAGUES[code]?.seasonSlots || []).length > 0;
+}
+
+// Leagues that carry a knockout bracket on top of their league phase.
+export function hasBracket(code) {
+  return (LEAGUES[code]?.koRounds || []).length > 0;
 }
 
 // Zone (Champions League / relegation / …) for a 1-based finishing position, for table coloring.
