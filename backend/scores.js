@@ -1,6 +1,6 @@
 const db = require("./db");
 const { runResolver, syncWCKnockouts } = require("./koResolver");
-const { leagues: LEAGUE_CONFIG } = require("./leagues");
+const { leagues: LEAGUE_CONFIG, matchdayForFdMatch, koRoundForMatchday } = require("./leagues");
 
 const API_BASE = "https://api.football-data.org/v4";
 const COMPETITION = "WC"; // FIFA World Cup
@@ -127,12 +127,37 @@ function ensureLeagueMatchIndexes() {
   try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_league_matches_unique ON league_matches(league, matchday, home_team_id, away_team_id)"); } catch (_) {}
 }
 
+// Resolve a football-data match side ({ id, tla }) to our league_teams.id.
+//
+// Round-robin leagues match on the tla (via TLA_ALIASES where ours differs). That can't work for
+// a pan-European competition: football-data hands the same tla to different clubs — Bayern
+// München and Barcelona are both "FCB" — so a feed-seeded league matches on the feed's own team
+// id instead, which is unique and already stored as league_teams.api_team_id.
+function buildTeamResolver(leagueCode, cfg) {
+  const byCode = {}, byApiId = {};
+  for (const t of db.prepare("SELECT id, code, api_team_id FROM league_teams WHERE league = ?").all(leagueCode)) {
+    byCode[t.code] = t.id;
+    if (t.api_team_id != null) byApiId[t.api_team_id] = t.id;
+  }
+  const fn = (side) => (cfg?.seedTeamsFromFeed
+    ? byApiId[side?.id] ?? null
+    : byCode[mapCode(leagueCode, side?.tla)] ?? null);
+  // Callers log the codes they couldn't place; for feed-seeded leagues that's the club name.
+  fn.label = (side) => (cfg?.seedTeamsFromFeed ? (side?.shortName || side?.name || `id:${side?.id}`) : mapCode(leagueCode, side?.tla));
+  return fn;
+}
+
 // Sync one league's fixtures into league_matches, dispatching to whichever feed owns it.
 async function syncLeagueFixtures(leagueCode) {
   const cfg = LEAGUE_CONFIG[leagueCode];
   if (!cfg) return { ok: false, reason: "unknown_league" };
   if (cfg.feed === "espn") return syncEspnFixtures(leagueCode);
-  return syncFootballDataFixtures(leagueCode);
+  // Clubs must exist before fixtures can reference them: a feed-seeded league has no squad file
+  // to seed from, so the draw's team list has to land first.
+  if (cfg.seedTeamsFromFeed) await syncFootballDataTeams(leagueCode);
+  const result = await syncFootballDataFixtures(leagueCode);
+  if (cfg.koRounds) syncKoTies(leagueCode);
+  return result;
 }
 
 // Refresh one league's live/finished scores, dispatching to whichever feed owns it.
@@ -140,7 +165,10 @@ async function syncLeagueScores(leagueCode) {
   const cfg = LEAGUE_CONFIG[leagueCode];
   if (!cfg) return;
   if (cfg.feed === "espn") return syncEspnScores(leagueCode);
-  return syncFootballDataScores(leagueCode);
+  const result = await syncFootballDataScores(leagueCode);
+  // A finished leg can settle a tie, so the bracket is recomputed off the back of every score run.
+  if (cfg.koRounds) syncKoTies(leagueCode);
+  return result;
 }
 
 // Sync one league's fixtures from football-data.org into league_matches (WHERE league=code).
@@ -169,8 +197,7 @@ async function syncFootballDataFixtures(leagueCode) {
       return { ok: false, reason: "api_empty", apiCount: 0 };
     }
 
-    const teamByCode = {};
-    for (const t of db.prepare("SELECT id, code FROM league_teams WHERE league = ?").all(leagueCode)) teamByCode[t.code] = t.id;
+    const resolveTeam = buildTeamResolver(leagueCode, cfg);
 
     ensureLeagueMatchIndexes();
     const findByApiId = db.prepare("SELECT id, matchday FROM league_matches WHERE league = ? AND api_match_id = ?");
@@ -189,17 +216,17 @@ async function syncFootballDataFixtures(leagueCode) {
 
     const applyAll = db.transaction(() => {
       for (const m of matches) {
-        const homeCode = mapCode(leagueCode, m.homeTeam?.tla);
-        const awayCode = mapCode(leagueCode, m.awayTeam?.tla);
-        const matchday = m.matchday;
+        // Knockout legs are renumbered onto their own matchdays so they can't collide with the
+        // league phase; round-robin leagues just get the API's matchday back.
+        const matchday = matchdayForFdMatch(cfg, m);
         const apiId = m.id ?? null;
-        if (!homeCode || !awayCode || !matchday) { skipped++; continue; }
+        if (!matchday) { skipped++; continue; }
 
-        const homeId = teamByCode[homeCode];
-        const awayId = teamByCode[awayCode];
+        const homeId = resolveTeam(m.homeTeam);
+        const awayId = resolveTeam(m.awayTeam);
         if (!homeId || !awayId) {
-          if (!homeId) unknownCodes.add(homeCode);
-          if (!awayId) unknownCodes.add(awayCode);
+          if (!homeId) unknownCodes.add(resolveTeam.label(m.homeTeam));
+          if (!awayId) unknownCodes.add(resolveTeam.label(m.awayTeam));
           skipped++;
           continue;
         }
@@ -275,8 +302,7 @@ async function syncFootballDataScores(leagueCode) {
     if (!res.ok) return;
 
     const matches = (await res.json()).matches || [];
-    const teamByCode = {};
-    for (const t of db.prepare("SELECT id, code FROM league_teams WHERE league = ?").all(leagueCode)) teamByCode[t.code] = t.id;
+    const resolveTeam = buildTeamResolver(leagueCode, cfg);
 
     const updateFinished = db.prepare(
       "UPDATE league_matches SET home_score = ?, away_score = ?, status = 'finished' WHERE league = ? AND home_team_id = ? AND away_team_id = ? AND status IN ('upcoming', 'live')"
@@ -287,8 +313,8 @@ async function syncFootballDataScores(leagueCode) {
 
     let finished = 0, live = 0;
     for (const m of matches) {
-      const homeId = teamByCode[mapCode(leagueCode, m.homeTeam?.tla)];
-      const awayId = teamByCode[mapCode(leagueCode, m.awayTeam?.tla)];
+      const homeId = resolveTeam(m.homeTeam);
+      const awayId = resolveTeam(m.awayTeam);
       if (!homeId || !awayId) continue;
 
       if (m.status === "FINISHED") {
@@ -459,6 +485,136 @@ async function syncEspnScores(leagueCode) {
 }
 
 // Back-compat alias for the admin "sync PL fixtures" button.
+// Seed league_teams straight from football-data.org for a league whose clubs aren't known ahead
+// of time (ucl2627 — the 36 come out of the league-phase draw). Idempotent and additive: it never
+// deletes, so a club that drops out of the feed keeps any predictions already made against it.
+async function syncFootballDataTeams(leagueCode) {
+  const cfg = LEAGUE_CONFIG[leagueCode];
+  if (!cfg?.seedTeamsFromFeed) return { ok: false, reason: "not_feed_seeded" };
+  const apiKey = process.env.FOOTBALL_API_KEY;
+  if (!apiKey) return { ok: false, reason: "no_api_key" };
+
+  try {
+    const res = await fetch(`${API_BASE}/competitions/${cfg.fdCompetition}/teams?season=2026`, {
+      headers: { "X-Auth-Token": apiKey },
+    });
+    // Before the draw the season simply doesn't exist yet — a 404 here is the normal state, not
+    // a failure worth shouting about.
+    if (!res.ok) return { ok: false, reason: "api_status", status: res.status };
+    const teams = (await res.json()).teams || [];
+    if (teams.length === 0) return { ok: false, reason: "api_empty" };
+    // Guard against a partial response overwriting a complete draw.
+    if (teams.length < cfg.teamCount) return { ok: false, reason: "api_short", got: teams.length };
+
+    const insert = db.prepare(`INSERT INTO league_teams (league, name, code, short_name, manager, crest_url, api_team_id)
+      VALUES (?, ?, ?, ?, NULL, ?, ?)`);
+    const update = db.prepare("UPDATE league_teams SET name = ?, short_name = ?, crest_url = ? WHERE id = ?");
+    const findByApi = db.prepare("SELECT id FROM league_teams WHERE league = ? AND api_team_id = ?");
+    let added = 0;
+    const apply = db.transaction(() => {
+      // Codes must stay unique per league, but football-data's tla is NOT unique across Europe —
+      // Bayern München and Barcelona are both "FCB". Clubs are therefore identified by the feed's
+      // team id, and a tla that's already taken falls back to letters from the club's name.
+      const taken = new Set(
+        db.prepare("SELECT code FROM league_teams WHERE league = ?").all(leagueCode).map((r) => r.code)
+      );
+      const uniqueCode = (t) => {
+        if (t.tla && !taken.has(t.tla)) return t.tla;
+        const base = (t.shortName || t.name || t.tla || "").toUpperCase().replace(/[^A-Z]/g, "");
+        for (let n = 3; n <= base.length; n++) {
+          if (!taken.has(base.slice(0, n))) return base.slice(0, n);
+        }
+        for (let i = 2; i < 100; i++) {
+          const c = `${t.tla || base.slice(0, 2)}${i}`;
+          if (!taken.has(c)) return c;
+        }
+        return null;
+      };
+
+      for (const t of teams) {
+        if (t.id == null) continue;
+        const name = t.name || t.shortName || String(t.id);
+        const short = t.shortName || name;
+        const existing = findByApi.get(leagueCode, t.id);
+        if (existing) { update.run(name, short, t.crest ?? null, existing.id); continue; }
+        const code = uniqueCode(t);
+        if (!code) continue;
+        taken.add(code);
+        insert.run(leagueCode, name, code, short, t.crest ?? null, t.id);
+        added++;
+      }
+    });
+    apply();
+    console.log(`${leagueCode} team sync: ${teams.length} from API, ${added} new.`);
+    return { ok: true, apiCount: teams.length, added };
+  } catch (err) {
+    console.log(`${leagueCode} team sync error:`, err.message);
+    return { ok: false, reason: "exception", message: err.message };
+  }
+}
+
+// Build/refresh the knockout bracket from already-synced league_matches. Each two-legged tie is
+// one row keyed on the pairing; the final is a single leg. A tie resolves only when every leg is
+// finished — on aggregate, and if that's level, on the second leg's penalty shootout, which is
+// the only place football-data carries the tiebreak.
+function syncKoTies(leagueCode) {
+  const cfg = LEAGUE_CONFIG[leagueCode];
+  if (!cfg?.koRounds) return { ok: false, reason: "no_ko_rounds" };
+
+  const rows = db.prepare(`SELECT id, matchday, home_team_id, away_team_id, home_score, away_score, status
+    FROM league_matches WHERE league = ? ORDER BY matchday, match_date, id`).all(leagueCode);
+
+  const findTie = db.prepare("SELECT * FROM league_ko_ties WHERE league = ? AND round = ? AND tie_no = ?");
+  const insertTie = db.prepare(`INSERT INTO league_ko_ties
+    (league, round, tie_no, home_team_id, away_team_id, leg1_match_id, leg2_match_id, winner_team_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const updateTie = db.prepare(`UPDATE league_ko_ties
+    SET home_team_id = ?, away_team_id = ?, leg1_match_id = ?, leg2_match_id = ?, winner_team_id = ? WHERE id = ?`);
+
+  let created = 0, resolved = 0;
+  const apply = db.transaction(() => {
+    for (const round of cfg.koRounds) {
+      const legs = round.md.map((md) => rows.filter((r) => r.matchday === md));
+      if (!legs[0]?.length) continue; // this round hasn't been drawn yet
+
+      // Leg 1 defines the tie and its home/away orientation; leg 2 is the reverse pairing.
+      legs[0].forEach((first, i) => {
+        const tieNo = i + 1;
+        const second = round.legs === 2
+          ? (legs[1] || []).find((r) => r.home_team_id === first.away_team_id && r.away_team_id === first.home_team_id)
+          : null;
+
+        let winner = null;
+        const bothDone = first.status === "finished" && (round.legs === 1 || second?.status === "finished");
+        if (bothDone) {
+          if (round.legs === 1) {
+            winner = first.home_score > first.away_score ? first.home_team_id
+              : first.away_score > first.home_score ? first.away_team_id : null;
+          } else {
+            const aggHome = (first.home_score ?? 0) + (second.away_score ?? 0);
+            const aggAway = (first.away_score ?? 0) + (second.home_score ?? 0);
+            if (aggHome !== aggAway) winner = aggHome > aggAway ? first.home_team_id : first.away_team_id;
+          }
+          if (winner) resolved++;
+        }
+
+        const existing = findTie.get(leagueCode, round.key, tieNo);
+        if (!existing) {
+          insertTie.run(leagueCode, round.key, tieNo, first.home_team_id, first.away_team_id,
+            first.id, second?.id ?? null, winner);
+          created++;
+        } else {
+          // Never clear a winner already recorded (an admin may have settled a shootout by hand).
+          updateTie.run(first.home_team_id, first.away_team_id, first.id, second?.id ?? null,
+            winner ?? existing.winner_team_id, existing.id);
+        }
+      });
+    }
+  });
+  apply();
+  return { ok: true, created, resolved };
+}
+
 async function syncPLFixtures() { return syncLeagueFixtures("epl2627"); }
 
 // ── Start all refresh loops ────────────────────────────────────────────────────
@@ -633,4 +789,4 @@ async function syncPLSquads() {
   }
 }
 
-module.exports = { startScoreRefresh, syncLeagueFixtures, syncLeagueScores, syncPLFixtures, syncPLSquads, fetchLiveScores };
+module.exports = { startScoreRefresh, syncFootballDataTeams, syncKoTies, syncLeagueFixtures, syncLeagueScores, syncPLFixtures, syncPLSquads, fetchLiveScores };

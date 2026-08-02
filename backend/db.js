@@ -1277,9 +1277,43 @@ db.exec(`
     set_at         TEXT DEFAULT (datetime('now')),
     UNIQUE(league, award_category)
   );
+  -- Champions League knockout bracket. A tie is the unit users predict: two legs for every round
+  -- before the final, one match for the final itself, so leg2_match_id is NULL there. Ties are
+  -- created by the CL sync as each round's draw publishes — a round simply has no rows until its
+  -- pairings exist. round is a UCL_KO_ROUNDS key (po/r16/qf/sf/final) and tie_no orders the
+  -- bracket within a round.
+  CREATE TABLE IF NOT EXISTS league_ko_ties (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    league         TEXT NOT NULL,
+    round          TEXT NOT NULL,
+    tie_no         INTEGER NOT NULL,
+    home_team_id   INTEGER REFERENCES league_teams(id),
+    away_team_id   INTEGER REFERENCES league_teams(id),
+    leg1_match_id  INTEGER REFERENCES league_matches(id),
+    leg2_match_id  INTEGER REFERENCES league_matches(id),
+    winner_team_id INTEGER REFERENCES league_teams(id),
+    UNIQUE(league, round, tie_no)
+  );
+  -- One pick per participant per tie: who goes through. Scored per UCL_KO_ROUNDS.pts.
+  CREATE TABLE IF NOT EXISTS league_ko_predictions (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES participants(id),
+    league         TEXT NOT NULL,
+    tie_id         INTEGER NOT NULL REFERENCES league_ko_ties(id),
+    team_id        INTEGER NOT NULL REFERENCES league_teams(id),
+    updated_at     TEXT DEFAULT (datetime('now')),
+    UNIQUE(participant_id, tie_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_league_ko_ties_league ON league_ko_ties(league, round);
+  CREATE INDEX IF NOT EXISTS idx_league_ko_preds_league ON league_ko_predictions(league, tie_id);
 `);
 
 // Columns added after the tables shipped — idempotent, safe to re-run on an existing DB.
+// football-data's team id. Needed for feed-seeded leagues because its 3-letter tla is NOT unique
+// across Europe (Bayern München and Barcelona are both "FCB"), so the Champions League has to
+// match clubs and fixtures on this id rather than on code.
+try { db.exec("ALTER TABLE league_teams ADD COLUMN api_team_id INTEGER"); } catch (_) { /* exists */ }
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_league_teams_api ON league_teams(league, api_team_id) WHERE api_team_id IS NOT NULL"); } catch (_) {}
 try { db.exec("ALTER TABLE league_teams ADD COLUMN conference TEXT"); } catch (_) { /* exists */ }
 try { db.exec("ALTER TABLE league_teams ADD COLUMN division TEXT"); } catch (_) { /* exists */ }
 try { db.exec("ALTER TABLE league_match_predictions ADD COLUMN predicted_margin_band TEXT"); } catch (_) { /* exists */ }
@@ -1353,7 +1387,11 @@ try {
     // Gate on the sources actually implemented, not on cfg.squadSource: 'laliga' and 'espn' are
     // declared in leagues.js but no squad sync exists for them, so those leagues are file-driven.
     const liveSourced = LIVE_SQUAD_SOURCES.has(cfg.squadSource);
-    if (currentCount === 0) {
+    if (totalPlayers === 0) {
+      // A league whose clubs come from the feed rather than a squad file (ucl2627 before the
+      // league-phase draw). An empty file describes nothing, so it must never be treated as
+      // "this league should have no players" — that would delete squads backfilled later.
+    } else if (currentCount === 0) {
       const seed = db.transaction(() => {
         const insP = db.prepare("INSERT OR IGNORE INTO league_players (league, name, team_id, position) VALUES (?, ?, ?, ?)");
         for (const [tc, players] of Object.entries(cfgSquads)) {
