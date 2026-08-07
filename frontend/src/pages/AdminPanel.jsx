@@ -281,6 +281,23 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
     grouped[p.sport][p.tournament].push(p);
   }
 
+  // Section subtotals span every matched pool, not just the page being rendered. Summing
+  // `grouped` instead made each header report its slice of the current 100 — soccer read
+  // "95 pools · 230 users" against a real 1056 pools — while the line above it counted the
+  // whole set. Test pools are excluded here, same as `totalPoolUsers` below.
+  const sectionTotals = {};
+  const addToSection = (key, p) => {
+    if (!sectionTotals[key]) sectionTotals[key] = { pools: 0, participants: 0 };
+    sectionTotals[key].pools++;
+    sectionTotals[key].participants += p.user_count || 0;
+  };
+  for (const p of matchedPools) {
+    if (p.is_test) continue;
+    addToSection(p.sport, p);
+    addToSection(`${p.sport}|${p.tournament}`, p);
+  }
+  const totalsFor = (key) => sectionTotals[key] || { pools: 0, participants: 0 };
+
   const totalPoolUsers = pools.filter((p) => !p.is_test).reduce((sum, p) => sum + (p.user_count || 0), 0);
 
   return (
@@ -353,26 +370,34 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
 
           {Object.entries(grouped).map(([sport, tournaments]) => {
             const sportLabel = SPORT_LABELS[sport] || { name: sport, emoji: "" };
-            const realPools = Object.values(tournaments).flat().filter((p) => !p.is_test);
-            const sportUsers = realPools.reduce((sum, p) => sum + (p.user_count || 0), 0);
-            const sportPools = realPools.length;
+            const sportTotals = totalsFor(sport);
+            // How many of that total actually made it onto this page, so the header isn't read
+            // as a count of the rows below it.
+            const shownPools = Object.values(tournaments).flat().filter((p) => !p.is_test).length;
 
             return (
               <div key={sport} className="admin-sport-section">
                 <div className="admin-sport-header">
                   <span>{sportLabel.emoji} {sportLabel.name}</span>
-                  <span className="admin-sport-stats">{sportPools} pool{sportPools !== 1 ? "s" : ""} &middot; {sportUsers} user{sportUsers !== 1 ? "s" : ""}</span>
+                  <span className="admin-sport-stats">
+                    {sportTotals.pools} pool{sportTotals.pools !== 1 ? "s" : ""} &middot;{" "}
+                    {sportTotals.participants} participant{sportTotals.participants !== 1 ? "s" : ""}
+                    {shownPools < sportTotals.pools && ` (${shownPools} on this page)`}
+                  </span>
                 </div>
 
                 {Object.entries(tournaments).map(([tournament, tournamentPools]) => {
                   const tournamentLabel = TOURNAMENT_LABELS[tournament] || tournament;
-                  const tournamentUsers = tournamentPools.filter((p) => !p.is_test).reduce((sum, p) => sum + (p.user_count || 0), 0);
+                  const tournamentTotals = totalsFor(`${sport}|${tournament}`);
 
                   return (
                     <div key={tournament} className="admin-tournament-section">
                       <div className="admin-tournament-header">
                         <span>{tournamentLabel}</span>
-                        <span className="admin-tournament-stats">{tournamentPools.length} pool{tournamentPools.length !== 1 ? "s" : ""} &middot; {tournamentUsers} user{tournamentUsers !== 1 ? "s" : ""}</span>
+                        <span className="admin-tournament-stats">
+                          {tournamentTotals.pools} pool{tournamentTotals.pools !== 1 ? "s" : ""} &middot;{" "}
+                          {tournamentTotals.participants} participant{tournamentTotals.participants !== 1 ? "s" : ""}
+                        </span>
                       </div>
                       <div className="pool-list">
                         {sortPools(tournamentPools).map((p) => (
