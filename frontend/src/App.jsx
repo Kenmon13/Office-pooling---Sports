@@ -40,24 +40,10 @@ import { SITE_ORIGIN, isIOS } from "./platform";
 import { enablePush, disablePush, setPushOpenHandler } from "./push";
 import PushToast from "./components/PushToast";
 import { isLeague, hasBracket } from "./leagues";
+// SPORTS is read when a pool is joined directly (via code or a shared link) rather than through
+// the sport picker, so there's no selectedSport to carry over — both are keyed by the pools row.
+import { SPORTS, TOURNAMENTS } from "./catalog";
 import "./App.css";
-
-const TOURNAMENT_META = {
-  wc2026: { id: "wc2026", name: "World Cup 2026", emoji: "🏆" },
-  epl2627: { id: "epl2627", name: "Premier League 26/27", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-  laliga2627: { id: "laliga2627", name: "La Liga 26/27", emoji: "🇪🇸" },
-  seriea2627: { id: "seriea2627", name: "Serie A 26/27", emoji: "🇮🇹" },
-  nfl2627: { id: "nfl2627", name: "NFL 26/27", emoji: "🏈" },
-  ucl2627: { id: "ucl2627", name: "Champions League 26/27", emoji: "⭐" },
-};
-
-// Used when a pool is joined directly (via code or a shared link) rather than through the sport
-// picker, so there's no selectedSport to carry over — keyed by pools.sport.
-const SPORT_META = {
-  soccer: { id: "soccer", name: "Soccer", emoji: "⚽" },
-  americanfootball: { id: "americanfootball", name: "American Football", emoji: "🏈" },
-  basketball: { id: "basketball", name: "Basketball", emoji: "🏀" },
-};
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -94,7 +80,7 @@ function App() {
     const parsed = JSON.parse(saved);
     const t = parsed.tournament ?? null;
     if (!t && parsed.pool?.tournament) {
-      return TOURNAMENT_META[parsed.pool.tournament] || { id: parsed.pool.tournament, name: parsed.pool.tournament, emoji: "🏆" };
+      return TOURNAMENTS[parsed.pool.tournament] || { id: parsed.pool.tournament, name: parsed.pool.tournament, emoji: "🏆" };
     }
     return t;
   });
@@ -266,9 +252,9 @@ function App() {
   const handleJoinPool = (poolData) => {
     setPool(poolData);
     setShowAdmin(false);
-    const sport = selectedSport || SPORT_META[poolData.sport] || { id: poolData.sport, name: poolData.sport, emoji: "\uD83C\uDFC6" };
+    const sport = selectedSport || SPORTS[poolData.sport] || { id: poolData.sport, name: poolData.sport, emoji: "\uD83C\uDFC6" };
     setSelectedSport(sport);
-    const tournament = selectedTournament || TOURNAMENT_META[poolData.tournament] || { id: poolData.tournament, name: poolData.tournament, emoji: "\uD83C\uDFC6" };
+    const tournament = selectedTournament || TOURNAMENTS[poolData.tournament] || { id: poolData.tournament, name: poolData.tournament, emoji: "\uD83C\uDFC6" };
     setSelectedTournament(tournament);
     localStorage.setItem(
       "pool_session",
@@ -488,8 +474,8 @@ function App() {
     setPoolPassword(null);
     setShowAdmin(false);
     localStorage.removeItem("pool_session");
-    setSelectedSport(SPORT_META[p.sport] || null);
-    setSelectedTournament(TOURNAMENT_META[p.tournament] || null);
+    setSelectedSport(SPORTS[p.sport] || null);
+    setSelectedTournament(TOURNAMENTS[p.tournament] || null);
   };
 
   const handleSwitchPool = () => {

@@ -1,18 +1,7 @@
-function SelectTournament({ sport, onSelect, onBack }) {
-  const tournaments = {
-    soccer: [
-      { id: "wc2026", name: "World Cup 2026", emoji: "\uD83C\uDFC6", available: true },
-      { id: "ucl2627", name: "Champions League 26/27", emoji: "\u2B50", available: true },
-      { id: "epl2627", name: "English Premier League 26/27", emoji: "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F", available: true },
-      { id: "laliga2627", name: "La Liga 26/27", emoji: "\uD83C\uDDEA\uD83C\uDDF8", available: true },
-      { id: "seriea2627", name: "Serie A 26/27", emoji: "\uD83C\uDDEE\uD83C\uDDF9", available: true },
-    ],
-    americanfootball: [
-      { id: "nfl2627", name: "NFL 26/27", emoji: "\uD83C\uDFC8", available: true },
-    ],
-  };
+import { tournamentsForSport } from "../catalog";
 
-  const list = tournaments[sport.id] || [];
+function SelectTournament({ sport, onSelect, onBack }) {
+  const list = tournamentsForSport(sport.id);
 
   return (
     <div className="select-page">

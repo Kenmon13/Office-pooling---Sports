@@ -1,18 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchProfile, updateProfile, changePassword, fetchMyPools } from "../api";
 import PasswordInput from "../components/PasswordInput";
-
-const SPORT_LABELS = {
-  soccer: "\u26BD",
-  basketball: "\uD83C\uDFC0",
-};
-
-const TOURNAMENT_LABELS = {
-  wc2026: "World Cup 2026",
-  ucl2627: "Champions League 26/27",
-  epl2627: "English Premier League 26/27",
-  laliga2627: "La Liga 26/27",
-};
+import { sportMeta, tournamentMeta } from "../catalog";
 
 function Settings({ user, onBack, onUpdateUser, onSelectPool }) {
   const [tab, setTab] = useState("profile");
@@ -175,10 +164,10 @@ function Settings({ user, onBack, onUpdateUser, onSelectPool }) {
                   })}
                 >
                   <span className="pool-list-name">
-                    {SPORT_LABELS[p.sport] || ""} {p.name}
+                    {sportMeta(p.sport).emoji} {p.name}
                   </span>
                   <span className="pool-list-meta">
-                    {TOURNAMENT_LABELS[p.tournament] || p.tournament} &middot; {p.member_count} member{p.member_count !== 1 ? "s" : ""}
+                    {tournamentMeta(p.tournament).name} &middot; {p.member_count} member{p.member_count !== 1 ? "s" : ""}
                   </span>
                 </button>
               </div>

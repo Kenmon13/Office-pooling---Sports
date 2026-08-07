@@ -1,9 +1,7 @@
+import { sportList } from "../catalog";
+
 function SelectSport({ onSelect }) {
-  const sports = [
-    { id: "soccer", name: "Soccer", emoji: "\u26BD", available: true },
-    { id: "americanfootball", name: "American Football", emoji: "\uD83C\uDFC8", available: true },
-    { id: "basketball", name: "Basketball", emoji: "\uD83C\uDFC0", available: false },
-  ];
+  const sports = sportList();
 
   return (
     <div className="select-page">

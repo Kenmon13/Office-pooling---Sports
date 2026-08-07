@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { adminFetchPools, adminDeletePool, adminFetchUsers, adminDeleteUser, adminFetchUserPools, adminSetUserEmail, adminDownloadBackup, adminSaveBackup, adminListBackups, adminDeleteBackup, adminRestoreFromUpload, adminRestoreFromBackup, adminFetchIssues, adminUpdateIssue, adminDeleteIssue, fetchIssueReplies, postIssueReply, adminDeleteReply, adminSyncPLFixtures, adminSyncPLSquads, adminFetchKoMismatches, adminPatchKnockoutMatch, adminSwapKnockoutSides, adminFetchPollResults, adminFetchPlayerAwardResults, adminSetPlayerAwardResult, fetchWcPlayers } from "../api";
 import { POLL_OPTIONS } from "../pollOptions";
+import { sportMeta, tournamentMeta } from "../catalog";
 
 // Tournament-wide award winners. Player awards pick from wc_players; Fair Play picks a team.
 const AWARD_DEFS = [
@@ -10,18 +11,6 @@ const AWARD_DEFS = [
   { key: "young_player", label: "🌟 Young Player",  type: "player" },
   { key: "fair_play",    label: "🤝 Fair Play",     type: "team" },
 ];
-
-const SPORT_LABELS = {
-  soccer: { name: "Soccer", emoji: "\u26BD" },
-  basketball: { name: "Basketball", emoji: "\uD83C\uDFC0" },
-};
-
-const TOURNAMENT_LABELS = {
-  wc2026: "World Cup 2026",
-  ucl2627: "Champions League 26/27",
-  epl2627: "English Premier League 26/27",
-  laliga2627: "La Liga 26/27",
-};
 
 function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
   const [tab, setTab] = useState("pools");
@@ -419,7 +408,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
           )}
 
           {Object.entries(grouped).map(([sport, tournaments]) => {
-            const sportLabel = SPORT_LABELS[sport] || { name: sport, emoji: "" };
+            const sportLabel = sportMeta(sport);
             const sportTotals = totalsFor(sport);
             // How many of that total actually made it onto this page, so the header isn't read
             // as a count of the rows below it.
@@ -437,7 +426,7 @@ function AdminPanel({ user, onSelectPool, onBack, onViewPicks }) {
                 </div>
 
                 {Object.entries(tournaments).map(([tournament, tournamentPools]) => {
-                  const tournamentLabel = TOURNAMENT_LABELS[tournament] || tournament;
+                  const tournamentLabel = tournamentMeta(tournament).name;
                   const tournamentTotals = totalsFor(`${sport}|${tournament}`);
 
                   return (
