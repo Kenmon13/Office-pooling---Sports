@@ -83,7 +83,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
     return (
       <div className="page">
         <h2>Player Awards</h2>
-        <AwardRules isLeagueMode={isLeagueMode} managerLabel={managerAward?.label} />
+        <AwardRules isLeagueMode={isLeagueMode} managerLabel={managerAward?.label} awardCount={AWARDS.length} />
         <p className="notice">Join the pool to make your player award picks.</p>
       </div>
     );
@@ -95,7 +95,7 @@ function Players({ currentUser, poolId, mockDate, tournament }) {
   return (
     <div className="page">
       <h2>Player Awards</h2>
-      <AwardRules isLeagueMode={isLeagueMode} managerLabel={managerAward?.label} />
+      <AwardRules isLeagueMode={isLeagueMode} managerLabel={managerAward?.label} awardCount={AWARDS.length} />
 
       {loaded && !locked && missingCount > 0 && (
         <div className="notif-window-card win-urgent" style={{ marginBottom: 16 }}>
@@ -371,13 +371,18 @@ function TeamPicker({ teams, currentPick, onSelect, saving, crestFn, isLeagueMod
   );
 }
 
-function AwardRules({ isLeagueMode, managerLabel }) {
+// Spell out small counts the way the surrounding copy reads; anything larger is rare enough that
+// the digit is fine.
+const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const countWord = (n) => COUNT_WORDS[n] ?? String(n);
+
+function AwardRules({ isLeagueMode, managerLabel, awardCount }) {
   if (isLeagueMode) {
     return (
       <div className="ko-rules">
         <p className="ko-rules-title">How player award picks work</p>
         <ul>
-          <li>Predict the winners of five individual/team awards given at the end of the season.</li>
+          <li>Predict the winners of {countWord(awardCount)} individual/team awards given at the end of the season.</li>
           <li>Each correct pick earns <strong>5 pts</strong>.</li>
           {managerLabel && (
             <li>The <strong>{managerLabel}</strong> is awarded to a team&apos;s manager — pick the club.</li>

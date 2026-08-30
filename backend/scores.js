@@ -251,19 +251,20 @@ async function syncFootballDataFixtures(leagueCode) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/competitions/${cfg.fdCompetition}/matches?season=2026`, {
-      headers: { "X-Auth-Token": apiKey },
-    });
-    if (!res.ok) {
-      console.log(`${leagueCode} fixture API responded ${res.status}, skipping.`);
-      return { ok: false, reason: "api_status", status: res.status };
+    // Through fdGet so a free-tier 429 waits for the budget to reset rather than losing the sync:
+    // at boot every league syncs at once, which is exactly when the burst limit bites.
+    const comp = await fdGet(`/competitions/${cfg.fdCompetition}/matches?season=2026`, apiKey);
+    if (!comp.ok && !cfg.seedTeamsFromFeed) {
+      console.log(`${leagueCode} fixture API responded ${comp.status}, skipping.`);
+      return { ok: false, reason: "api_status", status: comp.status };
     }
 
-    const data = await res.json();
-    let matches = data.matches || [];
+    let matches = comp.matches;
     let via = "competition endpoint";
     // An empty competition response is the normal, permanent state for the Champions League —
     // see fetchFixturesPerTeam. For a domestic league it just means the season isn't loaded yet.
+    // A feed-seeded league also lands here when the request itself failed: the fan-out is the only
+    // path that ever returns its fixtures, so it's worth trying regardless.
     if (matches.length === 0 && cfg.seedTeamsFromFeed) {
       const fb = await fetchFixturesPerTeam(leagueCode, cfg, apiKey);
       matches = fb.matches;
@@ -373,12 +374,10 @@ async function syncFootballDataScores(leagueCode) {
   if (!apiKey) return;
 
   try {
-    const res = await fetch(`${API_BASE}/competitions/${cfg.fdCompetition}/matches?season=2026&status=IN_PLAY,PAUSED,FINISHED`, {
-      headers: { "X-Auth-Token": apiKey },
-    });
-    if (!res.ok) return;
+    const comp = await fdGet(`/competitions/${cfg.fdCompetition}/matches?season=2026&status=IN_PLAY,PAUSED,FINISHED`, apiKey);
+    if (!comp.ok && !cfg.seedTeamsFromFeed) return;
 
-    let matches = (await res.json()).matches || [];
+    let matches = comp.matches;
     if (matches.length === 0 && cfg.seedTeamsFromFeed) matches = await fetchScoresByStoredIds(leagueCode, apiKey);
     const resolveTeam = buildTeamResolver(leagueCode, cfg);
 
@@ -706,8 +705,18 @@ function startLeagueSync(code) {
   syncLeagueScores(code);
   setInterval(() => syncLeagueScores(code), 5 * 60 * 1000);
 
-  const dailyFixtureSync = () => {
-    syncLeagueFixtures(code);
+  // A fixture sync that came back empty-handed used to wait a full day for its next go, so one
+  // rate-limited boot cost the league its fixtures until tomorrow — which is exactly how the
+  // Champions League sat fixture-less after its calendar was already published. Retry on a short
+  // timer until one lands, then settle into the daily re-sync.
+  const FIXTURE_RETRY_MS = 30 * 60 * 1000;
+  const dailyFixtureSync = async () => {
+    const result = await syncLeagueFixtures(code);
+    if (result && result.ok === false) {
+      console.log(`${code} fixture sync did not land (${result.reason}); retrying in 30 min.`);
+      setTimeout(dailyFixtureSync, FIXTURE_RETRY_MS);
+      return;
+    }
     setInterval(() => syncLeagueFixtures(code), 24 * 60 * 60 * 1000);
   };
 
