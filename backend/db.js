@@ -1409,7 +1409,9 @@ try {
         }
       });
       seed();
-      console.log(`Seeded ${code} squads (${totalPlayers} players across ${cfgTeams.length} clubs).`);
+      // Count the clubs from the squad file, not cfgTeams — a feed-seeded league (ucl2627) has
+      // its clubs in the DB rather than the file, and reported "across 0 clubs".
+      console.log(`Seeded ${code} squads (${totalPlayers} players across ${Object.keys(cfgSquads).length} clubs).`);
     } else if (!liveSourced && currentCount !== totalPlayers) {
       // File-driven league whose squad file changed (a manual transfer-window refresh). Reconcile
       // row-by-row instead of wiping the league: rows are keyed on the player's name, so unchanged
