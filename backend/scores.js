@@ -172,6 +172,75 @@ async function syncLeagueScores(leagueCode) {
 }
 
 // Sync one league's fixtures from football-data.org into league_matches (WHERE league=code).
+// ── football-data fallbacks for a feed-seeded competition ──────────────────────
+//
+// football-data's competition-wide match endpoints return an empty list for the Champions
+// League's current season even after the draw and the calendar are published — both
+// /competitions/CL/matches?season=2026 and the date-windowed /matches?competitions=CL answer 200
+// with count 0, while the same season's clubs and the previous season's 189 matches come back
+// fine. The fixtures are only reachable per club, via /teams/{id}/matches.
+//
+// The domestic leagues are unaffected, so this is a fallback rather than the default path: it
+// costs one request per club (36 for the UCL) against a free-tier budget of 10 requests a minute,
+// which is why the requests are spaced rather than fired in parallel.
+const FD_REQUEST_SPACING_MS = 6500;
+const fdSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function fdGet(path, apiKey, { retryOn429 = true } = {}) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { headers: { "X-Auth-Token": apiKey } });
+    // The free tier answers a burst with 429 and clears on the minute boundary. One wait-and-retry
+    // is enough; a second failure means the budget is genuinely gone, so give the caller the miss.
+    if (res.status === 429 && retryOn429) {
+      await fdSleep(60_000);
+      return fdGet(path, apiKey, { retryOn429: false });
+    }
+    if (!res.ok) return { ok: false, status: res.status, matches: [] };
+    const json = await res.json().catch(() => null);
+    return { ok: true, status: res.status, matches: json?.matches || [] };
+  } catch (err) {
+    return { ok: false, status: 0, matches: [], message: err.message };
+  }
+}
+
+// Gather a feed-seeded league's fixtures one club at a time. Every match comes back twice, once
+// from each side, so they're de-duplicated on the feed's match id.
+async function fetchFixturesPerTeam(leagueCode, cfg, apiKey) {
+  const teams = db.prepare(
+    "SELECT api_team_id FROM league_teams WHERE league = ? AND api_team_id IS NOT NULL"
+  ).all(leagueCode);
+  const byId = new Map();
+  let failed = 0;
+  for (const [i, t] of teams.entries()) {
+    if (i > 0) await fdSleep(FD_REQUEST_SPACING_MS);
+    const r = await fdGet(`/teams/${t.api_team_id}/matches?competitions=${cfg.fdCompetition}&season=2026`, apiKey);
+    if (!r.ok) { failed++; continue; }
+    for (const m of r.matches) if (m.id != null) byId.set(m.id, m);
+  }
+  return { matches: [...byId.values()], teamsQueried: teams.length, failed };
+}
+
+// Scores for a feed-seeded league can't come off the competition endpoint either. The fixtures
+// already carry the feed's own match ids, so ask for exactly the ones that could have moved —
+// kicked off, not yet recorded as finished — which is one request on a matchday and none the
+// rest of the time. The day-old floor keeps a match we somehow never closed out from being
+// re-fetched forever.
+async function fetchScoresByStoredIds(leagueCode, apiKey) {
+  const ids = db.prepare(`
+    SELECT api_match_id FROM league_matches
+    WHERE league = ? AND api_match_id IS NOT NULL AND status IN ('upcoming', 'live')
+      AND match_date IS NOT NULL
+      AND match_date <= datetime('now') AND match_date >= datetime('now', '-1 day')
+  `).all(leagueCode).map((r) => r.api_match_id);
+  const out = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    if (i > 0) await fdSleep(FD_REQUEST_SPACING_MS);
+    const r = await fdGet(`/matches?ids=${ids.slice(i, i + 50).join(",")}`, apiKey);
+    out.push(...r.matches);
+  }
+  return out;
+}
+
 async function syncFootballDataFixtures(leagueCode) {
   const cfg = LEAGUE_CONFIG[leagueCode];
   if (!cfg) return { ok: false, reason: "unknown_league" };
@@ -191,9 +260,17 @@ async function syncFootballDataFixtures(leagueCode) {
     }
 
     const data = await res.json();
-    const matches = data.matches || [];
+    let matches = data.matches || [];
+    let via = "competition endpoint";
+    // An empty competition response is the normal, permanent state for the Champions League —
+    // see fetchFixturesPerTeam. For a domestic league it just means the season isn't loaded yet.
+    if (matches.length === 0 && cfg.seedTeamsFromFeed) {
+      const fb = await fetchFixturesPerTeam(leagueCode, cfg, apiKey);
+      matches = fb.matches;
+      via = `per-team fan-out (${fb.teamsQueried} clubs, ${fb.failed} failed)`;
+    }
     if (matches.length === 0) {
-      console.log(`${leagueCode} fixtures: no matches returned from API yet.`);
+      console.log(`${leagueCode} fixtures: no matches returned from API yet (${via}).`);
       return { ok: false, reason: "api_empty", apiCount: 0 };
     }
 
@@ -280,7 +357,7 @@ async function syncFootballDataFixtures(leagueCode) {
     });
     applyAll();
 
-    console.log(`${leagueCode} fixture sync: ${inserted} inserted, ${updated} updated, ${remapped} remapped, ${pruned} pruned, ${skipped} skipped (${matches.length} from API).`);
+    console.log(`${leagueCode} fixture sync: ${inserted} inserted, ${updated} updated, ${remapped} remapped, ${pruned} pruned, ${skipped} skipped (${matches.length} from API via ${via}).`);
     return { ok: true, apiCount: matches.length, inserted, updated, remapped, pruned, skipped, unknownCodes: [...unknownCodes] };
   } catch (err) {
     console.log(`${leagueCode} fixture sync error:`, err.message);
@@ -301,7 +378,8 @@ async function syncFootballDataScores(leagueCode) {
     });
     if (!res.ok) return;
 
-    const matches = (await res.json()).matches || [];
+    let matches = (await res.json()).matches || [];
+    if (matches.length === 0 && cfg.seedTeamsFromFeed) matches = await fetchScoresByStoredIds(leagueCode, apiKey);
     const resolveTeam = buildTeamResolver(leagueCode, cfg);
 
     const updateFinished = db.prepare(
