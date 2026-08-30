@@ -6,10 +6,14 @@ import DonateModal from "./DonateModal";
 // Dismissal lives in localStorage (not sessionStorage, which the poll used to make itself
 // reappear every login) — an announcement people have already read shouldn't nag. Bump
 // ANNOUNCEMENT_KEY when there's something new to say and everyone sees it again.
-const ANNOUNCEMENT_KEY = "announcement:seen:pools-2627";
+const ANNOUNCEMENT_KEY = "announcement:seen:pools-2627-ucl";
 
 const POOLS = [
-  { tournament: "nfl2627",    sport: "americanfootball", emoji: "🏈", name: "NFL 26/27",            blurb: "Weekly picks, division winners and the Super Bowl", isNew: true },
+  // The Champions League leads and carries the NEW badge: its 36 clubs only existed from the
+  // 27 Aug league-phase draw, which makes it the one genuinely new thing here. The NFL has been
+  // open since July, so it gives the badge up rather than the two competing for it.
+  { tournament: "ucl2627",    sport: "soccer",           emoji: "⭐", name: "Champions League 26/27", blurb: "8-matchday league phase, knockout bracket and player awards", isNew: true },
+  { tournament: "nfl2627",    sport: "americanfootball", emoji: "🏈", name: "NFL 26/27",            blurb: "Weekly picks, division winners and the Super Bowl" },
   { tournament: "epl2627",    sport: "soccer",           emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", name: "Premier League 26/27", blurb: "38 matchdays, season table and player awards" },
   { tournament: "laliga2627", sport: "soccer",           emoji: "🇪🇸", name: "La Liga 26/27",        blurb: "38 matchdays, season table and player awards" },
   { tournament: "seriea2627", sport: "soccer",           emoji: "🇮🇹", name: "Serie A 26/27",        blurb: "38 matchdays, season table and player awards" },
