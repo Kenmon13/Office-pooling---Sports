@@ -314,6 +314,7 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
           isLocked={isLocked}
           hasStarted={hasStarted}
           standings={standings}
+          league={league}
         />
       ) : (
         <>
@@ -448,7 +449,7 @@ function SeasonPredictions({ currentUser, poolId, league = "epl2627" }) {
 // the finalists or within the top 8 — the same rule the backend enforces on save, applied here by
 // hiding clubs already taken by a sibling slot so the picker can't build a rejected entry.
 // Reuses the .nfl-slot* styles, which are shared by every slot-based league.
-function UCLSlotPicks({ slots, teams, picks, setPicks, isLocked, hasStarted, standings }) {
+function UCLSlotPicks({ slots, teams, picks, setPicks, isLocked, hasStarted, standings, league }) {
   const sorted = teams.slice().sort((a, b) => a.name.localeCompare(b.name));
   const positionOf = (teamId) => {
     const i = standings.findIndex((s) => s.team_id === teamId);
@@ -524,7 +525,69 @@ function UCLSlotPicks({ slots, teams, picks, setPicks, isLocked, hasStarted, sta
       <div className="nfl-slots" style={{ marginTop: 16 }}>
         {byScope("top8").map(renderSlot)}
       </div>
+
+      <UCLStandings standings={standings} league={league} picks={picks} slots={slots} />
     </>
+  );
+}
+
+// The 36-club league phase table. Shown as soon as the clubs are known rather than waiting for
+// kick-off: before matchday 1 every row reads zero, and the point of it then is seeing who is in
+// the competition and which band a club would land in — which is what the top-8 picks are about.
+// Knockout legs are already excluded upstream (the standings endpoint drops matchdays past the
+// league phase), so this is the league phase and nothing else.
+function UCLStandings({ standings, league, picks, slots }) {
+  if (!standings.length) return null;
+
+  const labels = getLeague(league)?.zoneLabels || {};
+  // ZONES_36 only names the two ends — top 8 go straight through, bottom 12 are out. Everything
+  // between them plays a knockout play-off round, which has no zone key, so it gets its own
+  // divider here rather than a colour.
+  const dividers = { 1: labels.cl, 9: "Play-off Round", 25: labels.relegation };
+
+  // Clubs the reader picked for a top-8 finish, so the table shows how those picks are faring.
+  const pickedTop8 = new Set(
+    slots.filter((s) => s.scope === "top8").map((s) => picks[s.pos]).filter(Boolean)
+  );
+
+  return (
+    <div className="ucl-table">
+      <h3 className="ucl-table-title">League Phase Table</h3>
+      <div className="ucl-table-head">
+        <span className="ucl-table-pos">#</span>
+        <span className="ucl-table-club">Club</span>
+        <span className="ucl-stat">P</span>
+        <span className="ucl-stat wdl">W</span>
+        <span className="ucl-stat wdl">D</span>
+        <span className="ucl-stat wdl">L</span>
+        <span className="ucl-stat">GD</span>
+        <span className="ucl-stat pts">Pts</span>
+      </div>
+
+      {standings.map((t, i) => {
+        const pos = i + 1;
+        const zone = zoneForPosition(league, pos) || "";
+        const gd = t.gf - t.ga;
+        return (
+          <div key={t.team_id}>
+            {dividers[pos] && <div className={`zone-divider ${zone}`}>{dividers[pos]}</div>}
+            <div className={`ucl-table-row ${zone} ${pickedTop8.has(t.team_id) ? "picked" : ""}`}>
+              <span className="ucl-table-pos">{pos}</span>
+              <span className="ucl-table-club">
+                {plCrest(t.code, t.crest_url)}
+                <span className="ucl-table-name">{t.short_name || t.name}</span>
+              </span>
+              <span className="ucl-stat">{t.played}</span>
+              <span className="ucl-stat wdl">{t.won}</span>
+              <span className="ucl-stat wdl">{t.drawn}</span>
+              <span className="ucl-stat wdl">{t.lost}</span>
+              <span className="ucl-stat">{gd > 0 ? `+${gd}` : gd}</span>
+              <span className="ucl-stat pts">{t.points}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

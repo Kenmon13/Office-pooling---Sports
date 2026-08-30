@@ -6427,3 +6427,104 @@ nav a.active {
   padding: 12px 0;
   background: linear-gradient(to top, #0a1a0a 70%, transparent);
 }
+
+/* Champions League league-phase table (Season page). Shares the zone-divider colours with the
+   ranked season table so the top-8 / eliminated bands read the same across both. */
+.ucl-table {
+  max-width: 620px;
+  margin: 28px auto 0;
+}
+
+.ucl-table-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #7da67d;
+  margin: 0 0 10px;
+}
+
+.ucl-table-head,
+.ucl-table-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.ucl-table-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6f8f6f;
+}
+
+.ucl-table-row {
+  background: #0e1e0e;
+  border: 1px solid #1e3a1e;
+  border-top: none;
+}
+
+.ucl-table-row:first-child,
+.zone-divider + .ucl-table-row {
+  border-top: 1px solid #1e3a1e;
+}
+
+.ucl-table > div:last-child .ucl-table-row {
+  border-radius: 0 0 6px 6px;
+}
+
+/* The finishing-position bands, as a left edge rather than a full row tint so the crest and
+   name stay legible. */
+.ucl-table-row.cl { border-left: 3px solid #5dade2; }
+.ucl-table-row.relegation { border-left: 3px solid #e07070; }
+
+/* A club the reader picked for the top 8. */
+.ucl-table-row.picked {
+  background: #122c12;
+}
+
+.ucl-table-pos {
+  width: 22px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #8fb98f;
+  text-align: right;
+}
+
+.ucl-table-club {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ucl-table-name {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ucl-stat {
+  width: 28px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 13px;
+  color: #b8d8b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.ucl-stat.pts {
+  font-weight: 700;
+  color: #e8f5e8;
+}
+
+/* Narrow screens keep the columns that carry the table — played, goal difference, points. */
+@media (max-width: 560px) {
+  .ucl-stat.wdl { display: none; }
+  .ucl-table-head,
+  .ucl-table-row { padding: 8px 8px; }
+}
